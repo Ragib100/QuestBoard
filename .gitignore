@@ -1,0 +1,15 @@
+# Flutter
+client/build/
+client/.dart_tool/
+
+# Python
+server/venv/
+server/__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
