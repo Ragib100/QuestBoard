@@ -72,6 +72,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Set up environment variables
+        run: cp .env.example .env
+
       - name: Install dependencies
         run: flutter pub get
 
