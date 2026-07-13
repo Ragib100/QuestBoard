@@ -1,20 +1,22 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 
 from app.db.base import Base
 from app.db.database import engine
 
-import app.db.models
+import app.models
 
-from app.routers.temp_test import router
+from app.routers.user import router as user_router
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 
-@app.get("/")
+@app.get("/api/")
 def root():
     return {"message": "QuestBoard API is running!"}
 
 
-app.include_router(router)
+api_router = APIRouter(prefix="/api")
+api_router.include_router(user_router)
+app.include_router(api_router)

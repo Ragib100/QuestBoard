@@ -94,37 +94,48 @@ badges ──1:N── user_badges
 
 ### 3.1 `users`
 
-Stores public profile data for every registered user. The `id` must match the uuid issued by Supabase Auth (`auth.users.id`). This row is created automatically via trigger when a user signs up.
+Stores public profile data for every registered user. The `id` references `auth.users(id)` directly with `ON DELETE CASCADE` — deleting a user from Supabase Auth automatically deletes this row, which cascades to all other tables. This row is created automatically via trigger when a user signs up. Step 1 of signup (email + password) creates a minimal row via trigger; Step 2 (profile details) fills in the remaining fields via `upsert`.
 
 | Column | Type | Constraints | Default | Description |
 |---|---|---|---|---|
-| `id` | `uuid` | PK | — | Matches `auth.users.id` |
-| `username` | `varchar(50)` | NOT NULL, UNIQUE | — | Public display name |
-| `avatar_url` | `text` | nullable | `null` | Supabase Storage path |
-| `bio` | `text` | nullable | `null` | Short user bio |
+| `id` | `uuid` | PK, FK → `auth.users(id)` CASCADE | — | Matches `auth.users.id` |
+| `username` | `text` | NOT NULL, UNIQUE | — | Public display name on leaderboard |
+| `first_name` | `text` | NOT NULL | — | User's first name |
+| `last_name` | `text` | NOT NULL | — | User's last name |
+| `phone_number` | `text` | nullable | `null` | Phone number with country code |
+| `image_url` | `text` | NOT NULL | — | Supabase Storage path for profile image |
+| `codeforces_handle` | `text` | NOT NULL | — | Codeforces username for challenge verification |
+| `codeforces_verified` | `bool` | NOT NULL | `false` | True after Codeforces handle is verified |
 | `points` | `int` | NOT NULL | `100` | Current point balance (cache) |
 | `streak_days` | `int` | NOT NULL | `0` | Consecutive active days |
-| `last_active` | `timestamp` | nullable | `null` | Last activity timestamp |
-| `created_at` | `timestamp` | NOT NULL | `now()` | Account creation time |
-| `updated_at` | `timestamp` | NOT NULL | `now()` | Last profile update |
+| `last_active` | `timestamptz` | nullable | `null` | Last activity timestamp |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | Account creation time |
+| `updated_at` | `timestamptz` | NOT NULL | `now()` | Last profile update |
 
 **Notes:**
 - `password_hash` is NOT stored here — Supabase Auth owns credentials.
+- `ON DELETE CASCADE` on the `auth.users` FK means deleting a user from Supabase Auth (or from the Auth dashboard) cascades the delete to `public.users`, which then cascades to all tables that reference `public.users(id)`. No orphan rows anywhere.
 - `points` is always kept in sync with the sum of `point_transactions.amount` for this user. Never update `points` directly — always go through the transaction flow.
-- `avatar_url` stores the Supabase Storage path: `avatars/{user_id}`.
+- `image_url` stores the Supabase Storage path: `avatars/{user_id}`.
+- `codeforces_handle` is collected at signup Step 2. `codeforces_verified` flips to `true` when the backend confirms the handle exists on Codeforces via their API.
+- The trigger on signup only inserts `id` and `created_at` — all other fields are filled when the user completes Step 2 via `upsert`.
 
 **SQL:**
 ```sql
 CREATE TABLE public.users (
-  id          uuid PRIMARY KEY,
-  username    varchar(50) NOT NULL UNIQUE,
-  avatar_url  text,
-  bio         text,
-  points      int NOT NULL DEFAULT 100,
-  streak_days int NOT NULL DEFAULT 0,
-  last_active timestamp,
-  created_at  timestamp NOT NULL DEFAULT now(),
-  updated_at  timestamp NOT NULL DEFAULT now()
+  id                  uuid        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username            text        NOT NULL UNIQUE,
+  first_name          text        NOT NULL,
+  last_name           text        NOT NULL,
+  phone_number        text,
+  image_url           text        NOT NULL DEFAULT '',
+  codeforces_handle   text        NOT NULL DEFAULT '',
+  codeforces_verified boolean     NOT NULL DEFAULT FALSE,
+  points              int         NOT NULL DEFAULT 100,
+  streak_days         int         NOT NULL DEFAULT 0,
+  last_active         timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT NOW(),
+  updated_at          timestamptz NOT NULL DEFAULT NOW()
 );
 ```
 
@@ -176,33 +187,36 @@ CREATE TABLE public.questions (
 
 ### 3.3 `answers`
 
-Answers submitted by helpers in response to a question. One answer per question can be accepted, triggering bounty transfer.
+Answers submitted by helpers in response to a question. One answer per question can be accepted, triggering bounty transfer. Answers support an optional image attachment in addition to body text, code blocks, and LaTeX.
 
 | Column | Type | Constraints | Default | Description |
 |---|---|---|---|---|
 | `id` | `uuid` | PK | `gen_random_uuid()` | Answer ID |
-| `question_id` | `uuid` | NOT NULL, FK → `questions.id` | — | Parent question |
-| `author_id` | `uuid` | NOT NULL, FK → `users.id` | — | Who answered |
+| `question_id` | `uuid` | NOT NULL, FK → `questions.id` CASCADE | — | Parent question |
+| `author_id` | `uuid` | NOT NULL, FK → `users.id` CASCADE | — | Who answered |
 | `body` | `text` | NOT NULL | — | Answer content (supports code and LaTeX) |
+| `image_url` | `text` | nullable | `null` | Optional attached image (Supabase Storage) |
 | `is_accepted` | `bool` | NOT NULL | `false` | True when the question owner accepts this |
-| `created_at` | `timestamp` | NOT NULL | `now()` | Submit time |
-| `updated_at` | `timestamp` | NOT NULL | `now()` | Last edit time |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | Submit time |
+| `updated_at` | `timestamptz` | NOT NULL | `now()` | Last edit time |
 
 **Notes:**
 - When `is_accepted` is flipped to `true`: `questions.is_solved` is set to `true`, `questions.accepted_answer_id` is set to this answer's `id`, and `bounty_points` are transferred to the answer author via `point_transactions`.
 - An accepted answer cannot be deleted.
 - A question can only have one accepted answer — enforced in application logic.
+- `image_url` path format: `answer-images/{answer_id}/image`. Store in Supabase Storage `answer-images` bucket.
 
 **SQL:**
 ```sql
 CREATE TABLE public.answers (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  question_id uuid NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
-  author_id   uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  body        text NOT NULL,
-  is_accepted bool NOT NULL DEFAULT false,
-  created_at  timestamp NOT NULL DEFAULT now(),
-  updated_at  timestamp NOT NULL DEFAULT now()
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  question_id uuid        NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
+  author_id   uuid        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  body        text        NOT NULL,
+  image_url   text,
+  is_accepted bool        NOT NULL DEFAULT false,
+  created_at  timestamptz NOT NULL DEFAULT NOW(),
+  updated_at  timestamptz NOT NULL DEFAULT NOW()
 );
 ```
 
@@ -362,32 +376,47 @@ CREATE TABLE public.ai_hints (
 
 ### 3.9 `daily_challenges`
 
-One row per day, populated automatically by a cron job that hits the Codeforces API at midnight.
+One row per day, populated automatically by a cron job that hits the Codeforces API at midnight. Codeforces uses a numeric rating system (800 – 3500) rather than easy/medium/hard labels. Both are stored — `cf_rating` is the raw Codeforces value, and `difficulty` is the mapped label shown to users in the app.
+
+**Codeforces rating → difficulty mapping:**
+
+| Codeforces Rating | App Difficulty | Bonus Points |
+|---|---|---|
+| 800 – 1200 | `easy` | 30 |
+| 1300 – 1900 | `medium` | 50 |
+| 2000 and above | `hard` | 80 |
 
 | Column | Type | Constraints | Default | Description |
 |---|---|---|---|---|
 | `id` | `uuid` | PK | `gen_random_uuid()` | Challenge ID |
-| `codeforces_id` | `varchar(20)` | nullable | `null` | e.g. `1234A` |
-| `title` | `text` | NOT NULL | — | Problem title |
+| `codeforces_id` | `text` | nullable | `null` | e.g. `1234A` — contest ID + index |
+| `title` | `text` | NOT NULL | — | Problem title from Codeforces |
 | `body` | `text` | NOT NULL | — | Full problem statement |
-| `difficulty` | `varchar(10)` | nullable | `null` | `easy`, `medium`, or `hard` |
+| `cf_rating` | `int` | nullable | `null` | Raw Codeforces numeric rating e.g. `1400` |
+| `difficulty` | `varchar(10)` | nullable | `null` | Mapped label: `easy`, `medium`, or `hard` |
 | `source_url` | `text` | nullable | `null` | Link to original Codeforces problem |
-| `bonus_points` | `int` | NOT NULL | `50` | Points awarded on solve |
+| `bonus_points` | `int` | NOT NULL | `50` | Points awarded on solve — set by difficulty |
 | `challenge_date` | `date` | NOT NULL, UNIQUE | — | One challenge per day |
-| `created_at` | `timestamp` | NOT NULL | `now()` | When the row was inserted |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | When the row was inserted |
+
+**Notes:**
+- `cf_rating` is stored as-is from the Codeforces API response (`problem.rating` field).
+- `difficulty` is computed by the backend at fetch time using the mapping above and stored for fast filtering — never recompute it in queries.
+- `bonus_points` is also set at fetch time based on the difficulty mapping above, not a fixed 50.
 
 **SQL:**
 ```sql
 CREATE TABLE public.daily_challenges (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  codeforces_id  varchar(20),
-  title          text NOT NULL,
-  body           text NOT NULL,
+  id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  codeforces_id  text,
+  title          text        NOT NULL,
+  body           text        NOT NULL,
+  cf_rating      int,
   difficulty     varchar(10) CHECK (difficulty IN ('easy', 'medium', 'hard')),
   source_url     text,
-  bonus_points   int NOT NULL DEFAULT 50,
-  challenge_date date NOT NULL UNIQUE,
-  created_at     timestamp NOT NULL DEFAULT now()
+  bonus_points   int         NOT NULL DEFAULT 50,
+  challenge_date date        NOT NULL UNIQUE,
+  created_at     timestamptz NOT NULL DEFAULT NOW()
 );
 ```
 
@@ -584,8 +613,9 @@ The `notifications` table drives the in-app bell icon. Firebase Cloud Messaging 
 
 | Bucket | Path Pattern | Public | Used By |
 |---|---|---|---|
-| `avatars` | `avatars/{user_id}` | Yes | `users.avatar_url` |
+| `avatars` | `avatars/{user_id}` | Yes | `users.image_url` |
 | `question-images` | `question-images/{question_id}/image` | Yes | `questions.image_url` |
+| `answer-images` | `answer-images/{answer_id}/image` | Yes | `answers.image_url` |
 | `badges` | `badges/{badge_name}.png` | Yes | `badges.icon_url` |
 
 All buckets are public read. Uploads are restricted to authenticated users via Supabase Storage RLS policies.
@@ -594,43 +624,82 @@ All buckets are public read. Uploads are restricted to authenticated users via S
 
 ## 7. Database Triggers
 
-### `on_auth_user_created`
-Fires after a new user is created in `auth.users`. Inserts a matching row into `public.users` and credits the signup bonus in `point_transactions`.
+### `on_auth_user_created` — REMOVED
 
-```sql
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
-BEGIN
-  -- Create public profile
-  INSERT INTO public.users (id, username, created_at, updated_at)
-  VALUES (
-    NEW.id,
-    SPLIT_PART(NEW.email, '@', 1), -- default username from email
-    now(),
-    now()
-  );
+This trigger has been intentionally removed. The `public.users` row is **not** created automatically when a Supabase Auth user is created.
 
-  -- Credit signup bonus
-  INSERT INTO public.point_transactions (user_id, amount, reason)
-  VALUES (NEW.id, 100, 'signup_bonus');
+**Why:** The `users` table has required fields (`username`, `first_name`, `last_name`, `codeforces_handle`, `image_url`) that are only available after the user completes signup Step 2. Creating a partial row on Step 1 would violate NOT NULL constraints or require dummy defaults that pollute the data.
 
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+**What happens instead:**
 
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+Step 1 — User submits email + password
+    │
+    ▼
+Supabase Auth creates auth.users row (trigger does nothing)
+    │
+    ▼
+Supabase sends verification email
+    │
+    ▼
+User taps verification link → app opens → Step 2 screen
+    │
+    ▼
+Step 2 — User submits username, name, phone, Codeforces handle, image
+    │
+    ▼
+Flutter calls POST /api/users/profile (FastAPI endpoint)
+    │
+    ▼
+FastAPI reads user id from JWT (sub claim)
+FastAPI inserts row into public.users with all fields
+FastAPI inserts 100 points into point_transactions
+    │
+    ▼
+User lands on Home Feed with 100 starting points
 ```
 
-### `update_updated_at`
+**FastAPI endpoint that does this:**
+
+```python
+@router.post("/users/profile", status_code=201)
+async def create_profile(
+    data: ProfileCreateSchema,
+    user_id: str = Depends(get_current_user)
+):
+    async with db.transaction():
+        # Insert public.users row
+        await db.execute("""
+            INSERT INTO public.users (
+                id, username, first_name, last_name,
+                phone_number, image_url, codeforces_handle,
+                created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        """, user_id, data.username, data.first_name, data.last_name,
+             data.phone_number, data.image_url, data.codeforces_handle)
+
+        # Credit 100 signup bonus points
+        await db.execute("""
+            INSERT INTO public.point_transactions
+                (user_id, amount, reason)
+            VALUES ($1, 100, 'signup_bonus')
+        """, user_id)
+
+    return {"message": "Profile created", "points_awarded": 100}
+```
+
+Both the `INSERT INTO public.users` and `INSERT INTO point_transactions` happen inside a single transaction — if either fails, both are rolled back and no partial data is saved.
+
+---
+
+### `set_updated_at`
 Automatically updates the `updated_at` column on `users`, `questions`, and `answers` whenever a row is modified.
 
 ```sql
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger AS $$
 BEGIN
-  NEW.updated_at = now();
+  NEW.updated_at = NOW();
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -739,16 +808,22 @@ $$ LANGUAGE plpgsql;
 
 
 -- ─── 1. USERS ────────────────────────────────────────────────
+-- References auth.users(id) directly — deleting from auth cascades here,
+-- which then cascades to all tables referencing public.users(id).
 CREATE TABLE public.users (
-  id          uuid         PRIMARY KEY,
-  username    varchar(50)  NOT NULL UNIQUE,
-  avatar_url  text,
-  bio         text,
-  points      int          NOT NULL DEFAULT 100,
-  streak_days int          NOT NULL DEFAULT 0,
-  last_active timestamp,
-  created_at  timestamp    NOT NULL DEFAULT now(),
-  updated_at  timestamp    NOT NULL DEFAULT now()
+  id                  uuid        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username            text        NOT NULL UNIQUE,
+  first_name          text        NOT NULL DEFAULT '',
+  last_name           text        NOT NULL DEFAULT '',
+  phone_number        text,
+  image_url           text        NOT NULL DEFAULT '',
+  codeforces_handle   text        NOT NULL DEFAULT '',
+  codeforces_verified boolean     NOT NULL DEFAULT FALSE,
+  points              int         NOT NULL DEFAULT 100,
+  streak_days         int         NOT NULL DEFAULT 0,
+  last_active         timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT NOW(),
+  updated_at          timestamptz NOT NULL DEFAULT NOW()
 );
 
 CREATE TRIGGER set_users_updated_at
@@ -803,13 +878,14 @@ CREATE TRIGGER set_questions_updated_at
 
 -- ─── 4. ANSWERS ──────────────────────────────────────────────
 CREATE TABLE public.answers (
-  id          uuid       PRIMARY KEY DEFAULT gen_random_uuid(),
-  question_id uuid       NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
-  author_id   uuid       NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  body        text       NOT NULL,
-  is_accepted bool       NOT NULL DEFAULT false,
-  created_at  timestamp  NOT NULL DEFAULT now(),
-  updated_at  timestamp  NOT NULL DEFAULT now()
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  question_id uuid        NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
+  author_id   uuid        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  body        text        NOT NULL,
+  image_url   text,                          -- optional image attachment
+  is_accepted bool        NOT NULL DEFAULT false,
+  created_at  timestamptz NOT NULL DEFAULT NOW(),
+  updated_at  timestamptz NOT NULL DEFAULT NOW()
 );
 
 CREATE TRIGGER set_answers_updated_at
@@ -872,16 +948,20 @@ CREATE TABLE public.ai_hints (
 
 
 -- ─── 9. DAILY_CHALLENGES ─────────────────────────────────────
+-- cf_rating: raw Codeforces rating (800–3500)
+-- difficulty: mapped label (800–1200=easy, 1300–1900=medium, 2000+=hard)
+-- bonus_points: set by backend at fetch time based on difficulty
 CREATE TABLE public.daily_challenges (
   id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  codeforces_id  varchar(20),
+  codeforces_id  text,
   title          text        NOT NULL,
   body           text        NOT NULL,
+  cf_rating      int,
   difficulty     varchar(10) CHECK (difficulty IN ('easy', 'medium', 'hard')),
   source_url     text,
   bonus_points   int         NOT NULL DEFAULT 50,
   challenge_date date        NOT NULL UNIQUE,
-  created_at     timestamp   NOT NULL DEFAULT now()
+  created_at     timestamptz NOT NULL DEFAULT NOW()
 );
 
 
@@ -958,28 +1038,11 @@ CREATE INDEX idx_challenges_date       ON public.daily_challenges (challenge_dat
 CREATE INDEX idx_users_points          ON public.users            (points DESC);
 
 
--- ─── TRIGGER: auto-create user profile on signup ─────────────
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
-BEGIN
-  INSERT INTO public.users (id, username, created_at, updated_at)
-  VALUES (
-    NEW.id,
-    SPLIT_PART(NEW.email, '@', 1),
-    now(),
-    now()
-  );
-
-  INSERT INTO public.point_transactions (user_id, amount, reason)
-  VALUES (NEW.id, 100, 'signup_bonus');
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- ─── TRIGGER: auto updated_at ────────────────────────────────
+-- NOTE: on_auth_user_created trigger has been intentionally removed.
+-- public.users row is created by FastAPI (POST /api/users/profile)
+-- after the user completes signup Step 2, along with the 100 point
+-- signup bonus. This ensures no partial rows with missing required fields.
 
 
 -- ─── ROW LEVEL SECURITY ──────────────────────────────────────

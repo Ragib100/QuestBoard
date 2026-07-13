@@ -11,21 +11,24 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    return await _client.auth.signUp(
+    final res = await _client.auth.signUp(
       email: email,
       password: password,
       emailRedirectTo: 'io.questboard://signup-callback',
     );
+    return res;
   }
 
   Future<AuthResponse> login({
     required String email,
     required String password,
   }) async {
-    return await _client.auth.signInWithPassword(
+    final res = await _client.auth.signInWithPassword(
       email: email,
       password: password,
     );
+    // print(Supabase.instance.client.auth.currentSession?.accessToken);
+    return res;
   }
 
   Future<void> logout() async {
