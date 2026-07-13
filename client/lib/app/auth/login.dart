@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:email_validator/email_validator.dart';
-import '../../../services/auth_service.dart';
+import '../../services/common/auth_service.dart';
 import 'signup.dart';
 import 'forgot_password.dart';
+import '../dashboard.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -63,9 +64,10 @@ class _LoginState extends State<Login> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
+      Navigator.pushReplacement(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Login successful.")));
+        MaterialPageRoute(builder: (context) => const Dashboard()),
+      );
     } on AuthException catch (e) {
       if (!mounted) return;
 

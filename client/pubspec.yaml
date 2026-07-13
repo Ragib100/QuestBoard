@@ -40,6 +40,9 @@ dependencies:
   email_validator: ^3.0.0
   app_links: ^7.2.1
   flutter_launcher_icons: ^0.14.4
+  image_picker: ^1.2.3
+  http: ^1.6.0
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:

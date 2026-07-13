@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login.dart';
-import '../../services/auth_service.dart';
+import '../../services/common/auth_service.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
