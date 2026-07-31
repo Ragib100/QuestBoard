@@ -4,7 +4,9 @@ client/.dart_tool/
 
 # Python
 server/venv/
+server/.venv/
 server/__pycache__/
+server/.ruff_cache/
 *.pyc
 
 # Environment

@@ -404,7 +404,7 @@
 **Day 1–2**
 - [ ] Forgot password and change password flows — confirm they work with Supabase Auth deep link setup
 - [ ] Add missing validations found during Week 5 testing
-- [ ] Clean up any `TODO` comments in the codebase
+
 
 **Day 3–5**
 - [ ] Write integration tests for the 5 most critical flows:

@@ -15,7 +15,7 @@ class UserService {
 
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  String get _apiUrl => dotenv.env['API_URL']!;
+  String get _apiUrl => dotenv.get('API_URL').replaceFirst(RegExp(r'/$'), '');
 
   Future<void> createUser({
     required String username,
@@ -23,7 +23,7 @@ class UserService {
     required String lastName,
     String? phoneNumber,
     required String codeforcesHandle,
-    required File imageFile,
+    File? imageFile,
   }) async {
     final user = _supabase.auth.currentUser;
 
@@ -31,28 +31,24 @@ class UserService {
       throw Exception("User is not authenticated.");
     }
 
-    // Upload image first
-    final extension = path.extension(imageFile.path);
-
-    final imagePath =
-        "${user.id}/${DateTime.now().millisecondsSinceEpoch}$extension";
-
-    await SupabaseServices.instance.uploadImage(
-      bucketName: "profile_image",
-      imageFile: imageFile,
-      filePath: imagePath,
-    );
+    var imagePath = '';
+    if (imageFile != null) {
+      final extension = path.extension(imageFile.path);
+      imagePath =
+          "${user.id}/${DateTime.now().millisecondsSinceEpoch}$extension";
+      await SupabaseServices.instance.uploadImage(
+        bucketName: 'profile_image',
+        imageFile: imageFile,
+        filePath: imagePath,
+      );
+    }
 
     // Get access token
-    final accessToken = _supabase.auth.currentSession!.accessToken;
+    final accessToken = _supabase.auth.currentSession?.accessToken;
+    if (accessToken == null) {
+      throw StateError('Your session has expired. Please sign in again.');
+    }
 
-    // print("Access Token: $accessToken");
-    // print("API URL: $_apiUrl");
-
-    // Send request to backend
-    // print(
-    //   "Creating user with username: $username, firstName: $firstName, lastName: $lastName, phoneNumber: $phoneNumber, codeforcesHandle: $codeforcesHandle, imagePath: $imagePath",
-    // );
     final response = await http.post(
       Uri.parse("$_apiUrl/api/users"),
       headers: {
@@ -69,13 +65,10 @@ class UserService {
       }),
     );
 
-    // print("Response status: ${response.statusCode}");
-    // print("Response body: ${response.body}");
-
     if (response.statusCode != 201) {
-      throw Exception(
-        jsonDecode(response.body)["detail"] ?? "Failed to create user.",
-      );
+      final body = jsonDecode(response.body);
+      final detail = body is Map<String, dynamic> ? body['detail'] : null;
+      throw Exception(detail ?? 'Failed to create your profile.');
     }
   }
 }

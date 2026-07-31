@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login.dart';
+import 'email_verification.dart';
+import '../profile/profile_create.dart';
 import '../../services/common/auth_service.dart';
 
 class Signup extends StatefulWidget {
@@ -50,13 +52,12 @@ class _SignupState extends State<Signup> {
 
       if (!mounted) return;
 
-      await _showCheckEmailDialog();
-
-      if (!mounted) return;
-
+      final nextScreen = response.session == null
+          ? const EmailVerification()
+          : const ProfileCreate();
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const Login()),
+        MaterialPageRoute(builder: (_) => nextScreen),
       );
     } on AuthException catch (e) {
       if (!mounted) return;
@@ -276,50 +277,6 @@ class _SignupState extends State<Signup> {
       ),
     );
   }
-
-  Future<void> _showCheckEmailDialog() async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF161B22),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFF30363D)),
-          ),
-          title: Text(
-            'Check your email',
-            style: GoogleFonts.spaceGrotesk(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          content: Text(
-            'We have sent a verification email to:\n\n'
-            '${_emailController.text.trim()}\n\n'
-            'Please verify your email before logging in.',
-            style: GoogleFonts.inter(
-              color: const Color(0xFF958DA1),
-              fontSize: 14,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Go to Login',
-                style: GoogleFonts.spaceGrotesk(
-                  color: const Color(0xFFD2BBFF),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 // Separate widget for the Step 1 Form to keep code clean
@@ -361,8 +318,8 @@ class _CredentialsFormState extends State<CredentialsForm> {
   bool get _hasNumber =>
       RegExp(r'[0-9]').hasMatch(widget.passwordController.text);
   bool get _hasSpecialCharacter => RegExp(
-    r'[!@#$%^&*(),.?":{}|<>_\-+=/\\\[\]`;~]',
-  ).hasMatch(widget.passwordController.text);
+        r'[!@#$%^&*(),.?":{}|<>_\-+=/\\\[\]`;~]',
+      ).hasMatch(widget.passwordController.text);
   bool get _passwordsMatch =>
       widget.confirmPasswordController.text.isNotEmpty &&
       widget.passwordController.text == widget.confirmPasswordController.text;
@@ -374,12 +331,12 @@ class _CredentialsFormState extends State<CredentialsForm> {
       _hasSpecialCharacter;
 
   int get _completedRequirements => [
-    _hasMinLength,
-    _hasUppercase,
-    _hasLowercase,
-    _hasNumber,
-    _hasSpecialCharacter,
-  ].where((isComplete) => isComplete).length;
+        _hasMinLength,
+        _hasUppercase,
+        _hasLowercase,
+        _hasNumber,
+        _hasSpecialCharacter,
+      ].where((isComplete) => isComplete).length;
 
   double get _strengthValue => _completedRequirements / 5;
 
@@ -630,9 +587,8 @@ class _CredentialsFormState extends State<CredentialsForm> {
           Text(
             isMatch ? "Passwords match" : "Passwords do not match",
             style: GoogleFonts.inter(
-              color: isMatch
-                  ? const Color(0xFF22C55E)
-                  : const Color(0xFFFF5C5C),
+              color:
+                  isMatch ? const Color(0xFF22C55E) : const Color(0xFFFF5C5C),
               fontSize: 12,
             ),
           ),

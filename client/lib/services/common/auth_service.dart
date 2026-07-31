@@ -42,6 +42,10 @@ class AuthService {
     );
   }
 
+  Future<void> updatePassword({required String password}) async {
+    await _client.auth.updateUser(UserAttributes(password: password));
+  }
+
   User? get currentUser => _client.auth.currentUser;
 
   Session? get currentSession => _client.auth.currentSession;
