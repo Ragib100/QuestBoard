@@ -24,7 +24,6 @@ def create_user(
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    print(f"Creating user with ID: {user_id} and data: {user_data}")
     try:
         return UserService.create_user(
             db=db,

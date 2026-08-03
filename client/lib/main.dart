@@ -13,17 +13,20 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
 
-  await Supabase.initialize(
-    url: SupabaseConfig.url,
-    publishableKey: SupabaseConfig.publishableKey, // fix: was publishableKey
-  );
+  if (SupabaseConfig.isConfigured) {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.publishableKey,
+    );
+  }
 
-  runApp(const MyApp());
+  runApp(MyApp(isSupabaseConfigured: SupabaseConfig.isConfigured));
 }
 
 class MyApp extends StatefulWidget {
-  // fix: must be StatefulWidget for AppLinks
-  const MyApp({super.key});
+  const MyApp({super.key, required this.isSupabaseConfigured});
+
+  final bool isSupabaseConfigured;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -32,12 +35,14 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final _appLinks = AppLinks();
   final _navigatorKey = GlobalKey<NavigatorState>();
+  static const ThemeMode _themeMode = ThemeMode.light;
 
   @override
   void initState() {
     super.initState();
     _initDeepLinks();
   }
+
 
   Future<void> _initDeepLinks() async {
     // Case 1 — app was closed and user tapped the link to open it
@@ -69,7 +74,7 @@ class _MyAppState extends State<MyApp> {
       }
 
       if (uri.host == 'reset-callback') {
-        // For forgot password flow — will handle later
+        // For forgot password flow
         Future.delayed(const Duration(milliseconds: 300), () {
           _navigatorKey.currentState?.pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const ResetPassword()),
@@ -89,9 +94,92 @@ class _MyAppState extends State<MyApp> {
         statusBarBrightness: Brightness.dark,
       ),
       child: MaterialApp(
-        navigatorKey: _navigatorKey, // needed to navigate from outside build()
+        navigatorKey: _navigatorKey,
+        title: 'QuestBoard',
         debugShowCheckedModeBanner: false,
-        home: const Intro(),
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.deepPurple,
+            brightness: Brightness.light,
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.grey[100],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
+            ),
+          ),
+        ),
+        darkTheme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.deepPurple,
+            brightness: Brightness.dark,
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.grey[900],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: Colors.deepPurpleAccent, width: 2),
+            ),
+          ),
+        ),
+        themeMode: _themeMode,
+        home: widget.isSupabaseConfigured
+            ? const Intro()
+            : const ConfigurationRequiredScreen(),
+      ),
+    );
+  }
+}
+
+class ConfigurationRequiredScreen extends StatelessWidget {
+  const ConfigurationRequiredScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.settings_outlined, size: 48),
+              SizedBox(height: 20),
+              Text(
+                'QuestBoard needs configuration',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Add your Supabase URL and publishable key to client/.env, '
+                'then restart the app. Copy client/.env.example as the template.',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

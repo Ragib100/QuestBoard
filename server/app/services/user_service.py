@@ -36,10 +36,12 @@ class UserService:
             codeforces_handle=user_data.codeforces_handle,
         )
 
-        print(f"Creating user: {user}")
-
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        try:
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        except Exception:
+            db.rollback()
+            raise
 
         return user

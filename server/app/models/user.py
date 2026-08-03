@@ -1,3 +1,4 @@
+from sqlalchemy.orm import relationship
 from sqlalchemy import (
     Boolean,
     Column,
@@ -85,3 +86,5 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    quests = relationship("Quest", back_populates="user")

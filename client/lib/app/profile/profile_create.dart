@@ -67,6 +67,16 @@ class _ProfileCreateState extends State<ProfileCreate> {
 
     FocusScope.of(context).unfocus();
 
+    if (_usernameController.text.trim().length < 3 ||
+        _firstNameController.text.trim().isEmpty ||
+        _lastNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Enter a username, first name, and last name.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -76,7 +86,7 @@ class _ProfileCreateState extends State<ProfileCreate> {
         lastName: _lastNameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         codeforcesHandle: _codeforcesController.text.trim(),
-        imageFile: _selectedImage!,
+        imageFile: _selectedImage,
       );
 
       if (!mounted) return;
@@ -117,7 +127,7 @@ class _ProfileCreateState extends State<ProfileCreate> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {},
+          onPressed: _isLoading ? null : () => Navigator.maybePop(context),
         ),
       ),
       body: SingleChildScrollView(
