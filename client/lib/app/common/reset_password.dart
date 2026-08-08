@@ -45,27 +45,40 @@ class _ResetPasswordState extends State<ResetPassword> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Choose a new password',
-                style: GoogleFonts.inter(fontSize: 24)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'New password'),
-              onSubmitted: (_) => _submit(),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Reset Password', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text('Choose a new, strong password for your account.', style: TextStyle(color: Color(0xFF64748B))),
+                const SizedBox(height: 40),
+                const Text('New Password', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(hintText: 'Enter at least 8 characters'),
+                ),
+                const SizedBox(height: 40),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  child: Text(_isLoading ? 'UPDATING...' : 'UPDATE PASSWORD'),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _isLoading ? null : _submit,
-              child: Text(_isLoading ? 'Saving…' : 'Update password'),
-            ),
-          ],
+          ),
         ),
       ),
     );

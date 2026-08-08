@@ -1,50 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'user_management.dart';
+import 'content_moderation.dart';
+import 'platform_management.dart';
+import 'reports_analytics.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final bool isWeb = MediaQuery.of(context).size.width > 900;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF161B22),
+        backgroundColor: Colors.white,
         elevation: 0,
-        title: Text(
-          'Admin Fortress',
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.redAccent,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
+        title: Text('Admin Dashboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStatsOverview(),
-            const SizedBox(height: 32),
-            Text(
-              'Management Modules',
-              style: GoogleFonts.spaceGrotesk(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStatsOverview(),
+                const SizedBox(height: 40),
+                Text('Management Modules', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+                _buildAdminModulesGrid(context, isWeb),
+                const SizedBox(height: 40),
+                Text('Platform Health', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+                _buildHealthChart(),
+              ],
             ),
-            const SizedBox(height: 16),
-            _buildAdminModulesGrid(),
-            const SizedBox(height: 32),
-            _buildRecentReports(),
-          ],
+          ),
         ),
       ),
     );
@@ -53,148 +48,79 @@ class AdminDashboard extends StatelessWidget {
   Widget _buildStatsOverview() {
     return Row(
       children: [
-        _buildStatCard('Users', '1.2k', Icons.people, Colors.blue),
-        const SizedBox(width: 16),
-        _buildStatCard('Quests', '850', Icons.assignment, Colors.green),
+        _adminStatCard('1,250', 'Total Users', Icons.people_rounded, Colors.blue),
+        const SizedBox(width: 20),
+        _adminStatCard('3,450', 'Total Quests', Icons.quiz_rounded, Colors.green),
+        const SizedBox(width: 20),
+        _adminStatCard('8,760', 'Answers', Icons.question_answer_rounded, Colors.orange),
+        const SizedBox(width: 20),
+        _adminStatCard('125,000', 'Total XP', Icons.stars_rounded, Colors.purple),
       ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _adminStatCard(String val, String label, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF161B22),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF30363D)),
-        ),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: GoogleFonts.spaceGrotesk(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                color: const Color(0xFF958DA1),
-                fontSize: 14,
-              ),
-            ),
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: color, size: 24)),
+            const SizedBox(height: 16),
+            Text(val, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
+            Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 14)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAdminModulesGrid() {
+  Widget _buildAdminModulesGrid(BuildContext context, bool isWeb) {
     final modules = [
-      {'title': 'User Management', 'icon': Icons.manage_accounts, 'color': Colors.orange},
-      {'title': 'Content Management', 'icon': Icons.article, 'color': Colors.purple},
-      {'title': 'Platform Management', 'icon': Icons.settings_applications, 'color': Colors.teal},
-      {'title': 'Reports & Analytics', 'icon': Icons.analytics, 'color': Colors.pink},
+      {'title': 'User Management', 'icon': Icons.manage_accounts, 'color': Colors.blue, 'page': const UserManagement()},
+      {'title': 'Content Moderation', 'icon': Icons.gavel_rounded, 'color': Colors.purple, 'page': const ContentModeration()},
+      {'title': 'Platform Settings', 'icon': Icons.settings_rounded, 'color': Colors.teal, 'page': const PlatformManagement()},
+      {'title': 'Reports & Analytics', 'icon': Icons.analytics_rounded, 'color': Colors.pink, 'page': const ReportsAnalytics()},
     ];
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isWeb ? 4 : 2,
+        crossAxisSpacing: 20,
+        mainAxisSpacing: 20,
         childAspectRatio: 1.3,
       ),
       itemCount: modules.length,
       itemBuilder: (context, index) {
-        final module = modules[index];
-        return Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF161B22),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF30363D)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(module['icon'] as IconData, color: module['color'] as Color, size: 32),
-              const SizedBox(height: 8),
-              Text(
-                module['title'] as String,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.spaceGrotesk(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+        final m = modules[index];
+        return InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => m['page'] as Widget)),
+          child: Container(
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(m['icon'] as IconData, color: m['color'] as Color, size: 40),
+                const SizedBox(height: 12),
+                Text(m['title'] as String, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildRecentReports() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Pending Reports',
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161B22),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Spam detected in Quest #452',
-                      style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Reported by 3 users',
-                      style: GoogleFonts.inter(color: const Color(0xFF958DA1), fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  visualDensity: VisualDensity.compact,
-                ),
-                child: const Text('Review'),
-              ),
-            ],
-          ),
-        ),
-      ],
+  Widget _buildHealthChart() {
+    return Container(
+      height: 300,
+      width: double.infinity,
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: const Center(child: Text('Chart Placeholder', style: TextStyle(color: Color(0xFF94A3B8)))),
     );
   }
 }

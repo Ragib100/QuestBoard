@@ -7,172 +7,96 @@ class DailyChallengeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF161B22),
+        backgroundColor: Colors.white,
         elevation: 0,
-        title: Text(
-          'Daily Challenge',
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: Text('Daily Challenge', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            _buildChallengeCard(),
-            const SizedBox(height: 32),
-            _buildRewardsSection(),
-            const SizedBox(height: 32),
-            _buildProgressSection(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChallengeCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E1B4B), Color(0xFF312E81)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF4338CA)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF4338CA).withValues(alpha: 0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.auto_awesome, color: Color(0xFF818CF8), size: 48),
-          const SizedBox(height: 16),
-          Text(
-            'The Debugger\'s Maze',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.spaceGrotesk(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Find and fix 3 memory leaks in the provided pseudo-code to earn bonus XP.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              color: const Color(0xFFC7D2FE),
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Container(
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, color: Color(0xFF0066FF), size: 64),
+                  const SizedBox(height: 24),
+                  Text('Today\'s Challenge', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Solve the challenge and earn bonus points.', style: TextStyle(color: Color(0xFF64748B), fontSize: 16)),
+                  const SizedBox(height: 40),
+                  _buildTimer(),
+                  const SizedBox(height: 48),
+                  _buildChallengeDetail(),
+                  const SizedBox(height: 48),
+                  ElevatedButton(
+                    onPressed: () {},
+                    style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 60)),
+                    child: const Text('SOLVE CHALLENGE'),
+                  ),
+                ],
               ),
             ),
-            child: const Text('ACCEPT CHALLENGE'),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildRewardsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildTimer() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          'Today\'s Rewards',
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildRewardItem(Icons.bolt, '100 XP'),
-            _buildRewardItem(Icons.stars, '50 Gems'),
-            _buildRewardItem(Icons.shield, 'Rare Badge'),
-          ],
-        ),
+        _timeBox('12', 'Hours'),
+        const SizedBox(width: 16),
+        _timeBox('45', 'Minutes'),
+        const SizedBox(width: 16),
+        _timeBox('30', 'Seconds'),
       ],
     );
   }
 
-  Widget _buildRewardItem(IconData icon, String label) {
-    return Container(
-      width: 100,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: const Color(0xFF7C3AED)),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+  Widget _timeBox(String val, String label) {
+    return Column(
+      children: [
+        Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+          child: Center(child: Text(val, style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)))),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+      ],
     );
   }
 
-  Widget _buildProgressSection() {
+  Widget _buildChallengeDetail() {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Weekly Streak',
-                style: GoogleFonts.spaceGrotesk(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text('4/7 Days', style: TextStyle(color: Color(0xFF7C3AED))),
-            ],
-          ),
-          const SizedBox(height: 16),
-          LinearProgressIndicator(
-            value: 4 / 7,
-            backgroundColor: const Color(0xFF0D1117),
-            valueColor: const AlwaysStoppedAnimation(Color(0xFF7C3AED)),
-            minHeight: 8,
-            borderRadius: BorderRadius.circular(4),
+          Text('Reverse a String', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          const Text('Given a string s, reverse the string and return it.', style: TextStyle(color: Color(0xFF64748B))),
+          const SizedBox(height: 20),
+          const Text('Example:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(8)),
+            child: const Text('Input: s = "hello"\nOutput: "olleh"', style: TextStyle(color: Colors.white, fontFamily: 'monospace')),
           ),
         ],
       ),

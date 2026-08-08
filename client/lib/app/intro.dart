@@ -1,212 +1,123 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'auth/login.dart';
+import 'auth/signup.dart';
 
-class Intro extends StatefulWidget {
+class Intro extends StatelessWidget {
   const Intro({super.key});
-
-  @override
-  State<Intro> createState() => _IntroState();
-}
-
-class _IntroState extends State<Intro> {
-  @override
-  void initState() {
-    super.initState();
-    _navigateToLogin();
-  }
-
-  Future<void> _navigateToLogin() async {
-    await Future.delayed(const Duration(seconds: 5));
-
-    if (!mounted) return;
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const Login()),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
-      body: Stack(
-        children: [
-          const BackgroundEffects(),
-          SafeArea(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Spacer(),
-
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 152,
-                            height: 152,
-                            decoration: BoxDecoration(
-                              color: const Color(0x33D2BBFF),
-                              borderRadius: BorderRadius.circular(30),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color.fromARGB(102, 132, 66, 247),
-                                  blurRadius: 40,
-                                  spreadRadius: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x667C3AED),
-                                  blurRadius: 20,
-                                  spreadRadius: 0,
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Image.asset(
-                                'assets/images/logo.jpg',
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 30),
-
-                      RichText(
-                        text: TextSpan(
-                          style: GoogleFonts.spaceGrotesk(
-                            color: Colors.white,
-                            fontSize: 20,
-                            height: 1.5,
-                          ),
-                          children: const [
-                            TextSpan(text: 'Quest'),
-                            TextSpan(
-                              text: 'Board',
-                              style: TextStyle(color: Color(0xFF7C3AED)),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      Text(
-                        'LEVEL UP YOUR PROBLEM-SOLVING',
-                        style: GoogleFonts.hankenGrotesk(
-                          color: const Color(0xFF8B949E),
-                          fontSize: 12,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const Spacer(),
-
-                const LoadingIndicator(),
-
-                const SizedBox(height: 40),
-              ],
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Row(
+          children: [
+            const Icon(Icons.bolt_rounded, color: Color(0xFF0066FF), size: 28),
+            const SizedBox(width: 8),
+            Text('QuestHub', style: GoogleFonts.outfit(color: const Color(0xFF1E293B), fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Login())), child: const Text('Login')),
+          const SizedBox(width: 12),
+          Padding(
+            padding: const EdgeInsets.only(right: 20.0),
+            child: ElevatedButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Signup())),
+              style: ElevatedButton.styleFrom(minimumSize: const Size(100, 40)),
+              child: const Text('Register', style: TextStyle(fontSize: 14)),
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class BackgroundEffects extends StatelessWidget {
-  const BackgroundEffects({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          top: -100,
-          left: -100,
-          child: Container(
-            width: 600,
-            height: 600,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [Color(0x26958DA1), Colors.transparent],
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            const SizedBox(height: 60),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome to\nQuestHub',
+                          style: GoogleFonts.outfit(fontSize: 56, fontWeight: FontWeight.bold, height: 1.1),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Ask. Answer. Learn. Grow.',
+                          style: GoogleFonts.inter(fontSize: 20, color: const Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Join our community to ask questions, share knowledge, earn points and badges, and grow together.',
+                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 16),
+                        ),
+                        const SizedBox(height: 40),
+                        Row(
+                          children: [
+                            ElevatedButton(
+                              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Signup())),
+                              style: ElevatedButton.styleFrom(minimumSize: const Size(180, 56)),
+                              child: const Text('Get Started'),
+                            ),
+                            const SizedBox(width: 20),
+                            OutlinedButton(
+                              onPressed: () {},
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(180, 56),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Learn More', style: TextStyle(color: Color(0xFF1E293B))),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Image.network('https://illustrations.popsy.co/blue/creative-process.svg'),
+                  ),
+                ],
               ),
             ),
-          ),
+            const SizedBox(height: 100),
+            _buildStatsSection(),
+            const SizedBox(height: 100),
+          ],
         ),
-        Positioned(
-          top: 200,
-          left: -100,
-          child: Container(
-            width: 600,
-            height: 600,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [Color(0x337C3AED), Colors.transparent],
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
-}
 
-class LoadingIndicator extends StatelessWidget {
-  const LoadingIndicator({super.key});
+  Widget _buildStatsSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      color: const Color(0xFFF8FAFC),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _statItem('10K+', 'Questions'),
+          _statItem('25K+', 'Answers'),
+          _statItem('5K+', 'Users'),
+          _statItem('100+', 'Challenges'),
+        ],
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _statItem(String val, String label) {
     return Column(
       children: [
-        Container(
-          width: 120,
-          height: 4,
-          decoration: BoxDecoration(
-            color: const Color(0x4C37333E),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0x194A4455)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: const LinearProgressIndicator(
-              value: null,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation(Color(0xFF7C3AED)),
-              minHeight: 4,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'INITIALIZING SYSTEM...',
-          style: GoogleFonts.jetBrainsMono(
-            color: const Color(0xFF958DA1),
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 2,
-          ),
-        ),
+        Text(val, style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.bold, color: const Color(0xFF0066FF))),
+        Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 16)),
       ],
     );
   }
