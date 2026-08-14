@@ -5,6 +5,8 @@ every class has been imported. Import this package, never the modules directly.
 """
 
 from .answer import Answer
+from .badge import Badge, BadgeCode, UserBadge
+from .notification import Notification, NotificationType
 from .point_transaction import PointReason, PointTransaction
 from .question import Question, Tag, question_tags
 from .user import User
@@ -12,6 +14,10 @@ from .vote import TARGET_ANSWER, TARGET_QUESTION, Vote
 
 __all__ = [
     "Answer",
+    "Badge",
+    "BadgeCode",
+    "Notification",
+    "NotificationType",
     "PointReason",
     "PointTransaction",
     "Question",
@@ -19,6 +25,7 @@ __all__ = [
     "TARGET_ANSWER",
     "TARGET_QUESTION",
     "User",
+    "UserBadge",
     "Vote",
     "question_tags",
 ]

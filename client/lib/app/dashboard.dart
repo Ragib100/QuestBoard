@@ -11,6 +11,9 @@ import '../core/app_colors.dart';
 import '../core/widgets/async_states.dart';
 import '../models/profile.dart';
 import '../services/api/api_client.dart';
+import '../models/gamification.dart';
+import '../services/common/gamification_service.dart';
+import '../services/common/quest_service.dart';
 import '../services/common/user_service.dart';
 
 class Dashboard extends StatefulWidget {
@@ -23,11 +26,35 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   int _currentIndex = 0;
   Profile? _me;
+  int _unread = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadMe();
+    _refresh();
+  }
+
+  /// Balance and unread count, pulled together whenever the user navigates.
+  /// Polling on a timer would cost more than it is worth for a class project —
+  /// every screen that can change either of these already triggers a refresh.
+  Future<void> _refresh() async {
+    await _loadMe();
+    await _loadUnread();
+  }
+
+  Future<void> _loadUnread() async {
+    try {
+      final count = await GamificationService.instance.unreadCount();
+      if (mounted) setState(() => _unread = count);
+    } on ApiException {
+      // Offline or not onboarded — leave the badge as it was.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    if (mounted) _loadUnread();
   }
 
   /// The signed-in user's balance, shown in the app bar and refreshed whenever
@@ -108,10 +135,7 @@ class _DashboardState extends State<Dashboard> {
           PointsBadge(points: _me!.points, label: '${_me!.points} pts'),
           const SizedBox(width: 16),
         ],
-        IconButton(
-          icon: const Icon(Icons.notifications_none_outlined, color: AppColors.textSecondary),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-        ),
+        _NotificationBell(count: _unread, onPressed: _openNotifications),
         const SizedBox(width: 16),
         const CircleAvatar(
           radius: 18,
@@ -183,7 +207,7 @@ class _DashboardState extends State<Dashboard> {
             if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Login()));
           } else {
             setState(() => _currentIndex = index >= 0 ? index : _currentIndex);
-            if (index == -2) Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+            if (index == -2) _openNotifications();
             if (index == -3) Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen()));
           }
         },
@@ -212,7 +236,7 @@ class _DashboardState extends State<Dashboard> {
       currentIndex: _currentIndex,
       onTap: (index) {
         setState(() => _currentIndex = index);
-        _loadMe();
+        _refresh();
       },
       backgroundColor: Colors.white,
       selectedItemColor: AppColors.primary,
@@ -229,8 +253,89 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
-class UserHome extends StatelessWidget {
+/// Bell with an unread count. The number is capped so a long absence cannot
+/// stretch the app bar.
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.count, required this.onPressed});
+
+  final int count;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_outlined,
+              color: AppColors.textSecondary),
+          tooltip: count == 0 ? 'Notifications' : '$count unread',
+          onPressed: onPressed,
+        ),
+        if (count > 0)
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 16),
+              decoration: BoxDecoration(
+                color: AppColors.danger,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.surface, width: 1.5),
+              ),
+              child: Text(
+                count > 9 ? '9+' : '$count',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class UserHome extends StatefulWidget {
   const UserHome({super.key});
+
+  @override
+  State<UserHome> createState() => _UserHomeState();
+}
+
+class _UserHomeState extends State<UserHome> {
+  Profile? _me;
+  List<LeaderboardEntry> _top = const [];
+  int _badgeCount = 0;
+  int _openQuests = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final me = await UserService.instance.me();
+      final board =
+          await GamificationService.instance.leaderboard(period: 'all_time');
+      final badges = await GamificationService.instance.badgesFor(me.id);
+      final feed = await QuestService.instance.list(limit: 1);
+      if (!mounted) return;
+      setState(() {
+        _me = me;
+        _top = board.entries.take(3).toList();
+        _badgeCount = badges.where((b) => b.isEarned).length;
+        _openQuests = feed.total;
+      });
+    } on ApiException {
+      // Leave the placeholders empty rather than showing invented numbers.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -242,7 +347,7 @@ class UserHome extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Welcome back, Arafat!',
+            _me == null ? 'Welcome back!' : 'Welcome back, ${_me!.firstName.isEmpty ? _me!.username : _me!.firstName}!',
             style: GoogleFonts.outfit(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -275,13 +380,13 @@ class UserHome extends StatelessWidget {
   Widget _buildStatsRow(bool isWeb) {
     return Row(
       children: [
-        _statCard('12', 'Quests Solved', Icons.check_circle_rounded, Colors.green),
+        _statCard('${_me?.points ?? 0}', 'Points', Icons.stars_rounded, AppColors.points),
         const SizedBox(width: 20),
-        _statCard('46', 'Active Quests', Icons.bolt_rounded, Colors.orange),
+        _statCard('$_openQuests', 'Open Quests', Icons.bolt_rounded, Colors.orange),
         const SizedBox(width: 20),
-        _statCard('1,250', 'Total Points', Icons.stars_rounded, Colors.blue),
+        _statCard('${_me?.streakDays ?? 0}', 'Day Streak', Icons.local_fire_department_rounded, const Color(0xFFF97316)),
         const SizedBox(width: 20),
-        _statCard('5', 'Badges', Icons.verified_rounded, Colors.purple),
+        _statCard('$_badgeCount', 'Badges', Icons.verified_rounded, Colors.purple),
       ],
     );
   }
@@ -472,9 +577,16 @@ class UserHome extends StatelessWidget {
             style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
           ),
           const SizedBox(height: 20),
-          _leaderboardItem('1', 'John Doe', '2,450 pts'),
-          _leaderboardItem('2', 'Sarah Khan', '2,150 pts'),
-          _leaderboardItem('3', 'Arafat Hasan', '1,250 pts'),
+          if (_top.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('No rankings yet.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            )
+          else
+            for (final entry in _top)
+              _leaderboardItem('${entry.rank}', entry.user.displayName,
+                  '${entry.score} pts'),
           const SizedBox(height: 12),
           Center(
             child: TextButton(

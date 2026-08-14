@@ -1,39 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/app_colors.dart';
 
-class LeaderboardScreen extends StatelessWidget {
+import '../../../core/app_colors.dart';
+import '../../../core/widgets/async_states.dart';
+import '../../../models/gamification.dart';
+import '../../../services/api/api_client.dart';
+import '../../../services/common/gamification_service.dart';
+import '../profile/profile_screen.dart';
+
+class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 
   @override
+  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+}
+
+class _LeaderboardScreenState extends State<LeaderboardScreen> {
+  Leaderboard? _board;
+  bool _loading = true;
+  String? _error;
+  String _period = 'all_time';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final board = await GamificationService.instance.leaderboard(period: _period);
+      if (mounted) setState(() => (_board = board, _loading = false));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_error = e.message, _loading = false));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 900;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text('Leaderboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-      ),
+      appBar: !isWeb
+          ? AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              title: Text('Leaderboard',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),
           child: Column(
             children: [
-              _buildFilterTabs(),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: 10,
-                  itemBuilder: (context, index) {
-                    return _LeaderTile(
-                      rank: index + 1,
-                      name: index == 0 ? 'John Doe' : (index == 1 ? 'Sarah Khan' : 'User_${index + 1}'),
-                      pts: '${2500 - (index * 150)} pts',
-                      isMe: index == 2,
-                    );
+              if (isWeb)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 32, 20, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Leaderboard',
+                        style: GoogleFonts.outfit(
+                            fontSize: 24, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'all_time', label: Text('All time')),
+                    ButtonSegment(value: 'weekly', label: Text('This week')),
+                  ],
+                  selected: {_period},
+                  onSelectionChanged: (s) {
+                    setState(() => _period = s.first);
+                    _load();
                   },
                 ),
               ),
+              Expanded(child: _body()),
             ],
           ),
         ),
@@ -41,70 +91,110 @@ class LeaderboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFilterTabs() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 20),
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _body() {
+    if (_loading) return const LoadingState();
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+
+    final board = _board!;
+    if (board.entries.isEmpty) {
+      return EmptyState(
+        icon: Icons.emoji_events_outlined,
+        title: _period == 'weekly' ? 'Nothing this week yet' : 'No rankings yet',
+        message: _period == 'weekly'
+            ? 'Points earned in the last seven days show up here. Answer a '
+                'quest to get on the board.'
+            : 'Be the first to earn points by answering a quest.',
+      );
+    }
+
+    final outsideTop = board.me != null &&
+        !board.entries.any((e) => e.user.id == board.me!.user.id);
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          _tab('Top Users', true),
-          _tab('This Week', false),
-          _tab('This Month', false),
-          _tab('All Time', false),
-        ],
-      ),
-    );
-  }
-
-  Widget _tab(String label, bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(color: active ? AppColors.primary : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-      child: Text(label, style: TextStyle(color: active ? Colors.white : AppColors.textSecondary, fontWeight: FontWeight.bold, fontSize: 13)),
-    );
-  }
-}
-
-class _LeaderTile extends StatelessWidget {
-  final int rank;
-  final String name, pts;
-  final bool isMe;
-  const _LeaderTile({required this.rank, required this.name, required this.pts, required this.isMe});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isMe ? AppColors.primaryTint : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isMe ? AppColors.primary.withValues(alpha: 0.3) : AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: rank <= 3 ? AppColors.subtleFill : Colors.transparent,
-              shape: BoxShape.circle,
+          for (final entry in board.entries)
+            _row(entry, highlight: entry.user.id == board.me?.user.id),
+          if (outsideTop) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                Expanded(child: Divider(color: AppColors.border)),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('Your position',
+                      style: TextStyle(
+                          color: AppColors.textMuted, fontSize: 12)),
+                ),
+                Expanded(child: Divider(color: AppColors.border)),
+              ]),
             ),
-            child: Center(child: Text(rank.toString(), style: TextStyle(fontWeight: FontWeight.bold, color: rank <= 3 ? AppColors.primary : AppColors.textSecondary))),
-          ),
-          const SizedBox(width: 16),
-          const CircleAvatar(radius: 20, backgroundColor: AppColors.subtleFill, child: Icon(Icons.person, size: 20, color: AppColors.textMuted)),
-          const SizedBox(width: 16),
-          Text(name, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-          if (isMe) ...[
-            const SizedBox(width: 8),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(4)), child: const Text('YOU', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+            _row(board.me!, highlight: true),
           ],
-          const Spacer(),
-          Text(pts, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
         ],
+      ),
+    );
+  }
+
+  Widget _row(LeaderboardEntry entry, {bool highlight = false}) {
+    final medal = switch (entry.rank) {
+      1 => '🥇',
+      2 => '🥈',
+      3 => '🥉',
+      _ => null,
+    };
+
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ProfileScreen(userId: entry.user.id)),
+      ),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: highlight ? AppColors.primaryTint : AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: highlight ? AppColors.primary : AppColors.border),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 36,
+              child: medal != null
+                  ? Text(medal, style: const TextStyle(fontSize: 22))
+                  : Text(
+                      entry.rank == 0 ? '—' : '${entry.rank}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMuted),
+                    ),
+            ),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.subtleFill,
+              child: Text(entry.user.initial,
+                  style: const TextStyle(fontSize: 13)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                entry.user.displayName,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            PointsBadge(points: entry.score, label: '${entry.score}'),
+          ],
+        ),
       ),
     );
   }

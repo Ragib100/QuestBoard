@@ -6,12 +6,16 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import (
     TARGET_ANSWER,
     Answer,
+    NotificationType,
     PointReason,
     Question,
     User,
     Vote,
 )
 from app.schemas.answer import AnswerCreate, AnswerUpdate
+from app.services.activity_service import ActivityService
+from app.services.badge_service import BadgeService
+from app.services.notification_service import NotificationService
 from app.services.point_service import PointService
 
 
@@ -41,7 +45,8 @@ class AnswerService:
         if question.author_id == user_id:
             raise PermissionError("You cannot answer your own quest.")
 
-        if db.get(User, user_id) is None:
+        author = db.get(User, user_id)
+        if author is None:
             raise ValueError("Complete your profile first.")
 
         answer = Answer(
@@ -53,6 +58,20 @@ class AnswerService:
 
         try:
             db.add(answer)
+            db.flush()
+
+            ActivityService.record(db, author)
+            BadgeService.sync(db, author)
+
+            NotificationService.create(
+                db,
+                user_id=question.author_id,
+                notification_type=NotificationType.ANSWER_RECEIVED,
+                message=f"{author.username} answered your quest "
+                f'"{question.title}".',
+                reference_id=question.id,
+            )
+
             db.commit()
             db.refresh(answer)
         except Exception:
@@ -133,6 +152,8 @@ class AnswerService:
         if helper is None:
             raise ValueError("That answer's author no longer exists.")
 
+        asker = db.get(User, user_id)
+
         try:
             answer.is_accepted = True
             question.is_solved = True
@@ -148,6 +169,28 @@ class AnswerService:
                     PointReason.BOUNTY_AWARDED,
                     reference_id=question.id,
                 )
+                NotificationService.create(
+                    db,
+                    user_id=helper.id,
+                    notification_type=NotificationType.BOUNTY_AWARDED,
+                    message=f"You won {question.bounty_points} points for "
+                    f'answering "{question.title}".',
+                    reference_id=question.id,
+                )
+
+            NotificationService.create(
+                db,
+                user_id=helper.id,
+                notification_type=NotificationType.ANSWER_ACCEPTED,
+                message=f'Your answer to "{question.title}" was accepted.',
+                reference_id=question.id,
+            )
+
+            if asker is not None:
+                ActivityService.record(db, asker)
+
+            # Winning a bounty can unlock first_bounty or bounty_hunter.
+            BadgeService.sync(db, helper)
 
             db.commit()
             db.refresh(answer)

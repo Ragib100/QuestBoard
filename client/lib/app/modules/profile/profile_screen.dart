@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../models/gamification.dart';
 import '../../../models/profile.dart';
 import '../../../models/quest.dart';
 import '../../../services/api/api_client.dart';
+import '../../../services/common/gamification_service.dart';
 import '../../../services/common/user_service.dart';
 import 'profile_edit.dart';
 
@@ -23,6 +25,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Profile? _profile;
   List<PointEntry> _entries = const [];
+  List<AchievementBadge> _badges = const [];
   bool _loading = true;
   String? _error;
 
@@ -46,10 +49,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ? await UserService.instance.me()
           : await UserService.instance.getProfile(widget.userId!);
       final points = await UserService.instance.points(profile.id);
+      final badges = await GamificationService.instance.badgesFor(profile.id);
       if (!mounted) return;
       setState(() {
         _profile = profile;
         _entries = points.entries;
+        _badges = badges;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -90,7 +95,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _content(bool isWeb) {
     final profile = _profile!;
     final left = _identityCard(profile);
-    final right = _ledgerCard();
+    final right = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _badgeCard(),
+        const SizedBox(height: 24),
+        _ledgerCard(),
+      ],
+    );
 
     return Center(
       child: ConstrainedBox(
@@ -174,7 +186,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Divider(color: AppColors.border),
           const SizedBox(height: 16),
           _stat('Points', '${profile.points}'),
-          _stat('Streak', '${profile.streakDays} days'),
+          _streakStat(profile.streakDays),
+          _stat('Badges',
+              '${_badges.where((b) => b.isEarned).length} of ${_badges.length}'),
           _stat('Joined', timeAgo(profile.createdAt)),
           if (_isMe) ...[
             const SizedBox(height: 24),
@@ -201,6 +215,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: const TextStyle(
                   fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
         ],
+      ),
+    );
+  }
+
+  /// Streaks get a flame once they are actually running — a "0 days" flame
+  /// would celebrate nothing.
+  Widget _streakStat(int days) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Streak', style: TextStyle(color: AppColors.textSecondary)),
+          Row(
+            children: [
+              if (days > 0) ...[
+                const Icon(Icons.local_fire_department_rounded,
+                    size: 16, color: Color(0xFFF97316)),
+                const SizedBox(width: 4),
+              ],
+              Text(days == 1 ? '1 day' : '$days days',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badgeCard() {
+    final earned = _badges.where((b) => b.isEarned).length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Badges',
+                  style: GoogleFonts.outfit(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Text('$earned / ${_badges.length}',
+                  style: const TextStyle(color: AppColors.textMuted)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_badges.isEmpty)
+            const Text('No badges defined yet.',
+                style: TextStyle(color: AppColors.textMuted))
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [for (final badge in _badges) _badgeChip(badge)],
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Locked badges stay visible but greyed out — seeing what is still
+  /// achievable is the point of a badge list.
+  Widget _badgeChip(AchievementBadge badge) {
+    final earned = badge.isEarned;
+    return Tooltip(
+      message: earned
+          ? '${badge.description}\nEarned ${timeAgo(badge.awardedAt!)}'
+          : '${badge.description} (locked)',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: earned ? AppColors.primaryTint : AppColors.subtleFill,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: earned ? AppColors.primary : AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              earned ? Icons.emoji_events_rounded : Icons.lock_outline_rounded,
+              size: 16,
+              color: earned ? AppColors.primary : AppColors.textMuted,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              badge.label,
+              style: TextStyle(
+                fontWeight: earned ? FontWeight.bold : FontWeight.normal,
+                color: earned ? AppColors.primary : AppColors.textMuted,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

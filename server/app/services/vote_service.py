@@ -12,6 +12,7 @@ from app.models import (
     User,
     Vote,
 )
+from app.services.activity_service import ActivityService
 from app.services.point_service import PointService
 
 
@@ -96,6 +97,10 @@ class VoteService:
         else:
             existing.value = value
             new_value = value
+
+        voter = db.get(User, user_id)
+        if voter is not None:
+            ActivityService.record(db, voter)
 
         delta = new_value - previous
         if delta:

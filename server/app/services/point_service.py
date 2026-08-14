@@ -46,4 +46,10 @@ class PointService:
             reference_id=reference_id,
         )
         db.add(entry)
+
+        # The session runs with autoflush off, so anything that reads the ledger
+        # later in the same transaction — a badge check counting bounties won —
+        # would not see this row. Flush, but never commit: the caller still owns
+        # the transaction.
+        db.flush()
         return entry

@@ -1,125 +1,212 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/app_colors.dart';
 
-class NotificationsScreen extends StatelessWidget {
+import '../../../core/app_colors.dart';
+import '../../../core/widgets/async_states.dart';
+import '../../../models/gamification.dart';
+import '../../../models/quest.dart' show timeAgo;
+import '../../../services/api/api_client.dart';
+import '../../../services/common/gamification_service.dart';
+import '../questions/question_detail.dart';
+
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  List<AppNotification> _items = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await GamificationService.instance.notifications();
+      if (mounted) setState(() => (_items = result.items, _loading = false));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_error = e.message, _loading = false));
+    }
+  }
+
+  Future<void> _markAllRead() async {
+    final previous = _items;
+    setState(() =>
+        _items = [for (final n in _items) n.copyWith(isRead: true)]);
+    try {
+      await GamificationService.instance.markAllRead();
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _items = previous);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _open(AppNotification notification) async {
+    if (!notification.isRead) {
+      setState(() => _items = [
+            for (final n in _items)
+              n.id == notification.id ? n.copyWith(isRead: true) : n
+          ]);
+      // Fire and forget: the row is already marked read locally, and a failed
+      // mark is not worth interrupting the user for.
+      GamificationService.instance.markRead(notification.id).ignore();
+    }
+
+    if (notification.opensQuest && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => QuestionDetail(questId: notification.referenceId!),
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final unread = _items.where((n) => !n.isRead).length;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
         elevation: 0,
-        title: Text('Notifications', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        title: Text('Notifications',
+            style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        actions: [
+          if (unread > 0)
+            TextButton(
+              onPressed: _markAllRead,
+              child: const Text('Mark all as read',
+                  style: TextStyle(color: AppColors.primary)),
+            ),
+        ],
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Recent Notifications', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
-                    TextButton(onPressed: () {}, child: const Text('Mark all as read', style: TextStyle(color: AppColors.primary))),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: 10,
-                  itemBuilder: (context, index) {
-                    return _NotificationTile(index: index);
-                  },
-                ),
-              ),
-            ],
-          ),
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: _body(),
         ),
       ),
     );
   }
-}
 
-class _NotificationTile extends StatelessWidget {
-  final int index;
-  const _NotificationTile({required this.index});
-
-  @override
-  Widget build(BuildContext context) {
-    final types = ['reply', 'upvote', 'streak', 'new_user'];
-    final type = types[index % 4];
-
-    String title, body, time;
-    IconData icon;
-    Color color;
-
-    switch (type) {
-      case 'reply':
-        title = 'John Doe answered your question';
-        body = 'What is the difference between Array and ArrayList?';
-        time = '10m ago';
-        icon = Icons.reply_rounded;
-        color = Colors.blue;
-        break;
-      case 'upvote':
-        title = 'Your answer was upvoted';
-        body = 'Explain the concept of Dependency Injection.';
-        time = '1h ago';
-        icon = Icons.thumb_up_rounded;
-        color = Colors.orange;
-        break;
-      case 'streak':
-        title = 'New badge earned: 7 Day Streak!';
-        body = 'Keep going, you\'re on fire!';
-        time = '2h ago';
-        icon = Icons.verified_rounded;
-        color = Colors.purple;
-        break;
-      default:
-        title = 'Welcome to QuestBoard!';
-        body = 'Start by browsing some questions or asking your own.';
-        time = '1d ago';
-        icon = Icons.celebration_rounded;
-        color = Colors.green;
+  Widget _body() {
+    if (_loading) return const LoadingState();
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_items.isEmpty) {
+      return const EmptyState(
+        icon: Icons.notifications_none_rounded,
+        title: 'Nothing yet',
+        message: 'Answers, accepted solutions and badges will show up here.',
+      );
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(20),
+        itemCount: _items.length,
+        itemBuilder: (context, i) => _tile(_items[i]),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 24),
+    );
+  }
+
+  ({IconData icon, Color color}) _visualFor(String type) => switch (type) {
+        NotificationType.answerAccepted => (
+            icon: Icons.check_circle_rounded,
+            color: AppColors.success
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary)),
-                const SizedBox(height: 4),
-                Text(body, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-                const SizedBox(height: 8),
-                Text(time, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              ],
+        NotificationType.bountyAwarded => (
+            icon: Icons.monetization_on_rounded,
+            color: AppColors.points
+          ),
+        NotificationType.badgeEarned => (
+            icon: Icons.emoji_events_rounded,
+            color: AppColors.primary
+          ),
+        NotificationType.answerReceived => (
+            icon: Icons.forum_rounded,
+            color: AppColors.primary
+          ),
+        _ => (icon: Icons.notifications_rounded, color: AppColors.textMuted),
+      };
+
+  Widget _tile(AppNotification notification) {
+    final visual = _visualFor(notification.type);
+
+    return InkWell(
+      onTap: () => _open(notification),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: notification.isRead ? AppColors.border : AppColors.primary,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: visual.color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(visual.icon, size: 18, color: visual.color),
             ),
-          ),
-          if (index < 3) Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
-        ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.message,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      height: 1.4,
+                      fontWeight: notification.isRead
+                          ? FontWeight.normal
+                          : FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(timeAgo(notification.createdAt),
+                      style: const TextStyle(
+                          color: AppColors.textMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+            if (!notification.isRead)
+              Container(
+                margin: const EdgeInsets.only(top: 6, left: 8),
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                    color: AppColors.primary, shape: BoxShape.circle),
+              ),
+          ],
+        ),
       ),
     );
   }

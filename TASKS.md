@@ -4,23 +4,26 @@ Single source of truth for progress. Check a box only when it meets the definiti
 done in [docs/product.md](docs/product.md#definition-of-done). Work top to bottom —
 milestones are ordered by dependency, not preference.
 
-**Now:** M3 — gamification. M1 and M2 are done and verified against the live database.
+**Now:** M4 — AI hints and the daily challenge. M1–M3 are done and verified against
+the live database.
 
 | Milestone | Status |
 |---|---|
 | M0 · Foundation | ✅ done |
 | M1 · Auth & profiles | ✅ done |
 | M2 · Quest loop (MVP core) | ✅ done |
-| M3 · Gamification & notifications | 🟡 tables exist, unused |
+| M3 · Gamification & notifications | ✅ done |
 | M4 · AI & daily challenge | 🟡 tables exist, unused |
 | M5 · Search, admin & polish | 🔴 not started |
 | M6 · Ship | 🔴 not started |
 
 **Verified green** (2026-08-14): `flutter analyze` → no issues · `flutter test` → 6/6
-passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **26 HTTP
-cases against the live database**, covering every endpoint plus each guard (self-vote,
-self-answer, accept-by-non-author, double accept, overspend, unknown tag, delete with
-answers). The economy ledger nets to zero — points are conserved, never minted.
+passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **26 API
+endpoints live**, exercised against the real database along with every guard
+(self-vote, self-answer, accept-by-non-author, double accept, overspend, unknown tag,
+delete-with-answers, reading someone else's notification). The economy ledger nets to
+zero — points are conserved, never minted. Streak transitions (first ever, same day,
+consecutive, gap) and badge idempotency are asserted too.
 
 ---
 
@@ -92,24 +95,43 @@ answers). The economy ledger nets to zero — points are conserved, never minted
 - [ ] Markdown + code block + LaTeX rendering for quest and answer bodies (deferred:
       needs a package decision, and plain text is readable meanwhile)
 
-## M3 · Gamification & notifications 🔴
+## M3 · Gamification & notifications ✅
 
-- [x] `notifications`, `badges`, `user_badges` tables exist; 8 badges seeded
-- [ ] ORM models + endpoints for them (nothing reads or writes these yet)
-- [ ] Streak update + `daily_bonus` on first activity of the day
-- [ ] Badge check as a background task after each point event
-- [ ] `GET /api/leaderboard` (weekly + all-time) and `GET /api/badges`
-- [ ] Notification rows on answer received / accepted / bounty won / badge earned
-- [ ] Notification list + read endpoints ("Mark all as read" is inert)
-- [ ] Wire `leaderboard_screen.dart` and `notifications_screen.dart`
-- [ ] Unread badge on the nav bell
-- [ ] Badges and streak on the profile screen
+**Server**
+- [x] `Notification`, `Badge`, `UserBadge` models over the existing tables
+- [x] `ActivityService` — streak transitions and the +10 `daily_bonus`, once a day,
+      on posting / answering / accepting / voting. Reads do not count.
+- [x] `BadgeService` — awards inline in the same transaction, idempotent via the
+      composite primary key ([decisions.md](docs/decisions.md) D18)
+- [x] `LeaderboardService` — all-time from `users.points`, weekly summed from the
+      ledger over 7 days, no cron ([decisions.md](docs/decisions.md) D17)
+- [x] `GET /api/leaderboard` (public, own rank pinned), `GET /api/badges`
+- [x] `GET /api/users/{id}/badges`, `GET /api/users/{id}/streak`
+- [x] Notifications on answer received / accepted / bounty won / badge earned
+- [x] `GET /api/notifications`, `/unread-count`, `PATCH /{id}/read`, `/read-all`
+
+**Client**
+- [x] `leaderboard_screen.dart` — weekly/all-time toggle, medals, own rank pinned
+      even outside the top 20, tap through to a profile
+- [x] `notifications_screen.dart` — typed icons, unread styling, optimistic
+      mark-read, tap through to the quest
+- [x] Unread count badge on the nav bell, refreshed on navigation
+- [x] Badges on the profile — locked ones stay visible
+      ([decisions.md](docs/decisions.md) D21)
+- [x] Streak with a flame, and real stats on the home dashboard (was hardcoded)
+
+**Deferred**
+- [ ] `top_helper` badge — needs a weekly-rank check on a schedule; the other six
+      awardable badges are live
+- [ ] Vote notifications — intentionally omitted, see
+      [decisions.md](docs/decisions.md) D19; revisit as a weekly digest
 
 ## M4 · AI & daily challenge 🔴
 
 - [ ] Pick and configure the LLM provider; add the key to `.env.example`
 - [x] `ai_hints` table exists
 - [ ] ORM model + the Socratic prompt (hints only, never the answer)
+- [ ] `ai_skeptic` and `challenger` badges become awardable once this lands
 - [ ] `POST /api/ai/hint` — deduct 5 points, refund on failure, 3/hour rate limit
 - [ ] Hint modal in `question_detail.dart` with the point-cost confirmation
 - [x] `daily_challenges`, `challenge_attempts` tables exist

@@ -14,6 +14,7 @@ from app.models import (
     Vote,
 )
 from app.schemas.question import QuestionCreate, QuestionUpdate
+from app.services.activity_service import ActivityService
 from app.services.point_service import PointService
 from app.services.vote_service import VoteService
 
@@ -61,6 +62,10 @@ class QuestionService:
         try:
             db.add(question)
             db.flush()
+
+            # Credit the daily bonus before charging the bounty: a user whose
+            # streak payment would cover the cost should not be refused.
+            ActivityService.record(db, author)
 
             # The bounty leaves the author's balance the moment the quest is
             # posted, so points cannot be promised twice.

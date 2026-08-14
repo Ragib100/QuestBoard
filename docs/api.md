@@ -43,8 +43,8 @@ reset all happen client-side through `supabase_flutter`. See
 | ✅ | `GET /users/{id}` | Public profile: username, names, `image_url`, points, `streak_days`, `codeforces_handle`, `created_at`. Never returns email or phone for other users. |
 | ✅ | `PATCH /users/{id}` | Own profile only. Editable: names, `phone_number`, `image_url`, `codeforces_handle`. |
 | ✅ | `GET /users/{id}/points` | `{ balance, transactions: [{ amount, reason, ref_id, created_at }] }`, newest first, paginated. |
-| ⬜ | `GET /users/{id}/badges` | Earned badges with `earned_at`. |
-| ⬜ | `GET /users/{id}/streak` | `{ streak_days, last_active }`. |
+| ✅ | `GET /users/{id}/badges` | Earned badges with `earned_at`. |
+| ✅ | `GET /users/{id}/streak` | `{ streak_days, last_active }`. |
 
 ## Quests
 
@@ -76,10 +76,11 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `GET /leaderboard?period=weekly\|all_time` | Top 20 plus the caller's own rank. |
-| ⬜ | `GET /badges` | Static catalogue of every badge. |
-| ⬜ | `GET /notifications` | Paginated, newest first, with `unread_count`. |
-| ⬜ | `PATCH /notifications/{id}/read` · `PATCH /notifications/read-all` | |
+| ✅ | `GET /leaderboard?period=weekly\|all_time` | Public. Top `limit` (≤50) plus the caller's own rank pinned when signed in. Weekly is summed from the ledger over the last 7 days — no cron, no snapshot table. |
+| ✅ | `GET /badges` | Public. The full catalogue; merge with `/users/{id}/badges` to show locked and earned together. |
+| ✅ | `GET /notifications` | Paginated, newest first, with `unread_count`. Types: `answer_received`, `answer_accepted`, `bounty_awarded`, `badge_earned`. Votes deliberately do **not** notify. |
+| ✅ | `PATCH /notifications/{id}/read` · `PATCH /notifications/read-all` | Read-all returns `{marked}`. Reading someone else's notification is `403`. |
+| ✅ | `GET /notifications/unread-count` | One COUNT, no rows — what the nav bell polls. |
 
 ## Daily challenge
 

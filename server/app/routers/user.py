@@ -11,6 +11,8 @@ from app.schemas.user import (
     UserResponse,
     UserUpdate,
 )
+from app.schemas.gamification import EarnedBadge, StreakResponse
+from app.services.badge_service import BadgeService
 from app.services.user_service import UserService
 
 router = APIRouter(
@@ -114,3 +116,38 @@ def get_points(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.get("/{user_id}/badges", response_model=list[EarnedBadge])
+def get_badges(user_id: UUID, db: Session = Depends(get_db)):
+    try:
+        UserService.get(db=db, user_id=user_id)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    return [
+        EarnedBadge(
+            id=ub.badge.id,
+            name=ub.badge.name,
+            description=ub.badge.description,
+            icon_url=ub.badge.icon_url,
+            awarded_at=ub.awarded_at,
+        )
+        for ub in BadgeService.for_user(db=db, user_id=user_id)
+    ]
+
+
+@router.get("/{user_id}/streak", response_model=StreakResponse)
+def get_streak(user_id: UUID, db: Session = Depends(get_db)):
+    try:
+        user = UserService.get(db=db, user_id=user_id)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    return StreakResponse(streak_days=user.streak_days, last_active=user.last_active)

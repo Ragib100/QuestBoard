@@ -102,3 +102,36 @@ end-to-end test asserts the ledger nets to zero — points are conserved, never 
 Tapping an arrow updates the count instantly and rolls back if the request fails.
 A vote is too small to justify a spinner, and the server returns the true count
 either way, so the client never has to guess for long.
+
+### D17 — The weekly leaderboard is computed, not snapshotted
+The plan called for a Monday cron that snapshots scores and resets a counter.
+`point_transactions` is already an append-only history, so the weekly number is just
+`sum(amount) where created_at >= now() - 7 days`. **No cron, no snapshot table, no
+Monday morning where the reset silently failed** — and the figure can be recomputed
+for any window later. All-time still reads `users.points` directly.
+
+### D18 — Badge checks run inline, not in a background task
+Three cheap `COUNT` queries after a point event. Running them inside the same
+transaction means a badge can never be lost to a worker that died between the answer
+and the award. A background task would have traded correctness for a few milliseconds
+nobody would notice.
+
+### D19 — Votes do not create notifications
+The `vote_received` type exists in the schema's CHECK constraint, and nothing writes
+it. Votes arrive constantly and each one is nearly meaningless on its own; a row per
+vote would bury the notifications that actually need action. Left in place for a future
+digest ("your answer got 12 upvotes this week"), which is the form worth sending.
+
+### D20 — Services flush, never commit
+`PointService` and `BadgeService` add rows and call `db.flush()`, leaving the commit
+to the caller. The session runs with `autoflush=False`, so **without the explicit
+flush a pending ledger row is invisible to the badge check that reads it two lines
+later** — a bug that shipped twice during M3 before the tests caught it: a badge
+awarded twice, and `first_bounty` never awarded at all. Flushing makes writes visible
+within the transaction; not committing keeps the whole event atomic.
+
+### D21 — Locked badges stay visible
+The profile shows all eight badges, greyed out until earned, rather than only the
+earned ones. Seeing what is still achievable is most of what a badge list is for.
+`challenger` and `ai_skeptic` are in the catalogue but unreachable until M4 — they
+show as locked, which is honest.
