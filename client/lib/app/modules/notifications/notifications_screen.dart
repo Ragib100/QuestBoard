@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/app_colors.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -7,11 +8,11 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('Notifications', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+        title: Text('Notifications', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -24,7 +25,7 @@ class NotificationsScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Recent Notifications', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
-                    TextButton(onPressed: () {}, child: const Text('Mark all as read', style: TextStyle(color: Color(0xFF0066FF)))),
+                    TextButton(onPressed: () {}, child: const Text('Mark all as read', style: TextStyle(color: AppColors.primary))),
                   ],
                 ),
               ),
@@ -81,7 +82,7 @@ class _NotificationTile extends StatelessWidget {
         color = Colors.purple;
         break;
       default:
-        title = 'Welcome to QuestHub!';
+        title = 'Welcome to QuestBoard!';
         body = 'Start by browsing some questions or asking your own.';
         time = '1d ago';
         icon = Icons.celebration_rounded;
@@ -94,14 +95,14 @@ class _NotificationTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(width: 16),
@@ -109,15 +110,15 @@ class _NotificationTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B))),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text(body, style: const TextStyle(color: Color(0xFF64748B), fontSize: 14)),
+                Text(body, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
                 const SizedBox(height: 8),
-                Text(time, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                Text(time, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
           ),
-          if (index < 3) Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF0066FF), shape: BoxShape.circle)),
+          if (index < 3) Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/app_colors.dart';
 
 class ContentModeration extends StatelessWidget {
   const ContentModeration({super.key});
@@ -9,17 +10,17 @@ class ContentModeration extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          title: Text('Content Moderation', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-          iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+          title: Text('Content Moderation', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          iconTheme: const IconThemeData(color: AppColors.textPrimary),
           bottom: const TabBar(
             tabs: [Tab(text: 'Flagged Questions'), Tab(text: 'Flagged Answers')],
-            labelColor: Color(0xFF0066FF),
-            indicatorColor: Color(0xFF0066FF),
-            unselectedLabelColor: Color(0xFF64748B),
+            labelColor: AppColors.primary,
+            indicatorColor: AppColors.primary,
+            unselectedLabelColor: AppColors.textSecondary,
           ),
         ),
         body: Center(
@@ -49,15 +50,15 @@ class ContentModeration extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFFFE4E6), borderRadius: BorderRadius.circular(4)), child: const Text('Pending Review', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold))),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: AppColors.dangerTint, borderRadius: BorderRadius.circular(4)), child: const Text('Pending Review', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold))),
               const Spacer(),
-              const Text('Reported by 3 users', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              const Text('Reported by 3 users', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 16),
@@ -67,7 +68,7 @@ class ContentModeration extends StatelessWidget {
             children: [
               Expanded(child: OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red), foregroundColor: Colors.red), child: const Text('Delete Content'))),
               const SizedBox(width: 16),
-              Expanded(child: ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E)), child: const Text('Approve Content'))),
+              Expanded(child: ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: AppColors.success), child: const Text('Approve Content'))),
             ],
           ),
         ],

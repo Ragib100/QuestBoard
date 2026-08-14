@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/app_colors.dart';
 
 class ReportsAnalytics extends StatelessWidget {
   const ReportsAnalytics({super.key});
@@ -7,12 +8,12 @@ class ReportsAnalytics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('Reports & Analytics', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+        title: Text('Reports & Analytics', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
@@ -59,11 +60,11 @@ class ReportsAnalytics extends StatelessWidget {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
         child: Column(
           children: [
             Text(val, style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.bold, color: color)),
-            Text(label, style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+            Text(label, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -74,15 +75,15 @@ class ReportsAnalytics extends StatelessWidget {
     return Container(
       height: 250,
       width: double.infinity,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0))),
-      child: const Center(child: Icon(Icons.show_chart_rounded, size: 80, color: Color(0xFFF1F5F9))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.border)),
+      child: const Center(child: Icon(Icons.show_chart_rounded, size: 80, color: AppColors.subtleFill)),
     );
   }
 
   Widget _buildRecentActivity() {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -102,8 +103,8 @@ class ReportsAnalytics extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(action, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B))),
-          Text(time, style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+          Text(action, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+          Text(time, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
         ],
       ),
     );
@@ -112,7 +113,7 @@ class ReportsAnalytics extends StatelessWidget {
   Widget _buildTopCategories() {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/app_colors.dart';
 
 class LeaderboardScreen extends StatelessWidget {
   const LeaderboardScreen({super.key});
@@ -7,11 +8,11 @@ class LeaderboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('Leaderboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+        title: Text('Leaderboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -44,7 +45,7 @@ class LeaderboardScreen extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 20),
       padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -60,8 +61,8 @@ class LeaderboardScreen extends StatelessWidget {
   Widget _tab(String label, bool active) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(color: active ? const Color(0xFF0066FF) : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-      child: Text(label, style: TextStyle(color: active ? Colors.white : const Color(0xFF64748B), fontWeight: FontWeight.bold, fontSize: 13)),
+      decoration: BoxDecoration(color: active ? AppColors.primary : Colors.transparent, borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(color: active ? Colors.white : AppColors.textSecondary, fontWeight: FontWeight.bold, fontSize: 13)),
     );
   }
 }
@@ -78,9 +79,9 @@ class _LeaderTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isMe ? const Color(0xFFE0F2FE) : Colors.white,
+        color: isMe ? AppColors.primaryTint : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isMe ? const Color(0xFF0066FF).withOpacity(0.3) : const Color(0xFFE2E8F0)),
+        border: Border.all(color: isMe ? AppColors.primary.withValues(alpha: 0.3) : AppColors.border),
       ),
       child: Row(
         children: [
@@ -88,21 +89,21 @@ class _LeaderTile extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: rank <= 3 ? const Color(0xFFF1F5F9) : Colors.transparent,
+              color: rank <= 3 ? AppColors.subtleFill : Colors.transparent,
               shape: BoxShape.circle,
             ),
-            child: Center(child: Text(rank.toString(), style: TextStyle(fontWeight: FontWeight.bold, color: rank <= 3 ? const Color(0xFF0066FF) : const Color(0xFF64748B)))),
+            child: Center(child: Text(rank.toString(), style: TextStyle(fontWeight: FontWeight.bold, color: rank <= 3 ? AppColors.primary : AppColors.textSecondary))),
           ),
           const SizedBox(width: 16),
-          const CircleAvatar(radius: 20, backgroundColor: Color(0xFFF1F5F9), child: Icon(Icons.person, size: 20, color: Color(0xFF94A3B8))),
+          const CircleAvatar(radius: 20, backgroundColor: AppColors.subtleFill, child: Icon(Icons.person, size: 20, color: AppColors.textMuted)),
           const SizedBox(width: 16),
-          Text(name, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+          Text(name, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           if (isMe) ...[
             const SizedBox(width: 8),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: const Color(0xFF0066FF), borderRadius: BorderRadius.circular(4)), child: const Text('YOU', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(4)), child: const Text('YOU', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
           ],
           const Spacer(),
-          Text(pts, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF0066FF))),
+          Text(pts, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
         ],
       ),
     );

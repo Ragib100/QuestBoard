@@ -3,6 +3,9 @@
 Base URL `${API_URL}/api`. Every endpoint except `/` requires
 `Authorization: Bearer <supabase-access-token>`.
 
+CORS is enabled via `CORS_ORIGINS` (defaults to `*`) — Flutter web cannot call the
+API without it.
+
 There are **no auth endpoints** — registration, login, logout, refresh and password
 reset all happen client-side through `supabase_flutter`. See
 [architecture.md](architecture.md#auth-flow).

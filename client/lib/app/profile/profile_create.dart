@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../dashboard.dart';
+import '../../core/widgets/labeled_field.dart';
 import '../../services/common/user_service.dart';
+import '../dashboard.dart';
+import '../../core/app_colors.dart';
 
 class ProfileCreate extends StatefulWidget {
   const ProfileCreate({super.key});
@@ -23,6 +25,16 @@ class _ProfileCreateState extends State<ProfileCreate> {
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _codeforcesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _phoneController.dispose();
+    _codeforcesController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -52,7 +64,7 @@ class _ProfileCreateState extends State<ProfileCreate> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, iconTheme: const IconThemeData(color: Color(0xFF1E293B))),
+      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, iconTheme: const IconThemeData(color: AppColors.textPrimary)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -62,31 +74,31 @@ class _ProfileCreateState extends State<ProfileCreate> {
               children: [
                 Text('Complete Your Profile', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                const Text('Tell us a bit more about yourself.', style: TextStyle(color: Color(0xFF64748B))),
+                const Text('Tell us a bit more about yourself.', style: TextStyle(color: AppColors.textSecondary)),
                 const SizedBox(height: 32),
                 GestureDetector(
                   onTap: _pickImage,
                   child: CircleAvatar(
                     radius: 50,
-                    backgroundColor: const Color(0xFFF1F5F9),
+                    backgroundColor: AppColors.subtleFill,
                     backgroundImage: _selectedImage != null ? FileImage(_selectedImage!) : null,
-                    child: _selectedImage == null ? const Icon(Icons.camera_alt, color: Color(0xFF94A3B8), size: 30) : null,
+                    child: _selectedImage == null ? const Icon(Icons.camera_alt, color: AppColors.textMuted, size: 30) : null,
                   ),
                 ),
                 const SizedBox(height: 32),
-                _buildField('Username', _usernameController, 'e.g. adventurer_one'),
+                LabeledField(label: 'Username', controller: _usernameController, hint: 'e.g. adventurer_one'),
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    Expanded(child: _buildField('First Name', _firstNameController, 'First Name')),
+                    Expanded(child: LabeledField(label: 'First Name', controller: _firstNameController, hint: 'First Name')),
                     const SizedBox(width: 16),
-                    Expanded(child: _buildField('Last Name', _lastNameController, 'Last Name')),
+                    Expanded(child: LabeledField(label: 'Last Name', controller: _lastNameController, hint: 'Last Name')),
                   ],
                 ),
                 const SizedBox(height: 20),
-                _buildField('Phone Number', _phoneController, 'Enter phone number'),
+                LabeledField(label: 'Phone Number', controller: _phoneController, hint: 'Enter phone number'),
                 const SizedBox(height: 20),
-                _buildField('Codeforces Handle', _codeforcesController, 'e.g. tourist'),
+                LabeledField(label: 'Codeforces Handle', controller: _codeforcesController, hint: 'e.g. tourist'),
                 const SizedBox(height: 40),
                 ElevatedButton(
                   onPressed: _isLoading ? null : handleSubmit,
@@ -100,14 +112,4 @@ class _ProfileCreateState extends State<ProfileCreate> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, String hint) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-        const SizedBox(height: 8),
-        TextField(controller: controller, decoration: InputDecoration(hintText: hint)),
-      ],
-    );
-  }
 }

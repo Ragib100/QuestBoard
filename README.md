@@ -7,6 +7,7 @@ accept the best one and the points transfer to whoever helped you.
 
 | | |
 |---|---|
+| Getting it running (Supabase, email, DB) | [docs/setup.md](docs/setup.md) |
 | What we're building and why | [docs/product.md](docs/product.md) |
 | What's done and what's next | [TASKS.md](TASKS.md) |
 | How the pieces fit together | [docs/architecture.md](docs/architecture.md) |
@@ -17,8 +18,12 @@ accept the best one and the points transfer to whoever helped you.
 
 ## Setup
 
-Copy `server/.env.example` → `server/.env` and `client/.env.example` → `client/.env`,
-then fill in your Supabase project URL, publishable key and database URL.
+**First time? Follow [docs/setup.md](docs/setup.md).** It covers the Supabase
+project, creating the tables, email delivery, and the deep-link configuration —
+none of which are optional for the app to work.
+
+Once configured, copy `server/.env.example` → `server/.env` and
+`client/.env.example` → `client/.env` and fill in your values.
 
 **Start the server first** — the client needs it running.
 

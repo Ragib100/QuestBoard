@@ -1,8 +1,13 @@
+import 'package:email_validator/email_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../core/app_colors.dart';
+import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
-import 'login.dart';
 import 'email_verification.dart';
+import 'login.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
@@ -12,24 +17,61 @@ class Signup extends StatefulWidget {
 }
 
 class _SignupState extends State<Signup> {
-  final _nameController = TextEditingController();
+  // Name and the rest of the profile are collected in ProfileCreate, after the
+  // email is verified — signup only needs credentials.
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _isLoading = false;
   bool _agreeTerms = false;
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
   Future<void> _handleSignup() async {
-    if (!_agreeTerms) return;
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (!EmailValidator.validate(email)) {
+      _showError('Enter a valid email address.');
+      return;
+    }
+    if (password.length < 8) {
+      _showError('Use a password of at least 8 characters.');
+      return;
+    }
+    if (password != _confirmController.text) {
+      _showError('The two passwords do not match.');
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      await AuthService.instance.signUp(email: _emailController.text, password: _passwordController.text);
-      if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const EmailVerification()));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      await AuthService.instance.signUp(email: email, password: password);
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const EmailVerification()),
+        );
+      }
+    } on AuthException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Could not create your account. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -37,7 +79,7 @@ class _SignupState extends State<Signup> {
     final bool isWeb = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       body: Row(
         children: [
           Expanded(
@@ -51,38 +93,74 @@ class _SignupState extends State<Signup> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.bolt_rounded, color: Color(0xFF0066FF), size: 32),
+                          const Icon(Icons.bolt_rounded,
+                              color: AppColors.primary, size: 32),
                           const SizedBox(width: 8),
-                          Text('QuestHub', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                          Text('QuestBoard',
+                              style: GoogleFonts.outfit(
+                                  fontSize: 24, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 40),
-                      Text('Create Your Account', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
+                      Text('Create Your Account',
+                          style: GoogleFonts.outfit(
+                              fontSize: 28, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      const Text('Join the QuestHub community today.', style: TextStyle(color: Color(0xFF64748B))),
+                      const Text(
+                          'Verify your email, then set up your profile.',
+                          style: TextStyle(color: AppColors.textSecondary)),
                       const SizedBox(height: 32),
-                      _buildLabel('Full Name'),
-                      TextField(controller: _nameController, decoration: const InputDecoration(hintText: 'Enter your name')),
+                      LabeledField(
+                        label: 'Email Address',
+                        controller: _emailController,
+                        hint: 'Enter your email',
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                      ),
                       const SizedBox(height: 20),
-                      _buildLabel('Email Address'),
-                      TextField(controller: _emailController, decoration: const InputDecoration(hintText: 'Enter your email')),
+                      LabeledField(
+                        label: 'Password',
+                        controller: _passwordController,
+                        hint: 'At least 8 characters',
+                        obscureText: true,
+                        textInputAction: TextInputAction.next,
+                      ),
                       const SizedBox(height: 20),
-                      _buildLabel('Password'),
-                      TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(hintText: 'Enter a password')),
-                      const SizedBox(height: 20),
-                      _buildLabel('Confirm Password'),
-                      TextField(controller: _confirmController, obscureText: true, decoration: const InputDecoration(hintText: 'Confirm your password')),
+                      LabeledField(
+                        label: 'Confirm Password',
+                        controller: _confirmController,
+                        hint: 'Re-enter your password',
+                        obscureText: true,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) =>
+                            (_isLoading || !_agreeTerms) ? null : _handleSignup(),
+                      ),
                       const SizedBox(height: 20),
                       Row(
                         children: [
-                          Checkbox(value: _agreeTerms, onChanged: (v) => setState(() => _agreeTerms = v!)),
-                          const Expanded(child: Text('I agree to the Terms of Service and Privacy Policy', style: TextStyle(fontSize: 13))),
+                          Checkbox(
+                              value: _agreeTerms,
+                              onChanged: (v) =>
+                                  setState(() => _agreeTerms = v ?? false)),
+                          const Expanded(
+                              child: Text(
+                                  'I agree to the Terms of Service and Privacy Policy',
+                                  style: TextStyle(fontSize: 13))),
                         ],
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
-                        onPressed: (_isLoading || !_agreeTerms) ? null : _handleSignup,
-                        child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('REGISTER'),
+                        onPressed: (_isLoading || !_agreeTerms)
+                            ? null
+                            : _handleSignup,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('REGISTER'),
                       ),
                       const SizedBox(height: 24),
                       Center(
@@ -91,8 +169,14 @@ class _SignupState extends State<Signup> {
                           children: [
                             const Text("Already have an account? "),
                             GestureDetector(
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Login())),
-                              child: const Text('Login', style: TextStyle(color: Color(0xFF0066FF), fontWeight: FontWeight.bold)),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const Login()),
+                              ),
+                              child: const Text('Login',
+                                  style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),
@@ -106,15 +190,25 @@ class _SignupState extends State<Signup> {
           if (isWeb)
             Expanded(
               child: Container(
-                color: const Color(0xFFF8FAFC),
+                color: AppColors.background,
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.network('https://illustrations.popsy.co/blue/meditating.svg', width: 400),
+                      Image.network(
+                        'https://illustrations.popsy.co/blue/meditating.svg',
+                        width: 400,
+                        errorBuilder: (_, __, ___) => const Icon(
+                            Icons.bolt_rounded,
+                            size: 160,
+                            color: AppColors.primary),
+                      ),
                       const SizedBox(height: 40),
-                      Text('Built by developers, for developers', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-                      const Text('A place where knowledge meets curiosity.', style: TextStyle(color: Color(0xFF64748B))),
+                      Text('Built by students, for students',
+                          style: GoogleFonts.outfit(
+                              fontSize: 24, fontWeight: FontWeight.bold)),
+                      const Text('A place where knowledge meets curiosity.',
+                          style: TextStyle(color: AppColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -122,13 +216,6 @@ class _SignupState extends State<Signup> {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
     );
   }
 }

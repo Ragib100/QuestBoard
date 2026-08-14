@@ -4,6 +4,7 @@ import 'user_management.dart';
 import 'content_moderation.dart';
 import 'platform_management.dart';
 import 'reports_analytics.dart';
+import '../../core/app_colors.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -13,12 +14,12 @@ class AdminDashboard extends StatelessWidget {
     final bool isWeb = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('Admin Dashboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+        title: Text('Admin Dashboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
@@ -63,14 +64,14 @@ class AdminDashboard extends StatelessWidget {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: color, size: 24)),
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: color, size: 24)),
             const SizedBox(height: 16),
             Text(val, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
-            Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 14)),
+            Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
           ],
         ),
       ),
@@ -100,7 +101,7 @@ class AdminDashboard extends StatelessWidget {
         return InkWell(
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => m['page'] as Widget)),
           child: Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -119,8 +120,8 @@ class AdminDashboard extends StatelessWidget {
     return Container(
       height: 300,
       width: double.infinity,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0))),
-      child: const Center(child: Text('Chart Placeholder', style: TextStyle(color: Color(0xFF94A3B8)))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.border)),
+      child: const Center(child: Text('Chart Placeholder', style: TextStyle(color: AppColors.textMuted))),
     );
   }
 }

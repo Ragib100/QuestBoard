@@ -56,3 +56,23 @@ Rather than delete working UI, admin is Tier 2 with a real (small) backend surfa
 The server uses SQLAlchemy over `DATABASE_URL` for all data work, and the `supabase-py`
 client **only** for `auth.get_user(token)` in `dependencies/auth.py`. Do not query
 tables through `supabase-py` — it bypasses the models.
+
+### D11 — iOS and macOS build targets deleted
+Commit `3c88a51` deliberately removed them; commit `0d3de06` re-added 68 files by
+accident while committing docs. iOS is out of scope (D5/D7 — no Apple hardware, no
+developer account, no time), and both trees regenerate with `flutter create .` if that
+ever changes. **Deleted and gitignored.** Supported targets are Android, web, Linux
+and Windows.
+
+### D12 — No fake success, no invented numbers
+The landing page advertised "10K+ Questions / 5K+ Users" for an app with no users, and
+the profile editor showed a "Profile updated!" toast while saving nothing. Both teach
+users to distrust the UI, and both hide unfinished work from the team. **A screen with
+no backend shows an explicit disabled state**, and marketing copy describes what the
+app does rather than how popular it is.
+
+### D13 — Colors live in `AppColors`, not in screens
+The same eight hex values appeared 240+ times across 21 files, so a palette change
+meant a 21-file sweep and drift was inevitable. **`client/lib/core/app_colors.dart` is
+the only place a `Color(0xFF…)` literal may appear.** Shared form rows likewise live in
+`core/widgets/labeled_field.dart` instead of a private `_buildLabel` per screen.

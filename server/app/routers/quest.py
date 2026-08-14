@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -24,4 +24,15 @@ def create_quest(
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    return QuestService.create_quest(db=db, user_id=user_id, quest_data=quest_data)
+    try:
+        return QuestService.create_quest(
+            db=db,
+            user_id=user_id,
+            quest_data=quest_data,
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

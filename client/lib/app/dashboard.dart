@@ -3,11 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/common/auth_service.dart';
 import './auth/login.dart';
 import 'modules/questions/browse_questions.dart';
-import 'modules/questions/ask_question.dart';
 import 'modules/leaderboard/leaderboard_screen.dart';
 import 'modules/daily_challenge/daily_challenge_screen.dart';
 import 'modules/notifications/notifications_screen.dart';
 import 'modules/profile/profile_screen.dart';
+import '../core/app_colors.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -31,7 +31,7 @@ class _DashboardState extends State<Dashboard> {
     final bool isWeb = MediaQuery.of(context).size.width > 960;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       body: Row(
         children: [
           if (isWeb) _buildWebSidebar(),
@@ -61,19 +61,19 @@ class _DashboardState extends State<Dashboard> {
       backgroundColor: Colors.white,
       elevation: 0,
       toolbarHeight: 70,
-      shape: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      shape: const Border(bottom: BorderSide(color: AppColors.border)),
       title: Container(
         width: 400,
         height: 40,
         decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
+          color: AppColors.subtleFill,
           borderRadius: BorderRadius.circular(20),
         ),
         child: const TextField(
           decoration: InputDecoration(
             hintText: 'Search questions...',
-            hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-            prefixIcon: Icon(Icons.search, size: 20, color: Color(0xFF94A3B8)),
+            hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+            prefixIcon: Icon(Icons.search, size: 20, color: AppColors.textMuted),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
@@ -83,13 +83,13 @@ class _DashboardState extends State<Dashboard> {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.notifications_none_outlined, color: Color(0xFF64748B)),
+          icon: const Icon(Icons.notifications_none_outlined, color: AppColors.textSecondary),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
         ),
         const SizedBox(width: 16),
         const CircleAvatar(
           radius: 18,
-          backgroundColor: Color(0xFF0066FF),
+          backgroundColor: AppColors.primary,
           child: Icon(Icons.person, size: 20, color: Colors.white),
         ),
         const SizedBox(width: 24),
@@ -102,7 +102,7 @@ class _DashboardState extends State<Dashboard> {
       width: 260,
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(right: BorderSide(color: Color(0xFFE2E8F0))),
+        border: Border(right: BorderSide(color: AppColors.border)),
       ),
       child: Column(
         children: [
@@ -128,14 +128,14 @@ class _DashboardState extends State<Dashboard> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          const Icon(Icons.bolt_rounded, color: Color(0xFF0066FF), size: 28),
+          const Icon(Icons.bolt_rounded, color: AppColors.primary, size: 28),
           const SizedBox(width: 10),
           Text(
-            'QuestHub',
+            'QuestBoard',
             style: GoogleFonts.outfit(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF1E293B),
+              color: AppColors.textPrimary,
             ),
           ),
         ],
@@ -164,19 +164,19 @@ class _DashboardState extends State<Dashboard> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: Icon(
           isSelected ? activeIcon : icon,
-          color: isSelected ? const Color(0xFF0066FF) : const Color(0xFF64748B),
+          color: isSelected ? AppColors.primary : AppColors.textSecondary,
           size: 22,
         ),
         title: Text(
           label,
           style: GoogleFonts.inter(
-            color: isSelected ? const Color(0xFF0066FF) : const Color(0xFF64748B),
+            color: isSelected ? AppColors.primary : AppColors.textSecondary,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             fontSize: 14,
           ),
         ),
         selected: isSelected,
-        selectedTileColor: const Color(0xFF0066FF).withOpacity(0.08),
+        selectedTileColor: AppColors.primary.withValues(alpha: 0.08),
       ),
     );
   }
@@ -186,8 +186,8 @@ class _DashboardState extends State<Dashboard> {
       currentIndex: _currentIndex,
       onTap: (index) => setState(() => _currentIndex = index),
       backgroundColor: Colors.white,
-      selectedItemColor: const Color(0xFF0066FF),
-      unselectedItemColor: const Color(0xFF94A3B8),
+      selectedItemColor: AppColors.primary,
+      unselectedItemColor: AppColors.textMuted,
       type: BottomNavigationBarType.fixed,
       elevation: 10,
       items: const [
@@ -217,13 +217,13 @@ class UserHome extends StatelessWidget {
             style: GoogleFonts.outfit(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF1E293B),
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Keep learning and earning points!',
-            style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: 16),
+            style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 16),
           ),
           const SizedBox(height: 32),
           _buildStatsRow(isWeb),
@@ -266,7 +266,7 @@ class UserHome extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE2E8F0).withOpacity(0.5),
+              color: AppColors.border.withValues(alpha: 0.5),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
@@ -277,7 +277,7 @@ class UserHome extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 24),
@@ -291,12 +291,12 @@ class UserHome extends StatelessWidget {
                   style: GoogleFonts.outfit(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1E293B),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 Text(
                   label,
-                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -319,7 +319,7 @@ class UserHome extends StatelessWidget {
           const SizedBox(height: 32),
           _buildDailyChallenge(context),
           const SizedBox(height: 32),
-          _buildTopLeaderboard(),
+          _buildTopLeaderboard(context),
         ],
       ],
     );
@@ -330,7 +330,7 @@ class UserHome extends StatelessWidget {
       children: [
         _buildDailyChallenge(context),
         const SizedBox(height: 32),
-        _buildTopLeaderboard(),
+        _buildTopLeaderboard(context),
       ],
     );
   }
@@ -341,11 +341,11 @@ class UserHome extends StatelessWidget {
       children: [
         Text(
           title,
-          style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+          style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         TextButton(
           onPressed: onTap,
-          child: const Text('See all', style: TextStyle(color: Color(0xFF0066FF))),
+          child: const Text('See all', style: TextStyle(color: AppColors.primary)),
         ),
       ],
     );
@@ -358,7 +358,7 @@ class UserHome extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,7 +368,7 @@ class UserHome extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF1E293B),
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
@@ -377,13 +377,13 @@ class UserHome extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: AppColors.subtleFill,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(tag, style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                child: Text(tag, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
               ),
               const Spacer(),
-              Text(time, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              Text(time, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ],
           ),
         ],
@@ -395,7 +395,7 @@ class UserHome extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF0066FF), Color(0xFF0052CC)]),
+        gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryDark]),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -417,7 +417,7 @@ class UserHome extends StatelessWidget {
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen())),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF0066FF),
+              foregroundColor: AppColors.primary,
               minimumSize: const Size(double.infinity, 48),
             ),
             child: const Text('Solve Challenge'),
@@ -427,20 +427,20 @@ class UserHome extends StatelessWidget {
     );
   }
 
-  Widget _buildTopLeaderboard() {
+  Widget _buildTopLeaderboard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Top Leaderboard',
-            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
           ),
           const SizedBox(height: 20),
           _leaderboardItem('1', 'John Doe', '2,450 pts'),
@@ -449,8 +449,9 @@ class UserHome extends StatelessWidget {
           const SizedBox(height: 12),
           Center(
             child: TextButton(
-              onPressed: () {},
-              child: const Text('View full leaderboard', style: TextStyle(color: Color(0xFF0066FF))),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+              child: const Text('View full leaderboard', style: TextStyle(color: AppColors.primary)),
             ),
           ),
         ],
@@ -463,11 +464,11 @@ class UserHome extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          CircleAvatar(radius: 14, backgroundColor: const Color(0xFFF1F5F9), child: Text(rank, style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)))),
+          CircleAvatar(radius: 14, backgroundColor: AppColors.subtleFill, child: Text(rank, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary))),
           const SizedBox(width: 12),
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w500, color: Color(0xFF1E293B))),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
           const Spacer(),
-          Text(pts, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0066FF))),
+          Text(pts, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
         ],
       ),
     );

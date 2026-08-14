@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/common/auth_service.dart';
+import '../auth/login.dart';
+import '../../core/app_colors.dart';
 
 class ResetPassword extends StatefulWidget {
   const ResetPassword({super.key});
@@ -32,7 +34,16 @@ class _ResetPasswordState extends State<ResetPassword> {
       await AuthService.instance
           .updatePassword(password: _passwordController.text);
       if (!mounted) return;
-      Navigator.pop(context);
+      // Reached via a deep link with pushAndRemoveUntil, so there is nothing to
+      // pop back to — send the user to login with their new password.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated. Please sign in.')),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const Login()),
+        (route) => false,
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -49,7 +60,7 @@ class _ResetPasswordState extends State<ResetPassword> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -62,7 +73,7 @@ class _ResetPasswordState extends State<ResetPassword> {
               children: [
                 Text('Reset Password', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                const Text('Choose a new, strong password for your account.', style: TextStyle(color: Color(0xFF64748B))),
+                const Text('Choose a new, strong password for your account.', style: TextStyle(color: AppColors.textSecondary)),
                 const SizedBox(height: 40),
                 const Text('New Password', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),

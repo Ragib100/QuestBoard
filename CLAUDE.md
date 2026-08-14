@@ -18,8 +18,9 @@ cd client && flutter run -d linux    # or: -d chrome, -d <android-device-id>
 flutter analyze && flutter test
 ```
 
-Both need a `.env` (see `.env.example` in each dir). Server runs on `:8000`;
-Android emulator reaches it at `http://10.0.2.2:8000`.
+Both need a `.env` (see `.env.example` in each dir), plus a Supabase project with
+`server/schema.sql` applied — full walkthrough in [docs/setup.md](docs/setup.md).
+Start uvicorn with `--host 0.0.0.0` when testing on a phone.
 
 ## Layout
 
@@ -33,8 +34,10 @@ server/app/
   routers/             HTTP endpoints (thin — delegate to services)
   services/            business logic
   dependencies/auth.py get_current_user_id — verifies Supabase JWT
+server/schema.sql      the live tables; run in the Supabase SQL editor
 client/lib/
   main.dart            app entry, theme, deep-link handling
+  core/                app_colors.dart (the palette), widgets/ (shared UI)
   config/              env-backed config
   services/common/     auth_service, user_service, supabase_services (singletons)
   app/auth/            login, signup, forgot_password, email_verification
@@ -55,8 +58,10 @@ client/lib/
 - **Server layering:** router → service → model. Routers do no DB work.
 - **Client state:** `StatefulWidget` + `setState`, `Navigator` (no router package),
   `package:http`. No Riverpod / GoRouter / Dio — do not add them.
-- **Theme:** light, blue `#0066FF`, Inter/Outfit via `google_fonts`. See
-  [docs/design-system.md](docs/design-system.md). Do not use the old dark-navy palette.
+- **Theme:** light, blue `#0066FF`, Inter/Outfit via `google_fonts`. Colors come
+  from `AppColors` in `client/lib/core/app_colors.dart` — never write a raw
+  `Color(0xFF...)` literal. Forms use `LabeledField` from `core/widgets/`. See
+  [docs/design-system.md](docs/design-system.md); the old dark-navy palette is gone.
 - **Branching:** feature branches, PR review before merge, `main` always deployable.
 
 ## Docs (read on demand — do not preload)
@@ -64,6 +69,7 @@ client/lib/
 | File | Read it when |
 |---|---|
 | [TASKS.md](TASKS.md) | Starting any work — what's done, what's next. Update it when you finish something. |
+| [docs/setup.md](docs/setup.md) | Nothing runs, email never arrives, DB won't connect, or you're deploying |
 | [docs/product.md](docs/product.md) | Deciding scope, point-economy rules, what is out of scope |
 | [docs/architecture.md](docs/architecture.md) | Adding an endpoint, screen, or changing auth/data flow |
 | [docs/data-model.md](docs/data-model.md) | Touching the DB — canonical schema, live vs. planned tables |
@@ -77,3 +83,7 @@ client/lib/
    that consumes it.
 2. **No gold plating.** Finish all Tier 1 (MVP) items in `TASKS.md` before starting Tier 2.
 3. **Keep docs true.** If code and docs disagree, the code wins — fix the doc in the same PR.
+4. **Never fake success.** A screen with no backend shows an honest disabled state,
+   not a "Saved!" toast. Never invent statistics or seed the UI with fictional numbers.
+5. **Before every PR:** `flutter analyze` and `flutter test` in `client/`, `ruff check app`
+   and `black app` in `server/`. All must be clean.

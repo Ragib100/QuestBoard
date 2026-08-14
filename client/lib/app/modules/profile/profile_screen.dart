@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/app_colors.dart';
+import 'profile_edit.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -9,7 +11,7 @@ class ProfileScreen extends StatelessWidget {
     final isWeb = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: !isWeb ? AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -23,7 +25,7 @@ class ProfileScreen extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _buildLeftSection()),
+                Expanded(child: _buildLeftSection(context)),
                 const SizedBox(width: 32),
                 Expanded(flex: 2, child: _buildRightSection()),
               ],
@@ -34,7 +36,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLeftSection() {
+  Widget _buildLeftSection(BuildContext context) {
     return Column(
       children: [
         Container(
@@ -42,16 +44,16 @@ class ProfileScreen extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: AppColors.border),
           ),
           child: Column(
             children: [
-              const CircleAvatar(radius: 60, backgroundColor: Color(0xFFF1F5F9), child: Icon(Icons.person, size: 60, color: Color(0xFF94A3B8))),
+              const CircleAvatar(radius: 60, backgroundColor: AppColors.subtleFill, child: Icon(Icons.person, size: 60, color: AppColors.textMuted)),
               const SizedBox(height: 24),
               Text('Arafat Hasan', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-              const Text('@arafathasan', style: TextStyle(color: Color(0xFF64748B))),
+              const Text('@arafathasan', style: TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: 24),
-              const Divider(color: Color(0xFFE2E8F0)),
+              const Divider(color: AppColors.border),
               const SizedBox(height: 24),
               _profileStat('Quests', '12'),
               _profileStat('Answers', '46'),
@@ -59,7 +61,8 @@ class ProfileScreen extends StatelessWidget {
               _profileStat('Badges', '5'),
               const SizedBox(height: 32),
               ElevatedButton(
-                onPressed: () {},
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const ProfileEdit())),
                 style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 52)),
                 child: const Text('Edit Profile'),
               ),
@@ -76,8 +79,8 @@ class ProfileScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFF64748B))),
-          Text(val, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+          Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(val, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
         ],
       ),
     );
@@ -90,7 +93,7 @@ class ProfileScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(32),
           width: double.infinity,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0))),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.border)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -98,7 +101,7 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 16),
               const Text(
                 'Passionate developer and problem solver. Love to build stuff with Flutter and explore new technologies.',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 16, height: 1.5),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 16, height: 1.5),
               ),
             ],
           ),
@@ -117,21 +120,21 @@ class ProfileScreen extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
       child: Row(
         children: [
-          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFF1F5F9), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Color(0xFF0066FF), size: 20)),
+          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppColors.subtleFill, shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: AppColors.primary, size: 20)),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(action, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                Text(target, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                Text(action, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Text(target, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
               ],
             ),
           ),
-          Text(time, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+          Text(time, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
         ],
       ),
     );

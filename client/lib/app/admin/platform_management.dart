@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/app_colors.dart';
 
 class PlatformManagement extends StatelessWidget {
   const PlatformManagement({super.key});
@@ -7,12 +8,12 @@ class PlatformManagement extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('Platform Management', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
-        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+        title: Text('Platform Management', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -43,7 +44,7 @@ class PlatformManagement extends StatelessWidget {
   Widget _buildCard(String title, List<Widget> children) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -59,7 +60,7 @@ class PlatformManagement extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-      trailing: Switch(value: value, onChanged: (v) {}, activeColor: const Color(0xFF0066FF)),
+      trailing: Switch(value: value, onChanged: (v) {}, activeThumbColor: AppColors.primary),
     );
   }
 

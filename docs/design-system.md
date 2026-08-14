@@ -1,24 +1,31 @@
 # Design system
 
-Light, clean, modern — closer to Linear or Notion than to a gaming app. Defined once in
-`_buildTheme()` in `client/lib/main.dart`. Prefer `Theme.of(context)` over restating
-values; the constants below exist because much of the existing UI hardcodes them.
+Light, clean, modern — closer to Linear or Notion than to a gaming app. The widget
+theme lives in `_buildTheme()` in `client/lib/main.dart`; the palette lives in
+`AppColors` (`client/lib/core/app_colors.dart`).
+
+**Never write a raw `Color(0xFF...)` literal in a screen** — use `AppColors`, or
+`Theme.of(context)` where the theme already carries the value.
 
 > An earlier spec called for a dark navy + neon palette. It was abandoned once the app
 > was built light — see [decisions.md](decisions.md) D2. Do not reintroduce it.
 
 ## Color
 
-| Role | Hex | Used for |
+| Token | Hex | Used for |
 |---|---|---|
-| Primary | `#0066FF` | Buttons, links, active nav, focus rings |
-| Background | `#F8FAFC` | Every `Scaffold` |
-| Surface | `#FFFFFF` | Cards, app bars, inputs, sidebar |
-| Border | `#E2E8F0` | Card and input outlines, dividers |
-| Text primary | `#1E293B` | Headings, body |
-| Text secondary | `#64748B` | Captions, metadata, placeholders |
-| Subtle fill | `#F1F5F9` | Search field, chips, hover |
-| Danger | `#EF4444` | Destructive actions, admin bans, errors |
+| `AppColors.primary` | `#0066FF` | Buttons, links, active nav, focus rings |
+| `AppColors.primaryDark` | `#0052CC` | Pressed / darker primary |
+| `AppColors.background` | `#F8FAFC` | Every `Scaffold` |
+| `AppColors.surface` | `#FFFFFF` | Cards, app bars, inputs, sidebar |
+| `AppColors.border` | `#E2E8F0` | Card and input outlines, dividers |
+| `AppColors.textPrimary` | `#1E293B` | Headings, body |
+| `AppColors.textSecondary` | `#64748B` | Captions, metadata |
+| `AppColors.textMuted` | `#94A3B8` | Placeholders, timestamps |
+| `AppColors.subtleFill` | `#F1F5F9` | Search field, chips, hover |
+| `AppColors.primaryTint` | `#E0F2FE` | Tinted chips and icon circles |
+| `AppColors.success` | `#22C55E` | Accepted answers, solved quests |
+| `AppColors.danger` | `#EF4444` | Destructive actions, admin bans, errors |
 
 Points and bounties are the one place to break the blue: use amber `#F59E0B` with a 🪙
 so a balance always reads as currency.
@@ -27,6 +34,12 @@ so a balance always reads as currency.
 
 `google_fonts`: **Outfit** for anything bold — headings, button labels, nav, numbers.
 **Inter** for body text and everything else. Never mix a third family.
+
+## Shared widgets
+
+`LabeledField` (`core/widgets/labeled_field.dart`) is the standard form row —
+bold label, optional grey helper, then the input. Use it for every form field
+rather than rebuilding a label + `TextField` pair per screen.
 
 ## Shape and spacing
 

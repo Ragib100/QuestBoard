@@ -9,6 +9,7 @@ import 'app/intro.dart';
 import 'app/profile/profile_create.dart';
 import 'app/common/reset_password.dart';
 import 'config/supabase_config.dart';
+import 'core/app_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -85,7 +86,7 @@ class _MyAppState extends State<MyApp> {
       value: SystemUiOverlayStyle.dark,
       child: MaterialApp(
         navigatorKey: _navigatorKey,
-        title: 'QuestHub',
+        title: 'QuestBoard',
         debugShowCheckedModeBanner: false,
         theme: _buildTheme(),
         home: widget.isSupabaseConfigured
@@ -100,11 +101,11 @@ class _MyAppState extends State<MyApp> {
       brightness: Brightness.light,
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF0066FF),
-        surface: const Color(0xFFF8FAFC),
-        onSurface: const Color(0xFF1E293B),
+        seedColor: AppColors.primary,
+        surface: AppColors.background,
+        onSurface: AppColors.textPrimary,
       ),
-      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+      scaffoldBackgroundColor: AppColors.background,
     );
 
     return baseTheme.copyWith(
@@ -112,12 +113,12 @@ class _MyAppState extends State<MyApp> {
         displayLarge: GoogleFonts.outfit(
           textStyle: baseTheme.textTheme.displayLarge,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFF1E293B),
+          color: AppColors.textPrimary,
         ),
         titleLarge: GoogleFonts.outfit(
           textStyle: baseTheme.textTheme.titleLarge,
           fontWeight: FontWeight.bold,
-          color: const Color(0xFF1E293B),
+          color: AppColors.textPrimary,
         ),
       ),
       cardTheme: CardThemeData(
@@ -125,12 +126,12 @@ class _MyAppState extends State<MyApp> {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: const BorderSide(color: AppColors.border),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF0066FF),
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 54),
           elevation: 0,
@@ -148,15 +149,15 @@ class _MyAppState extends State<MyApp> {
         fillColor: Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
     );
@@ -175,7 +176,7 @@ class ConfigurationRequiredScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.settings_outlined, size: 64, color: Color(0xFF0066FF)),
+              const Icon(Icons.settings_outlined, size: 64, color: AppColors.primary),
               const SizedBox(height: 24),
               Text(
                 'Configuration Required',
@@ -185,7 +186,7 @@ class ConfigurationRequiredScreen extends StatelessWidget {
               const Text(
                 'Please add your Supabase credentials to the .env file in the client directory and restart the app.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF64748B)),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ],
           ),

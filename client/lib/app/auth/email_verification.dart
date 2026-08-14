@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'login.dart';
+import '../../core/app_colors.dart';
 
 class EmailVerification extends StatelessWidget {
   const EmailVerification({super.key});
@@ -19,8 +20,8 @@ class EmailVerification extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(color: const Color(0xFFE0F2FE), shape: BoxShape.circle),
-                  child: const Icon(Icons.mark_email_read_rounded, size: 80, color: Color(0xFF0066FF)),
+                  decoration: BoxDecoration(color: AppColors.primaryTint, shape: BoxShape.circle),
+                  child: const Icon(Icons.mark_email_read_rounded, size: 80, color: AppColors.primary),
                 ),
                 const SizedBox(height: 40),
                 Text('Verify Your Email', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.bold)),
@@ -28,7 +29,7 @@ class EmailVerification extends StatelessWidget {
                 const Text(
                   'We have sent a verification link to your email address. Please check your inbox and click the link to continue.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
                 ),
                 const SizedBox(height: 48),
                 ElevatedButton(
@@ -38,7 +39,7 @@ class EmailVerification extends StatelessWidget {
                 const SizedBox(height: 24),
                 TextButton(
                   onPressed: () {},
-                  child: const Text('Didn\'t receive the email? Resend Email', style: TextStyle(color: Color(0xFF0066FF))),
+                  child: const Text('Didn\'t receive the email? Resend Email', style: TextStyle(color: AppColors.primary)),
                 ),
               ],
             ),
