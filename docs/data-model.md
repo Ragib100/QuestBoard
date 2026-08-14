@@ -1,211 +1,187 @@
 # Data model
 
-Postgres on Supabase. `auth.users` is Supabase's own table — never write to it. Our
-`public.users` row shares its primary key and holds everything else. **Email lives only
-in `auth.users`**; do not copy it.
+Postgres on Supabase. Everything below is **live** — this file was regenerated from
+the running database, not written ahead of it. Verify with the Supabase table editor
+before trusting a detail; if the two disagree, the database wins and this file is the
+bug.
 
-Status legend: **live** = migrated and in use · **planned** = not created yet, shape is
-a proposal until the migration lands.
+Two conventions to internalise:
+
+- `auth.users` is Supabase's own table. Never write to it. Our `public.users` row
+  shares its primary key. **Email lives only in `auth.users`** — never copy it.
+- The table is `questions`; the product calls it a **quest**
+  ([decisions.md](decisions.md) D1). Every foreign key, route and JSON key says
+  `question`. Do not rename one without the other.
 
 ---
 
-## `users` — live
+## `users`
 
 Mirrors `server/app/models/user.py`. Created by `POST /api/users` after email
-verification, not by a DB trigger.
+verification, not by a database trigger — so a verified account with no row here is
+a user who never finished onboarding. `GET /api/users/me` returns 404 in that state,
+which is how the client knows to show ProfileCreate.
 
 ```sql
-CREATE TABLE users (
-    id                  UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    username            TEXT UNIQUE NOT NULL,
-    first_name          TEXT NOT NULL DEFAULT '',
-    last_name           TEXT NOT NULL DEFAULT '',
-    phone_number        TEXT,
-    image_url           TEXT NOT NULL DEFAULT '',  -- storage path, not a full URL
-    codeforces_handle   TEXT NOT NULL DEFAULT '',
-    codeforces_verified BOOLEAN NOT NULL DEFAULT false,
-    points              INT NOT NULL DEFAULT 100,
-    streak_days         INT NOT NULL DEFAULT 0,
-    last_active         TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+users (
+    id                  uuid primary key references auth.users(id) on delete cascade,
+    username            text        not null unique,
+    first_name          text        not null default '',
+    last_name           text        not null default '',
+    phone_number        text,
+    image_url           text        not null default '',   -- storage path, not a URL
+    codeforces_handle   text        not null default '',
+    codeforces_verified boolean     not null default false,
+    points              integer     not null default 100,
+    streak_days         integer     not null default 0,
+    is_admin            boolean     not null default false,
+    last_active         timestamptz,
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
+)
 ```
 
-`image_url` holds the path inside the `profile_image` bucket (e.g.
-`<uid>/1699999999.png`); the client resolves it with `getPublicUrl`. Pending migration:
-`is_admin BOOLEAN NOT NULL DEFAULT false` — the admin screens need it.
+`image_url` holds the path inside the `profile_image` bucket (`<uid>/<epoch>.png`);
+the client turns it into a URL with `getPublicUrl`. `points` is a **cache** of the
+`point_transactions` sum — see the ledger rule below.
 
-## `quests` — live
+## `questions`
 
-Mirrors `server/app/models/quest.py`. The economy columns are **not** there yet.
+Mirrors `server/app/models/question.py`.
 
 ```sql
-CREATE TABLE quests (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    title       TEXT NOT NULL,
-    description TEXT,
-    tags        TEXT[],
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-);
+questions (
+    id                 uuid primary key default gen_random_uuid(),
+    author_id          uuid    not null references users(id) on delete cascade,
+    title              text    not null,
+    body               text    not null,
+    image_url          text,
+    bounty_points      integer not null default 0,
+    is_solved          boolean not null default false,
+    accepted_answer_id uuid    references answers(id),
+    view_count         integer not null default 0,
+    difficulty         varchar(10),                        -- unused until M4
+    created_at         timestamptz not null default now(),
+    updated_at         timestamptz not null default now()
+)
 ```
 
-Pending migration to make the core loop possible:
+`accepted_answer_id` and `answers.question_id` reference each other, so the two tables
+must be created in one migration.
+
+## `answers`
 
 ```sql
-ALTER TABLE quests
-  ADD COLUMN bounty_points      INT NOT NULL DEFAULT 0 CHECK (bounty_points BETWEEN 0 AND 100),
-  ADD COLUMN is_solved          BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN accepted_answer_id UUID;   -- FK added after `answers` exists
+answers (
+    id          uuid primary key default gen_random_uuid(),
+    question_id uuid    not null references questions(id) on delete cascade,
+    author_id   uuid    not null references users(id) on delete cascade,
+    body        text    not null,
+    image_url   text,
+    is_accepted boolean not null default false,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+)
 ```
 
-Tags are a `TEXT[]` column, not a join table — a fixed handful of subject tags does not
-justify two extra tables. Index with `GIN (tags)` when filtering gets slow.
+There is no `vote_count` column — scores are summed from `votes` on read.
 
-## `answers` — planned
+## `votes`
+
+One row per user per target. The unique constraint is what makes toggling safe: a
+double tap can only ever collide on it.
 
 ```sql
-CREATE TABLE answers (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quest_id    UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
-    author_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    body        TEXT NOT NULL,
-    is_accepted BOOLEAN NOT NULL DEFAULT false,
-    vote_count  INT NOT NULL DEFAULT 0,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX answers_quest_idx ON answers(quest_id);
+votes (
+    id          uuid primary key default gen_random_uuid(),
+    user_id     uuid     not null references users(id) on delete cascade,
+    target_type varchar(10) not null check (target_type in ('question','answer')),
+    target_id   uuid     not null,
+    value       smallint not null check (value in (1, -1)),
+    created_at  timestamptz not null default now(),
+    unique (user_id, target_type, target_id)
+)
 ```
 
-## `votes` — planned
+`target_id` is polymorphic and deliberately has no foreign key — deleting a question
+or answer must therefore delete its votes explicitly, which the services do.
 
-One row per user per target; the unique constraint is what makes toggling safe.
+## `point_transactions`
+
+The economy ledger, and the reason the numbers can be trusted.
+
+**Append-only. Never `UPDATE` or `DELETE` a row.** `users.points` is a cache of
+`sum(amount)`, and the two are written together inside one transaction by
+`PointService` — the only code allowed to touch either
+([decisions.md](decisions.md) D15).
 
 ```sql
-CREATE TABLE votes (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    target_type TEXT NOT NULL CHECK (target_type IN ('quest','answer')),
-    target_id   UUID NOT NULL,
-    value       SMALLINT NOT NULL CHECK (value IN (-1, 1)),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, target_type, target_id)
-);
+point_transactions (
+    id           uuid primary key default gen_random_uuid(),
+    user_id      uuid    not null references users(id) on delete cascade,
+    amount       integer not null,          -- negative for deductions
+    reason       varchar(50) not null,
+    reference_id uuid,                      -- the question/answer/challenge involved
+    created_at   timestamptz not null default now()
+)
 ```
 
-Polymorphic `target_id` has no FK by design. Re-voting the same value deletes the row;
-the opposite value updates it.
+Valid `reason` values live in `PointReason` (`app/models/point_transaction.py`) and
+are documented in [product.md](product.md#point-economy).
 
-## `point_transactions` — planned
+## `tags` / `question_tags`
 
-The economy ledger. Append-only: never `UPDATE` or `DELETE` a row. `users.points` is
-a running cache of `SUM(amount)` and must be updated in the same transaction as the
-insert. Valid `reason` values are the table in [product.md](product.md#point-economy).
+A fixed catalogue, seeded with 14 subject tags. Unknown tag names are **rejected**
+rather than created, so the feed filter cannot fill with typos.
 
 ```sql
-CREATE TABLE point_transactions (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    amount     INT NOT NULL,          -- negative for deductions
-    reason     TEXT NOT NULL,
-    ref_id     UUID,                  -- quest / answer / challenge it relates to
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX point_tx_user_idx ON point_transactions(user_id, created_at DESC);
+tags (
+    id   uuid primary key default gen_random_uuid(),
+    name varchar(50) not null unique
+)
+question_tags (
+    question_id uuid not null references questions(id) on delete cascade,
+    tag_id      uuid not null references tags(id) on delete cascade
+)
 ```
 
-## `notifications` — planned
-
-```sql
-CREATE TABLE notifications (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type       TEXT NOT NULL,   -- answer_received | answer_accepted | badge_earned | bounty_won
-    message    TEXT NOT NULL,
-    ref_id     UUID,
-    is_read    BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX notifications_unread_idx ON notifications(user_id) WHERE NOT is_read;
-```
-
-## `badges` / `user_badges` — planned
-
-`badges` is a static lookup seeded once from the badge table in
-[product.md](product.md#badges).
-
-```sql
-CREATE TABLE badges (
-    code        TEXT PRIMARY KEY,   -- 'first_answer', 'streak_5', ...
-    name        TEXT NOT NULL,
-    description TEXT NOT NULL,
-    icon        TEXT NOT NULL
-);
-CREATE TABLE user_badges (
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    badge_code TEXT NOT NULL REFERENCES badges(code),
-    earned_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (user_id, badge_code)
-);
-```
-
-## `daily_challenges` / `challenge_attempts` — planned
-
-```sql
-CREATE TABLE daily_challenges (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    codeforces_id  TEXT UNIQUE NOT NULL,   -- e.g. '1873/A'
-    title          TEXT NOT NULL,
-    url            TEXT NOT NULL,
-    rating         INT,
-    bonus_points   INT NOT NULL DEFAULT 50,
-    challenge_date DATE UNIQUE NOT NULL
-);
-CREATE TABLE challenge_attempts (
-    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    challenge_id UUID NOT NULL REFERENCES daily_challenges(id) ON DELETE CASCADE,
-    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    is_solved    BOOLEAN NOT NULL DEFAULT false,
-    solved_at    TIMESTAMPTZ,
-    UNIQUE (challenge_id, user_id)
-);
-```
-
-Solves are verified against the Codeforces API using `users.codeforces_handle`, so a
-user must link and verify a handle before the daily challenge counts.
-
-## `ai_hints` — planned
-
-```sql
-CREATE TABLE ai_hints (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    quest_id   UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
-    hint_text  TEXT NOT NULL,
-    cost       INT NOT NULL DEFAULT 5,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
-
-Doubles as the rate-limit source: count rows for the user in the last hour, cap at 3.
+Seeded: `dsa`, `math`, `physics`, `chemistry`, `calculus`, `linear-algebra`,
+`graph-theory`, `dynamic-programming`, `number-theory`, `geometry`,
+`data-structures`, `algorithms`, `probability`, `statistics`.
 
 ---
 
-## Search
+## Tables that exist but are not used yet
 
-Enable once, before building search or duplicate detection:
+These were created up front and are **empty**. No ORM model, no endpoint — treat the
+shapes as a starting point, not a contract, and confirm the columns before building
+against them.
+
+| Table | Milestone | Notes |
+|---|---|---|
+| `notifications` | M3 | `user_id`, `type` varchar(30), `message`, `reference_id`, `is_read` |
+| `badges` | M3 | 8 seeded: `first_answer`, `first_bounty`, `streak_5`, `streak_30`, `bounty_hunter`, `top_helper`, `challenger`, `ai_skeptic`. Keyed by `id` + `name`, **not** by a `code` column |
+| `user_badges` | M3 | `user_id`, `badge_id`, `awarded_at` |
+| `ai_hints` | M4 | `question_id`, `user_id`, `hint_text`, `points_cost` (default 5) |
+| `daily_challenges` | M4 | `codeforces_id`, `title`, `body`, `cf_rating`, `difficulty`, `source_url`, `bonus_points` (default 50), `challenge_date` |
+| `challenge_attempts` | M4 | `challenge_id`, `user_id`, `is_solved`, `solved_at` |
+
+## Search — not enabled yet
+
+Run before building search or duplicate detection (M5):
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX quests_title_trgm ON quests USING GIN (title gin_trgm_ops);
-CREATE INDEX quests_body_trgm  ON quests USING GIN (description gin_trgm_ops);
+create extension if not exists pg_trgm;
+create index questions_title_trgm on questions using gin (title gin_trgm_ops);
+create index questions_body_trgm  on questions using gin (body gin_trgm_ops);
 ```
+
+Until then `GET /api/questions?search=` uses `ILIKE`, which is correct but does not
+scale past a few thousand rows.
 
 ## Row Level Security
 
-The server connects with a privileged `DATABASE_URL` and **bypasses RLS**, so
-authorization is enforced in the service layer — every mutation must check ownership
-against `get_current_user_id`. RLS still matters for anything the Flutter client reads
-from Supabase directly (currently only Storage). Keep policies read-only-public,
-write-own if you add one.
+The API connects as a privileged role and **bypasses RLS**, so authorization is
+enforced in the service layer — every mutation checks ownership against
+`get_current_user_id`. RLS still matters for what the Flutter client touches directly,
+which today is only Storage. If you add a policy, keep it read-public / write-own.

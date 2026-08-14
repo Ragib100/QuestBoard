@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.dependencies.auth import get_current_user_id
-from app.routers.quest import router as quest_router
+from app.routers.answer import router as answer_router
+from app.routers.question import router as question_router
 from app.routers.user import router as user_router
 
 app = FastAPI(title="QuestBoard API", version="0.1.0")
@@ -29,7 +30,8 @@ def root():
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(user_router)
-api_router.include_router(quest_router)
+api_router.include_router(question_router)
+api_router.include_router(answer_router)
 
 
 @api_router.get("/ping")

@@ -5,11 +5,14 @@ Newest last. Only add an entry when the reasoning is not obvious from the code.
 
 ---
 
-### D1 — "Quest", not "question"
-The old docs said `questions`; the shipped DB table, ORM model and UI all say `quests`.
-Renaming live code and a live Supabase table to match a doc is pure cost, and "quest"
-fits the product name. **Quest is canonical.** `docs/api.md` and `docs/data-model.md`
-were rewritten to match.
+### D1 — "Quest" in the product, `questions` in the schema (revised)
+> Originally this said `quests` was canonical. That was decided without database
+> access and turned out to be wrong — see D14.
+
+The table is `questions` and so is every foreign key, route and JSON key. The product,
+the UI and the Dart types say **quest**. Treat the wire format as the schema's business
+and the word "quest" as the product's: `Quest.fromJson` reads `question_id`, and that is
+intentional.
 
 ### D2 — Light theme, not dark navy
 Early design docs specified a dark gamified palette (`#0D1117` + electric purple).
@@ -76,3 +79,26 @@ The same eight hex values appeared 240+ times across 21 files, so a palette chan
 meant a 21-file sweep and drift was inevitable. **`client/lib/core/app_colors.dart` is
 the only place a `Color(0xFF…)` literal may appear.** Shared form rows likewise live in
 `core/widgets/labeled_field.dart` instead of a private `_buildLabel` per screen.
+
+### D14 — The `quests` table was a dead end
+The database already contained a complete schema built on `questions` — with
+`answers`, `votes`, `point_transactions`, `notifications`, `question_tags`, plus
+seeded `badges` and `tags` — every foreign key pointing at it. Alongside it sat
+`quests`: six columns, zero rows, referenced by nothing but the ORM.
+
+Renaming the real schema would have meant rewriting six tables' foreign keys to
+satisfy a naming preference. Aligning four server files cost far less. **`quests`
+was dropped and the code moved to `questions`.** The lesson for the next
+disagreement: the database is the expensive artifact, so check it before deciding
+which side of a conflict is authoritative.
+
+### D15 — Points move only through `PointService`
+Every balance change goes through one method that writes the ledger row and updates
+`users.points` together, and never commits on its own. That is what lets a bounty
+transfer debit the asker and credit the helper inside a single transaction. The
+end-to-end test asserts the ledger nets to zero — points are conserved, never minted.
+
+### D16 — Votes are optimistic in the UI, authoritative on the server
+Tapping an arrow updates the count instantly and rolls back if the request fails.
+A vote is too small to justify a spinner, and the server returns the true count
+either way, so the client never has to guess for long.

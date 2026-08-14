@@ -23,6 +23,33 @@ class UserUpdate(BaseModel):
     codeforces_verified: bool | None = None
 
 
+class UserSummary(BaseModel):
+    """Author block embedded in question and answer payloads."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    username: str
+    first_name: str
+    last_name: str
+    image_url: str
+    points: int
+
+
+class PointTransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    amount: int
+    reason: str
+    reference_id: UUID | None
+    created_at: datetime
+
+
+class PointsResponse(BaseModel):
+    balance: int
+    transactions: list[PointTransactionResponse]
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,3 +71,5 @@ class UserResponse(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+
+    is_admin: bool = False

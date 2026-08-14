@@ -24,21 +24,25 @@ reset all happen client-side through `supabase_flutter`. See
 
 ---
 
+> **Path naming:** the routes say `/questions` because the table does. The product
+> calls them quests. See [decisions.md](decisions.md) D1.
+
 ## Health
 
 | | Endpoint | Notes |
 |---|---|---|
 | ✅ | `GET /` | Unauthenticated liveness check |
 | ✅ | `GET /ping` | Returns `{ user_id }` — use it to verify a token end to end |
+| ✅ | `GET /users/me` | The caller's own profile. **404 means signed in but not onboarded** — route to ProfileCreate |
 
 ## Users
 
 | | Endpoint | Notes |
 |---|---|---|
 | ✅ | `POST /users` | Creates the profile row after email verification. Body: `username`, `first_name`, `last_name`, `phone_number?`, `codeforces_handle`, `image_url` (storage path). `409` if username taken. |
-| ⬜ | `GET /users/{id}` | Public profile: username, names, `image_url`, points, `streak_days`, `codeforces_handle`, `created_at`. Never returns email or phone for other users. |
-| ⬜ | `PATCH /users/{id}` | Own profile only. Editable: names, `phone_number`, `image_url`, `codeforces_handle`. |
-| ⬜ | `GET /users/{id}/points` | `{ balance, transactions: [{ amount, reason, ref_id, created_at }] }`, newest first, paginated. |
+| ✅ | `GET /users/{id}` | Public profile: username, names, `image_url`, points, `streak_days`, `codeforces_handle`, `created_at`. Never returns email or phone for other users. |
+| ✅ | `PATCH /users/{id}` | Own profile only. Editable: names, `phone_number`, `image_url`, `codeforces_handle`. |
+| ✅ | `GET /users/{id}/points` | `{ balance, transactions: [{ amount, reason, ref_id, created_at }] }`, newest first, paginated. |
 | ⬜ | `GET /users/{id}/badges` | Earned badges with `earned_at`. |
 | ⬜ | `GET /users/{id}/streak` | `{ streak_days, last_active }`. |
 
@@ -46,27 +50,27 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ✅ | `POST /quests` | Body: `title`, `description`, `tags[]`, `bounty_points` (0–100, pending). Deducts the bounty in the same transaction. `402` if balance too low. |
-| ⬜ | `GET /quests` | Query: `tag`, `sort=latest\|bounty\|votes`, `page`, `limit` (default 20). Returns list + author summary + counts. |
-| ⬜ | `GET /quests/{id}` | Single quest with its answers, vote counts, and the caller's own vote. |
-| ⬜ | `PATCH /quests/{id}` | Author only. Bounty cannot be changed after posting. |
-| ⬜ | `DELETE /quests/{id}` | Author only, and only while unanswered — refunds the bounty. |
-| ⬜ | `GET /quests/search?q=` | `pg_trgm` similarity over title and description. |
-| ⬜ | `POST /quests/duplicate-check` | Tier 3. Body `{ title }` → up to 3 similar quests. |
+| ✅ | `POST /questions` | Body: `title` (≥10), `body` (≥20), `tags[]` (≤5, must exist), `bounty_points` (0–100). Deducts the bounty in the same transaction; `402` if the balance is too low, `400` on an unknown tag. |
+| ✅ | `GET /questions` | Public. Query: `tag`, `search`, `sort=latest\|bounty\|votes`, `page`, `limit` (≤50). Returns `{items, page, limit, total, has_more}`. A token is optional but adds `my_vote`. |
+| ✅ | `GET /questions/{id}` | Public. Quest with answers (accepted first, then by score), vote counts and the caller's own votes. Increments `view_count`. |
+| ✅ | `PATCH /questions/{id}` | Author only. Bounty cannot be changed after posting. |
+| ✅ | `DELETE /questions/{id}` | Author only, and only while unanswered (`409` otherwise) — refunds the bounty. |
+| ⬜ | `GET /questions/search?q=` | `pg_trgm` similarity over title and description. |
+| ⬜ | `POST /questions/duplicate-check` | Tier 3. Body `{ title }` → up to 3 similar quests. |
 
 ## Answers
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `POST /quests/{id}/answers` | Body `{ body }`. Notifies the quest author. `409` if the quest is solved. |
-| ⬜ | `PATCH /answers/{id}` · `DELETE /answers/{id}` | Author only. Cannot touch an accepted answer. |
-| ⬜ | `POST /answers/{id}/accept` | Quest author only, once. One transaction: mark answer accepted, mark quest solved, credit the helper, write `bounty_awarded`, insert a notification. |
+| ✅ | `POST /questions/{id}/answers` | Body `{ body }`. Notifies the quest author. `409` if the quest is solved. |
+| ✅ | `PATCH /answers/{id}` · `DELETE /answers/{id}` | Author only. Cannot touch an accepted answer. |
+| ✅ | `POST /answers/{id}/accept` | Quest author only, once (`409` on repeat). One transaction: mark accepted, close the quest, credit the helper, write `bounty_awarded`. |
 
 ## Votes
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `POST /quests/{id}/vote` · `POST /answers/{id}/vote` | Body `{ value: 1 \| -1 }`. Same value again clears the vote; the opposite flips it. Adjusts the author's points by ±1. `403` on self-vote. Returns `{ vote_count, my_vote }`. |
+| ✅ | `POST /questions/{id}/vote` · `POST /answers/{id}/vote` | Body `{ value: 1 \| -1 }`. Same value again clears the vote; the opposite flips it. Moves the author's balance by the *delta*. `403` on self-vote. Returns `{ vote_count, my_vote }`. |
 
 ## Gamification
 

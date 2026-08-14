@@ -87,4 +87,11 @@ class User(Base):
         nullable=False,
     )
 
-    quests = relationship("Quest", back_populates="user")
+    is_admin = Column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+
+    questions = relationship("Question", back_populates="author")
+    answers = relationship("Answer", back_populates="author")

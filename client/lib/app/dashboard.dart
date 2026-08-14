@@ -8,6 +8,10 @@ import 'modules/daily_challenge/daily_challenge_screen.dart';
 import 'modules/notifications/notifications_screen.dart';
 import 'modules/profile/profile_screen.dart';
 import '../core/app_colors.dart';
+import '../core/widgets/async_states.dart';
+import '../models/profile.dart';
+import '../services/api/api_client.dart';
+import '../services/common/user_service.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -18,6 +22,24 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   int _currentIndex = 0;
+  Profile? _me;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMe();
+  }
+
+  /// The signed-in user's balance, shown in the app bar and refreshed whenever
+  /// the user comes back from a screen that can spend or earn points.
+  Future<void> _loadMe() async {
+    try {
+      final me = await UserService.instance.me();
+      if (mounted) setState(() => _me = me);
+    } on ApiException {
+      // Not onboarded yet, or offline — the app bar simply omits the balance.
+    }
+  }
 
   final List<Widget> _pages = [
     const UserHome(),
@@ -82,6 +104,10 @@ class _DashboardState extends State<Dashboard> {
         ),
       ),
       actions: [
+        if (_me != null) ...[
+          PointsBadge(points: _me!.points, label: '${_me!.points} pts'),
+          const SizedBox(width: 16),
+        ],
         IconButton(
           icon: const Icon(Icons.notifications_none_outlined, color: AppColors.textSecondary),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
@@ -184,7 +210,10 @@ class _DashboardState extends State<Dashboard> {
   Widget _buildMobileNav() {
     return BottomNavigationBar(
       currentIndex: _currentIndex,
-      onTap: (index) => setState(() => _currentIndex = index),
+      onTap: (index) {
+        setState(() => _currentIndex = index);
+        _loadMe();
+      },
       backgroundColor: Colors.white,
       selectedItemColor: AppColors.primary,
       unselectedItemColor: AppColors.textMuted,

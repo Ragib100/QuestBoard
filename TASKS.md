@@ -4,27 +4,23 @@ Single source of truth for progress. Check a box only when it meets the definiti
 done in [docs/product.md](docs/product.md#definition-of-done). Work top to bottom —
 milestones are ordered by dependency, not preference.
 
-**Now:** M2 — the core loop. Nothing in M3+ starts until M2 is done.
+**Now:** M3 — gamification. M1 and M2 are done and verified against the live database.
 
 | Milestone | Status |
 |---|---|
 | M0 · Foundation | ✅ done |
-| M1 · Auth & profiles | 🟡 mostly done |
-| M2 · Quest loop (MVP core) | 🔴 not started |
-| M3 · Gamification & notifications | 🔴 not started |
-| M4 · AI & daily challenge | 🔴 not started |
+| M1 · Auth & profiles | ✅ done |
+| M2 · Quest loop (MVP core) | ✅ done |
+| M3 · Gamification & notifications | 🟡 tables exist, unused |
+| M4 · AI & daily challenge | 🟡 tables exist, unused |
 | M5 · Search, admin & polish | 🔴 not started |
 | M6 · Ship | 🔴 not started |
 
-**Verified green** (2026-08-14): `flutter analyze` → no issues · `flutter test` → 4/4
-passing (6 tests) · `flutter build web` → succeeds · `ruff check app` + `black --check app` →
-clean · `GET /api/` → 200 · `/api/ping` → 401 without a valid token · CORS preflight
-→ 200 · both ORM models registered and the `User.quests` relationship resolves.
-
-⚠️ **Blocked on configuration, not code:** `server/.env` still holds the placeholder
-`DATABASE_URL`, so no endpoint that touches the database can work yet, and Supabase
-has no custom SMTP so verification emails are never delivered. Both are one-time
-setup steps — follow [docs/setup.md](docs/setup.md).
+**Verified green** (2026-08-14): `flutter analyze` → no issues · `flutter test` → 6/6
+passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **26 HTTP
+cases against the live database**, covering every endpoint plus each guard (self-vote,
+self-answer, accept-by-non-author, double accept, overspend, unknown tag, delete with
+answers). The economy ledger nets to zero — points are conserved, never minted.
 
 ---
 
@@ -57,47 +53,49 @@ setup steps — follow [docs/setup.md](docs/setup.md).
 - [x] Forgot-password screen reachable from the login form
 - [x] Signup reports "already registered" instead of Supabase's silent fake success
 - [x] Show/hide toggle on every password field
-- [ ] `GET /api/users/{id}` — profile read
-- [ ] `PATCH /api/users/{id}` — profile edit (`ProfileEdit` is built and waiting on it)
-- [ ] Wire `profile_screen.dart` to real data (still shows placeholder content)
-- [ ] Migration: add `users.is_admin BOOLEAN NOT NULL DEFAULT false`
-- [ ] Route users with a session but no `users` row to `ProfileCreate` on cold start
-- [ ] Resend-verification-email button on `EmailVerification` (currently inert)
+- [x] `GET /api/users/{id}` and `GET /api/users/me` — profile read
+- [x] `PATCH /api/users/{id}` — profile edit, own account only
+- [x] `GET /api/users/{id}/points` — balance plus the ledger
+- [x] `profile_screen.dart` shows the real profile, avatar and point history
+- [x] `profile_edit.dart` saves for real; changing the Codeforces handle clears verification
+- [x] `users.is_admin` — already present in the database
+- [x] Session-without-profile routes to `ProfileCreate`, on login and on cold start
 
-## M2 · Quest loop 🔴
+## M2 · Quest loop ✅
 
-The product does not exist until this works end to end. Every screen below renders
-hardcoded placeholder content today.
-
-**Database**
-- [ ] Migration: `quests` gains `bounty_points`, `is_solved`, `accepted_answer_id`
-- [ ] Create `answers`, `votes`, `point_transactions` (see [docs/data-model.md](docs/data-model.md))
+**Database** — the schema already existed; the code was aligned to it
+([decisions.md](docs/decisions.md) D14).
+- [x] `questions`, `answers`, `votes`, `point_transactions`, `tags`, `question_tags`
+- [x] Dropped the vestigial `quests` table
 
 **Server**
-- [ ] `GET /api/quests` — pagination, `tag` filter, `sort=latest|bounty|votes`
-- [ ] `GET /api/quests/{id}` — quest + answers + vote state
-- [ ] `PATCH` / `DELETE /api/quests/{id}` — author only, refund on delete
-- [ ] Deduct the bounty inside `POST /api/quests`, reject when the balance is short
-- [ ] `POST /api/quests/{id}/answers`
-- [ ] `PATCH` / `DELETE /api/answers/{id}`
-- [ ] `POST /api/answers/{id}/accept` — the bounty transfer transaction
-- [ ] Vote endpoints for quests and answers, with toggle logic and ±1 to the author
-- [ ] `PointService` — the one place `users.points` and `point_transactions` are written
+- [x] `GET /api/questions` — public, pagination, `tag`, `search`, `sort=latest|bounty|votes`
+- [x] `GET /api/questions/{id}` — quest + answers + vote state, increments `view_count`
+- [x] `PATCH` / `DELETE /api/questions/{id}` — author only, refunds on delete,
+      refuses once answers exist
+- [x] `POST /api/questions` deducts the bounty and returns 402 when short
+- [x] `POST /api/questions/{id}/answers`, `PATCH` / `DELETE /api/answers/{id}`
+- [x] `POST /api/answers/{id}/accept` — bounty transfer in one transaction
+- [x] Vote endpoints with toggle/flip/clear and ±1 to the author by delta
+- [x] `PointService` — the only writer of `users.points` and the ledger
 
 **Client**
-- [ ] `QuestService` (list, get, create, update, delete) on the `UserService` pattern
-- [ ] Wire `browse_questions.dart` — real data, pagination, loading/error/empty states
-- [ ] Wire `question_detail.dart` — answers, accept button for the author
-- [ ] Wire `ask_question.dart` — the Publish button and category picker are inert;
-      needs tags, a bounty slider and a balance check before submit
-- [ ] Answer composer — the send button in `question_detail.dart` is inert
-- [ ] Vote buttons with optimistic update and rollback on failure
-- [ ] Points balance in the app bar, refreshed after every economy action
-- [ ] Markdown + code block + LaTeX rendering for quest and answer bodies
+- [x] `ApiClient` — bearer token, timeouts, and `detail` turned into `ApiException`
+- [x] `QuestService` + typed `Quest` / `Answer` / `Profile` models
+- [x] `browse_questions.dart` — real data, infinite scroll, pull to refresh, tag and
+      sort filters, loading/error/empty states
+- [x] `question_detail.dart` — answers ordered accepted-first, accept with a
+      confirmation dialog, composer hidden from the author and on solved quests
+- [x] `ask_question.dart` — tag picker, bounty slider capped at the real balance
+- [x] Vote buttons with optimistic update and rollback on failure
+- [x] Points balance in the app bar, refreshed on navigation
+- [ ] Markdown + code block + LaTeX rendering for quest and answer bodies (deferred:
+      needs a package decision, and plain text is readable meanwhile)
 
 ## M3 · Gamification & notifications 🔴
 
-- [ ] Create `notifications`, `badges`, `user_badges`; seed the badge catalogue
+- [x] `notifications`, `badges`, `user_badges` tables exist; 8 badges seeded
+- [ ] ORM models + endpoints for them (nothing reads or writes these yet)
 - [ ] Streak update + `daily_bonus` on first activity of the day
 - [ ] Badge check as a background task after each point event
 - [ ] `GET /api/leaderboard` (weekly + all-time) and `GET /api/badges`
@@ -110,10 +108,11 @@ hardcoded placeholder content today.
 ## M4 · AI & daily challenge 🔴
 
 - [ ] Pick and configure the LLM provider; add the key to `.env.example`
-- [ ] Create `ai_hints`; write the Socratic prompt (hints only, never the answer)
+- [x] `ai_hints` table exists
+- [ ] ORM model + the Socratic prompt (hints only, never the answer)
 - [ ] `POST /api/ai/hint` — deduct 5 points, refund on failure, 3/hour rate limit
 - [ ] Hint modal in `question_detail.dart` with the point-cost confirmation
-- [ ] Create `daily_challenges`, `challenge_attempts`
+- [x] `daily_challenges`, `challenge_attempts` tables exist
 - [ ] Daily job pulling one Codeforces problem, with a cached fallback
 - [ ] Codeforces handle verification flow
 - [ ] `GET /api/challenges/today`, `POST /solve`, `GET /leaderboard`
@@ -121,9 +120,10 @@ hardcoded placeholder content today.
 
 ## M5 · Search, admin & polish 🔴
 
-- [ ] Enable `pg_trgm`, add the GIN indexes
-- [ ] `GET /api/quests/search` + search UI (the dashboard search box is not wired)
-- [ ] Tag filter chips and sort control on the feed
+- [ ] Enable `pg_trgm` and the GIN indexes — search currently uses `ILIKE`, which is
+      correct but will not scale
+- [ ] Wire the dashboard search box to `GET /api/questions?search=`
+- [x] Tag filter chips and sort control on the feed
 - [ ] Admin endpoints: stats, user list, suspend, force-delete
 - [ ] Wire the five screens in `client/lib/app/admin/`, gated on `is_admin` — they are
       complete UI but currently unreachable, with every action button inert
@@ -136,7 +136,8 @@ hardcoded placeholder content today.
 - [ ] Release Android APK, tested off a debug build
 - [ ] Web build deployed (`flutter build web` already succeeds)
 - [ ] Seed demo data
-- [ ] Backend tests for the economy transactions (bounty transfer, voting)
+- [ ] Commit the economy tests as a pytest suite — they were run against the live DB
+      but not checked in
 - [ ] Widget tests for the auth screens
 - [ ] Final report and demo recording
 

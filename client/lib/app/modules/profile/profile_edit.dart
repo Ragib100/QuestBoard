@@ -1,27 +1,41 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/labeled_field.dart';
+import '../../../models/profile.dart';
+import '../../../services/api/api_client.dart';
+import '../../../services/common/user_service.dart';
 
-/// Profile editing form.
-///
-/// The fields mirror the `users` table exactly (see docs/data-model.md) — there
-/// is no `bio` column, so there is no bio field. Saving is disabled until
-/// `PATCH /api/users/{id}` exists; see TASKS.md (M1).
+/// Editing form. The fields mirror the `users` table exactly — there is no
+/// `bio` column, so there is no bio field.
 class ProfileEdit extends StatefulWidget {
-  const ProfileEdit({super.key});
+  const ProfileEdit({super.key, required this.profile});
+
+  final Profile profile;
 
   @override
   State<ProfileEdit> createState() => _ProfileEditState();
 }
 
 class _ProfileEditState extends State<ProfileEdit> {
-  final _usernameController = TextEditingController();
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _codeforcesController = TextEditingController();
+  late final _usernameController =
+      TextEditingController(text: widget.profile.username);
+  late final _firstNameController =
+      TextEditingController(text: widget.profile.firstName);
+  late final _lastNameController =
+      TextEditingController(text: widget.profile.lastName);
+  late final _phoneController =
+      TextEditingController(text: widget.profile.phoneNumber ?? '');
+  late final _codeforcesController =
+      TextEditingController(text: widget.profile.codeforcesHandle);
+
+  final _picker = ImagePicker();
+  File? _newAvatar;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -33,8 +47,57 @@ class _ProfileEditState extends State<ProfileEdit> {
     super.dispose();
   }
 
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _pickImage() async {
+    final image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null && mounted) {
+      setState(() => _newAvatar = File(image.path));
+    }
+  }
+
+  Future<void> _save() async {
+    final username = _usernameController.text.trim();
+    if (username.length < 3) {
+      _notify('Your username needs at least 3 characters.');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      String? imagePath;
+      if (_newAvatar != null) {
+        imagePath = await UserService.instance.uploadAvatar(_newAvatar!);
+      }
+
+      await UserService.instance.updateProfile(
+        userId: widget.profile.id,
+        username: username,
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+        codeforcesHandle: _codeforcesController.text.trim(),
+        imageUrl: imagePath,
+      );
+
+      if (mounted) Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      _notify(e.message);
+    } catch (_) {
+      _notify('Could not save your profile. Please try again.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final existing = UserService.instance.avatarUrl(widget.profile.imageUrl);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -49,20 +112,45 @@ class _ProfileEditState extends State<ProfileEdit> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(24),
             child: Container(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border)),
               child: Column(
                 children: [
-                  const CircleAvatar(
-                    radius: 50,
-                    backgroundColor: AppColors.subtleFill,
-                    child: Icon(Icons.person,
-                        size: 50, color: AppColors.textMuted),
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: AppColors.subtleFill,
+                        backgroundImage: _newAvatar != null
+                            ? FileImage(_newAvatar!)
+                            : (existing != null
+                                ? NetworkImage(existing) as ImageProvider
+                                : null),
+                        child: (_newAvatar == null && existing == null)
+                            ? const Icon(Icons.person,
+                                size: 50, color: AppColors.textMuted)
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppColors.primary,
+                          child: IconButton(
+                            onPressed: _pickImage,
+                            tooltip: 'Change photo',
+                            icon: const Icon(Icons.camera_alt,
+                                size: 16, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 32),
                   LabeledField(
@@ -88,50 +176,29 @@ class _ProfileEditState extends State<ProfileEdit> {
                       keyboardType: TextInputType.phone),
                   const SizedBox(height: 20),
                   LabeledField(
-                      label: 'Codeforces Handle',
-                      controller: _codeforcesController,
-                      hint: 'e.g. tourist'),
+                    label: 'Codeforces Handle',
+                    controller: _codeforcesController,
+                    helper: widget.profile.codeforcesVerified
+                        ? 'Verified. Changing it clears verification.'
+                        : 'Used to verify daily challenge solves.',
+                    hint: 'e.g. tourist',
+                  ),
                   const SizedBox(height: 32),
-                  const _NotConnectedNotice(),
-                  const SizedBox(height: 16),
-                  const ElevatedButton(
-                    onPressed: null,
-                    child: Text('SAVE CHANGES'),
+                  ElevatedButton(
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('SAVE CHANGES'),
                   ),
                 ],
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _NotConnectedNotice extends StatelessWidget {
-  const _NotConnectedNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.subtleFill,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.info_outline, size: 20, color: AppColors.textSecondary),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Editing is not live yet — the profile update endpoint has not '
-              'been built.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-          ),
-        ],
       ),
     );
   }

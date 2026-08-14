@@ -6,8 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
-import '../dashboard.dart';
 import 'forgot_password.dart';
+import 'post_login_router.dart';
 import 'signup.dart';
 
 class Login extends StatefulWidget {
@@ -45,12 +45,7 @@ class _LoginState extends State<Login> {
     setState(() => _isLoading = true);
     try {
       await AuthService.instance.login(email: email, password: password);
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const Dashboard()),
-        );
-      }
+      if (mounted) await goToLanding(context);
     } on AuthException catch (e) {
       _showError(e.message);
     } catch (_) {

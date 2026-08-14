@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'app/auth/post_login_router.dart';
 import 'app/intro.dart';
 import 'app/profile/profile_create.dart';
 import 'app/common/reset_password.dart';
@@ -90,7 +91,7 @@ class _MyAppState extends State<MyApp> {
         debugShowCheckedModeBanner: false,
         theme: _buildTheme(),
         home: widget.isSupabaseConfigured
-            ? const Intro()
+            ? const _Launch()
             : const ConfigurationRequiredScreen(),
       ),
     );
@@ -160,6 +161,43 @@ class _MyAppState extends State<MyApp> {
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
+    );
+  }
+}
+
+/// Decides the first screen: the landing page for signed-out visitors, or —
+/// for a restored session — the dashboard or onboarding, depending on whether
+/// the profile was ever completed.
+class _Launch extends StatefulWidget {
+  const _Launch();
+
+  @override
+  State<_Launch> createState() => _LaunchState();
+}
+
+class _LaunchState extends State<_Launch> {
+  late final Future<Widget> _destination = _resolve();
+
+  Future<Widget> _resolve() async {
+    if (Supabase.instance.client.auth.currentSession == null) {
+      return const Intro();
+    }
+    return landingScreenForCurrentUser();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _destination,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8FAFC),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return snapshot.data ?? const Intro();
+      },
     );
   }
 }
