@@ -165,6 +165,24 @@ consecutive, gap) and badge idempotency are asserted too.
 
 ---
 
+## Fixed after M3 field testing
+
+- [x] **`INTERNET` permission was only in the debug manifest** — a release APK
+      would have had no network access at all
+- [x] **Android blocked all cleartext HTTP**, so every call to the local API failed
+      before leaving the phone. Debug builds now permit it; release stays HTTPS-only
+- [x] `API_URL` pointed at `192.168.137.35`, an address this machine does not have.
+      Switched to `adb reverse` + `localhost`, which survives network changes
+- [x] Startup blocked on a 20s network timeout before drawing anything — now 4s for
+      routing, 10s elsewhere, and the dashboard never blocks the first frame
+- [x] Dashboard made five API calls in sequence; they now run in parallel
+- [x] Four stat tiles forced into one `Row` overflowed every phone by up to 117px —
+      now a responsive grid, 2 up on mobile and 4 on desktop
+- [x] Landing page overflowed by 215px on a phone (app bar) and 64px on desktop
+      (hero buttons); both layouts fixed
+- [x] Added `test/layout_test.dart` — renders screens at 320px and 360px and fails
+      on any overflow, so this class of bug cannot come back silently
+
 ## Chores
 
 - [x] Removed a hardcoded password backdoor in `login.dart` that logged anyone in
@@ -180,4 +198,6 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] Quest creation now returns a clear 400 instead of a raw 500 when the caller has
       no profile row yet
 - [ ] Android `applicationId` is still `com.example.client` — rename before release
+- [ ] Deploy the API so the app works off your Wi-Fi (M6); until then `adb reverse`
+      is the fastest local loop
 - [ ] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR

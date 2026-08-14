@@ -26,23 +26,30 @@ class Intro extends StatelessWidget {
                     color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.push(
-                context, MaterialPageRoute(builder: (_) => const Login())),
-            child: const Text('Login'),
-          ),
-          const SizedBox(width: 12),
-          Padding(
-            padding: const EdgeInsets.only(right: 20.0),
-            child: ElevatedButton(
-              onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const Signup())),
-              style: ElevatedButton.styleFrom(minimumSize: const Size(100, 40)),
-              child: const Text('Register', style: TextStyle(fontSize: 14)),
-            ),
-          ),
-        ],
+        // On a phone the logo plus two buttons overflows the app bar, and the
+        // hero below already offers both actions — so only the wide layout
+        // carries them up here.
+        actions: isWeb
+            ? [
+                TextButton(
+                  onPressed: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const Login())),
+                  child: const Text('Login'),
+                ),
+                const SizedBox(width: 12),
+                Padding(
+                  padding: const EdgeInsets.only(right: 20.0),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const Signup())),
+                    style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(100, 40)),
+                    child:
+                        const Text('Register', style: TextStyle(fontSize: 14)),
+                  ),
+                ),
+              ]
+            : null,
       ),
       body: SingleChildScrollView(
         child: Center(
@@ -100,31 +107,10 @@ class Intro extends StatelessWidget {
           style: const TextStyle(color: AppColors.textMuted, fontSize: 16),
         ),
         const SizedBox(height: 40),
-        Wrap(
-          spacing: 20,
-          runSpacing: 12,
-          children: [
-            ElevatedButton(
-              onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const Signup())),
-              style: ElevatedButton.styleFrom(
-                  minimumSize: Size(isWeb ? 180 : 300, 56)),
-              child: const Text('Get Started'),
-            ),
-            OutlinedButton(
-              onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const Login())),
-              style: OutlinedButton.styleFrom(
-                minimumSize: Size(isWeb ? 180 : 300, 56),
-                side: const BorderSide(color: AppColors.border),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('I already have an account',
-                  style: TextStyle(color: AppColors.textPrimary)),
-            ),
-          ],
-        ),
+        // Side by side on desktop, stacked full-width on a phone. Wrap rather
+        // than Row on desktop: the two labels together need more than half of
+        // a 1200px page, so a hard Row overflows instead of breaking.
+        _HeroActions(isWeb: isWeb),
       ],
     );
   }
@@ -155,15 +141,59 @@ class Intro extends StatelessWidget {
       width: double.infinity,
       color: AppColors.background,
       padding: EdgeInsets.symmetric(vertical: 60, horizontal: isWeb ? 40 : 24),
-      child: Wrap(
-        spacing: 32,
-        runSpacing: 32,
-        alignment: WrapAlignment.center,
-        children: items
-            .map((item) => SizedBox(width: isWeb ? 300 : 340, child: item))
-            .toList(),
+      // A fixed 340px card overflows a 360px phone once padding is subtracted,
+      // so the phone layout takes whatever width is actually left.
+      child: LayoutBuilder(
+        builder: (context, constraints) => Wrap(
+          spacing: 32,
+          runSpacing: 32,
+          alignment: WrapAlignment.center,
+          children: items
+              .map((item) => SizedBox(
+                    width: isWeb ? 300 : constraints.maxWidth,
+                    child: item,
+                  ))
+              .toList(),
+        ),
       ),
     );
+  }
+}
+
+class _HeroActions extends StatelessWidget {
+  const _HeroActions({required this.isWeb});
+
+  final bool isWeb;
+
+  @override
+  Widget build(BuildContext context) {
+    final signUp = ElevatedButton(
+      onPressed: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const Signup())),
+      style: ElevatedButton.styleFrom(
+          minimumSize: Size(isWeb ? 180 : double.infinity, 56)),
+      child: const Text('Get Started'),
+    );
+
+    final logIn = OutlinedButton(
+      onPressed: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const Login())),
+      style: OutlinedButton.styleFrom(
+        minimumSize: Size(isWeb ? 180 : double.infinity, 56),
+        side: const BorderSide(color: AppColors.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: const Text('I already have an account',
+          style: TextStyle(color: AppColors.textPrimary)),
+    );
+
+    if (!isWeb) {
+      // double.infinity needs a bounded parent, which Column gives it and
+      // Wrap does not.
+      return Column(children: [signUp, const SizedBox(height: 12), logIn]);
+    }
+
+    return Wrap(spacing: 20, runSpacing: 12, children: [signUp, logIn]);
   }
 }
 

@@ -12,6 +12,7 @@ import '../core/widgets/async_states.dart';
 import '../models/profile.dart';
 import '../services/api/api_client.dart';
 import '../models/gamification.dart';
+import '../models/quest.dart';
 import '../services/common/gamification_service.dart';
 import '../services/common/quest_service.dart';
 import '../services/common/user_service.dart';
@@ -38,8 +39,8 @@ class _DashboardState extends State<Dashboard> {
   /// Polling on a timer would cost more than it is worth for a class project —
   /// every screen that can change either of these already triggers a refresh.
   Future<void> _refresh() async {
-    await _loadMe();
-    await _loadUnread();
+    // Independent calls — running them together halves the wait.
+    await Future.wait([_loadMe(), _loadUnread()]);
   }
 
   Future<void> _loadUnread() async {
@@ -320,20 +321,30 @@ class _UserHomeState extends State<UserHome> {
 
   Future<void> _load() async {
     try {
-      final me = await UserService.instance.me();
-      final board =
-          await GamificationService.instance.leaderboard(period: 'all_time');
-      final badges = await GamificationService.instance.badgesFor(me.id);
-      final feed = await QuestService.instance.list(limit: 1);
+      // The badge list needs the user id, so it waits; everything else goes
+      // out at once rather than in a chain of round trips.
+      final results = await Future.wait([
+        UserService.instance.me(),
+        GamificationService.instance.leaderboard(period: 'all_time'),
+        QuestService.instance.list(limit: 1),
+      ]);
+
+      final me = results[0] as Profile;
+      final board = results[1] as Leaderboard;
+      final feed = results[2] as QuestPage;
+
       if (!mounted) return;
       setState(() {
         _me = me;
         _top = board.entries.take(3).toList();
-        _badgeCount = badges.where((b) => b.isEarned).length;
         _openQuests = feed.total;
       });
+
+      final badges = await GamificationService.instance.badgesFor(me.id);
+      if (!mounted) return;
+      setState(() => _badgeCount = badges.where((b) => b.isEarned).length);
     } on ApiException {
-      // Leave the placeholders empty rather than showing invented numbers.
+      // Leave the tiles at zero rather than showing invented numbers.
     }
   }
 
@@ -377,24 +388,44 @@ class _UserHomeState extends State<UserHome> {
     );
   }
 
+  /// Four tiles across on desktop, two per row on a phone.
+  ///
+  /// A plain Row overflowed on a 720px screen: each tile has fixed padding and
+  /// an icon, so four of them simply do not fit. LayoutBuilder gives the tiles
+  /// a real width to size against instead of letting them overflow.
   Widget _buildStatsRow(bool isWeb) {
-    return Row(
-      children: [
-        _statCard('${_me?.points ?? 0}', 'Points', Icons.stars_rounded, AppColors.points),
-        const SizedBox(width: 20),
-        _statCard('$_openQuests', 'Open Quests', Icons.bolt_rounded, Colors.orange),
-        const SizedBox(width: 20),
-        _statCard('${_me?.streakDays ?? 0}', 'Day Streak', Icons.local_fire_department_rounded, const Color(0xFFF97316)),
-        const SizedBox(width: 20),
-        _statCard('$_badgeCount', 'Badges', Icons.verified_rounded, Colors.purple),
-      ],
+    final tiles = [
+      _statCard('${_me?.points ?? 0}', 'Points', Icons.stars_rounded,
+          AppColors.points),
+      _statCard('$_openQuests', 'Open Quests', Icons.bolt_rounded,
+          Colors.orange),
+      _statCard('${_me?.streakDays ?? 0}', 'Day Streak',
+          Icons.local_fire_department_rounded, const Color(0xFFF97316)),
+      _statCard('$_badgeCount', 'Badges', Icons.verified_rounded,
+          Colors.purple),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900 ? 4 : 2;
+        const gap = 16.0;
+        final width =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final tile in tiles) SizedBox(width: width, child: tile),
+          ],
+        );
+      },
     );
   }
 
   Widget _statCard(String value, String label, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(24),
+    return Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -409,34 +440,43 @@ class _UserHomeState extends State<UserHome> {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: color, size: 24),
+              child: Icon(icon, color: color, size: 20),
             ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: GoogleFonts.outfit(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+            const SizedBox(width: 12),
+            // Expanded + ellipsis: a four-digit score must never push the
+            // label off the edge of a narrow tile.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                Text(
-                  label,
-                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ],
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-      ),
     );
   }
 

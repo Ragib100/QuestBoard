@@ -19,7 +19,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: Intro()));
 
     expect(find.text('Get Started'), findsOneWidget);
-    expect(find.text('Login'), findsOneWidget);
+    expect(find.text('I already have an account'), findsOneWidget);
 
     // The landing page used to advertise "10K+" users that do not exist.
     expect(find.textContaining('K+'), findsNothing);

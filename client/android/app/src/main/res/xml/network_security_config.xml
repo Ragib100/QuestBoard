@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Release policy: HTTPS only.
+
+    Debug builds override this file with android/app/src/debug/res/xml/ of the
+    same name, which permits cleartext so a local dev server works. The debug
+    source set wins automatically, so nothing here needs to be relaxed for
+    development and a release APK can never ship a cleartext exemption.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

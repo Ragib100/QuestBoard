@@ -14,12 +14,13 @@ import '../profile/profile_create.dart';
 /// rather than assuming the dashboard.
 Future<Widget> landingScreenForCurrentUser() async {
   try {
-    await UserService.instance.me();
+    await UserService.instance.me(timeout: ApiClient.fastTimeout);
     return const Dashboard();
   } on ApiException catch (e) {
     if (e.isNotFound) return const ProfileCreate();
-    // Offline or server down: the dashboard degrades gracefully, whereas
-    // sending a fully onboarded user back through signup would not.
+    // Offline, or the server is unreachable. The dashboard degrades gracefully
+    // into empty states, whereas sending a fully onboarded user back through
+    // signup would not — so never block startup on this call.
     return const Dashboard();
   }
 }

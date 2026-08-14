@@ -29,6 +29,14 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient._();
 
+  /// Long enough for a cold Render dyno, short enough that a wrong `API_URL`
+  /// surfaces as an error instead of a frozen screen.
+  static const defaultTimeout = Duration(seconds: 10);
+
+  /// For calls made while the user is staring at a blank screen — startup
+  /// routing would rather guess quickly than block on an unreachable server.
+  static const fastTimeout = Duration(seconds: 4);
+
   String get _baseUrl =>
       dotenv.get('API_URL', fallback: '').replaceFirst(RegExp(r'/+$'), '');
 
@@ -52,9 +60,16 @@ class ApiClient {
     );
   }
 
-  Future<dynamic> get(String path,
-      {Map<String, dynamic>? query, bool auth = true}) async {
-    return _send(() => http.get(_uri(path, query), headers: _headers(auth: auth)));
+  Future<dynamic> get(
+    String path, {
+    Map<String, dynamic>? query,
+    bool auth = true,
+    Duration? timeout,
+  }) async {
+    return _send(
+      () => http.get(_uri(path, query), headers: _headers(auth: auth)),
+      timeout: timeout,
+    );
   }
 
   Future<dynamic> post(String path, {Object? body, bool auth = true}) async {
@@ -77,10 +92,13 @@ class ApiClient {
     return _send(() => http.delete(_uri(path), headers: _headers()));
   }
 
-  Future<dynamic> _send(Future<http.Response> Function() request) async {
+  Future<dynamic> _send(
+    Future<http.Response> Function() request, {
+    Duration? timeout,
+  }) async {
     final http.Response response;
     try {
-      response = await request().timeout(const Duration(seconds: 20));
+      response = await request().timeout(timeout ?? defaultTimeout);
     } on ApiException {
       rethrow;
     } catch (_) {

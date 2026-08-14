@@ -79,8 +79,8 @@ class UserService {
   /// Throws an [ApiException] with `isNotFound` when the account is verified
   /// but onboarding was never completed — the caller should route to
   /// ProfileCreate rather than treat it as an error.
-  Future<Profile> me() async {
-    final json = await ApiClient.instance.get('/users/me');
+  Future<Profile> me({Duration? timeout}) async {
+    final json = await ApiClient.instance.get('/users/me', timeout: timeout);
     return Profile.fromJson(json as Map<String, dynamic>);
   }
 

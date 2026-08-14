@@ -48,8 +48,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final profile = widget.userId == null
           ? await UserService.instance.me()
           : await UserService.instance.getProfile(widget.userId!);
-      final points = await UserService.instance.points(profile.id);
-      final badges = await GamificationService.instance.badgesFor(profile.id);
+
+      // Both depend on the profile id, but not on each other.
+      final results = await Future.wait([
+        UserService.instance.points(profile.id),
+        GamificationService.instance.badgesFor(profile.id),
+      ]);
+      final points =
+          results[0] as ({int balance, List<PointEntry> entries});
+      final badges = results[1] as List<AchievementBadge>;
+
       if (!mounted) return;
       setState(() {
         _profile = profile;

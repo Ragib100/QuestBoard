@@ -156,20 +156,48 @@ flutter pub get
 flutter run -d chrome        # or -d linux, or a connected phone
 ```
 
-## 8. Pointing the client at the API
+## 8. Connecting a phone to your API
 
-`API_URL` in `client/.env` must be reachable **from the device running the app**,
-which is not the same as reachable from your PC.
+**Use `adb reverse`.** It is the most reliable option for a USB-connected Android
+device and needs no IP address at all:
+
+```bash
+adb reverse tcp:8000 tcp:8000     # run once per USB connection
+flutter run
+```
+
+This tunnels `localhost:8000` *on the phone* to port 8000 on your PC, so
+`API_URL=http://localhost:8000` just works — no LAN IP to look up, nothing to
+change when your network does, and no firewall involvement. Re-run the command
+after unplugging or rebooting the phone.
+
+Other targets:
 
 | Running on | `API_URL` |
 |---|---|
+| Phone over USB (recommended) | `http://localhost:8000` + `adb reverse` |
 | Desktop or web on the same PC | `http://localhost:8000` |
 | Android emulator | `http://10.0.2.2:8000` |
-| Physical phone on the same Wi-Fi | `http://<your-pc-lan-ip>:8000` |
+| Phone on the same Wi-Fi, no USB | `http://<your-pc-lan-ip>:8000` |
 | Phone anywhere else | your deployed URL (step 9) |
 
-Find your LAN IP with `ip addr` (Linux) or `ipconfig` (Windows). The server must
-be started with `--host 0.0.0.0`, and your firewall must allow port 8000.
+For the Wi-Fi option, find your LAN IP with `ip addr` (Linux) or `ipconfig`
+(Windows) — and check it every time, because DHCP reassigns it. Start the server
+with `--host 0.0.0.0`, and confirm from the PC first:
+
+```bash
+curl http://<your-pc-lan-ip>:8000/api/
+```
+
+If that fails, the phone has no chance; it is a firewall or binding problem.
+
+### Cleartext HTTP is handled for you
+
+Android 9+ blocks plain `http://` by default, and the request fails *before it
+leaves the phone* — which looks exactly like a dead server. Debug builds now ship
+a network security config that permits cleartext
+(`android/app/src/debug/res/xml/`), while release builds stay HTTPS-only. You do
+not need to change anything; just know that **a deployed API must be HTTPS**.
 
 ## 9. Do you need to deploy the backend?
 
@@ -212,4 +240,6 @@ works locally.
 | `could not translate host name` / connection timeout | Using the IPv6-only direct host instead of the pooler — step 3 |
 | Profile creation fails with 401 | The API cannot verify the token; check `SUPABASE_URL` matches in both `.env` files |
 | Flutter web: "XMLHttpRequest error" | `CORS_ORIGINS` does not include your origin, or the API is not running |
-| Phone cannot reach the API | Server not started with `--host 0.0.0.0`, wrong LAN IP, or a firewall |
+| Phone cannot reach the API | Run `adb reverse tcp:8000 tcp:8000` and set `API_URL=http://localhost:8000`. Otherwise: server not started with `--host 0.0.0.0`, a stale LAN IP, or a firewall |
+| App hangs on a blank screen at launch | It no longer can — startup routing gives up after 4s. If it still does, `API_URL` is malformed rather than unreachable |
+| Everything works except calls to your own API | Cleartext HTTP blocked. Only affects release builds now; a deployed API must be HTTPS |
