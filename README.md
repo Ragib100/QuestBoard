@@ -1,57 +1,73 @@
 # QuestBoard
 
-QuestBoard is a full-stack application with a Python (FastAPI) backend and a Flutter frontend.
+A gamified Q&A app for STEM students. Post a **quest** with a point bounty, get answers,
+accept the best one and the points transfer to whoever helped you.
 
-## 1. Start the Backend Server First
-Before running the frontend client on any platform, make sure the backend is running.
-1. Open a terminal and navigate to the `server` directory.
-2. Activate your virtual environment and run the server:
+**Flutter** client · **FastAPI** server · **Supabase** (Postgres, Auth, Storage)
+
+| | |
+|---|---|
+| Getting it running (Supabase, email, DB) | [docs/setup.md](docs/setup.md) |
+| What we're building and why | [docs/product.md](docs/product.md) |
+| What's done and what's next | [TASKS.md](TASKS.md) |
+| How the pieces fit together | [docs/architecture.md](docs/architecture.md) |
+| Database schema | [docs/data-model.md](docs/data-model.md) |
+| API contract | [docs/api.md](docs/api.md) |
+| UI conventions | [docs/design-system.md](docs/design-system.md) |
+| Why something is the way it is | [docs/decisions.md](docs/decisions.md) |
+
+## Setup
+
+**First time? Follow [docs/setup.md](docs/setup.md).** It covers the Supabase
+project, creating the tables, email delivery, and the deep-link configuration —
+none of which are optional for the app to work.
+
+Once configured, copy `server/.env.example` → `server/.env` and
+`client/.env.example` → `client/.env` and fill in your values.
+
+**Start the server first** — the client needs it running.
+
 ```bash
-source .venv/bin/activate
-uvicorn app.main:app --reload
+cd server
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload          # http://localhost:8000, docs at /docs
 ```
 
----
-
-## 2. Running the Flutter Client
-
-Open a new terminal window and navigate to the `client` directory:
 ```bash
 cd client
+flutter pub get
+flutter run -d linux                   # or -d windows, -d chrome
 ```
 
-### Option A: Native Desktop (Best for Low-End PCs)
-Running natively on your OS provides the best performance and doesn't require any emulator overhead.
-* **Linux:** `flutter run -d linux`
-* **Windows:** `flutter run -d windows`
+## Running the client elsewhere
 
-### Option B: Web Browser (Extremely Lightweight)
-You can run the app directly in your web browser. This is very fast and requires no mobile emulators.
-* **Firefox or Brave:** You can run it via a local web server which any browser can access: `flutter run -d web-server`. Then, open the provided localhost URL (e.g., `http://localhost:54321`) in Brave or Firefox.
+Set `API_URL` in `client/.env` to match the target, or the app cannot reach the server:
 
-### Option C: Mobile Testing (Bluetooth, Camera, GPS, etc.)
+| Target | `API_URL` |
+|---|---|
+| Desktop / web | `http://localhost:8000` |
+| Android emulator | `http://10.0.2.2:8000` |
+| Physical phone | `http://<your-pc-lan-ip>:8000` |
 
-If you need to test native mobile features, you have two options. Using your own physical phone is highly recommended for low-end PCs because it uses **zero** RAM on your computer compared to an emulator.
+**Web:** `flutter run -d chrome`, or `flutter run -d web-server` and open the printed
+localhost URL in any browser.
 
-#### 1. Physical Android Phone (Highly Recommended for Low-End PC)
-This is the absolute best way to test mobile features on a low-end machine.
-1. On your Android phone, go to **Settings > About Phone** and tap **Build Number** 7 times to enable Developer Options.
-2. Go back to Settings, search for **Developer Options**, and enable **USB Debugging**.
-3. Plug your phone into your PC using a USB cable.
-4. On your phone, a prompt will appear asking to "Allow USB debugging". Check "Always allow from this computer" and tap OK.
-5. In your terminal, run `flutter devices` to ensure your phone is recognized.
-6. Run the app on your phone:
-   ```bash
-   flutter run
-   ```
-*(Flutter will automatically pick your connected phone. If you have multiple devices, use `flutter run -d <device_id>`)*.
+**Physical Android device** — the lightest option on a low-end PC, since it uses none of
+your RAM. Enable Developer Options (tap *Build Number* seven times in *Settings → About
+Phone*), turn on **USB debugging**, plug in over USB and accept the prompt. Confirm with
+`flutter devices`, then `flutter run`.
 
-#### 2. AOSP ATD Emulator (Lightweight Emulator)
-If you don't have an Android device on hand, you can use the Automated Test Device (ATD) image. It runs headlessly or with a very minimal UI, saving RAM.
-1. Install an ATD system image via the Android SDK Manager: `sdkmanager "system-images;android-30;aosp_atd;x86_64"`
-2. Create an AVD with it: `avdmanager create avd -n ATD_Device -k "system-images;android-30;aosp_atd;x86_64"`
-3. Start the emulator: `emulator -avd ATD_Device`
-4. Once the emulator is running, start the app:
-   ```bash
-   flutter run
-   ```
+**Emulator**, if you have no device to hand — the AOSP ATD image is the lightest:
+
+```bash
+sdkmanager "system-images;android-30;aosp_atd;x86_64"
+avdmanager create avd -n ATD_Device -k "system-images;android-30;aosp_atd;x86_64"
+emulator -avd ATD_Device
+```
+
+## Contributing
+
+Feature branches only; `main` stays deployable. Every PR needs one review. Define the
+endpoint in `docs/api.md` before building the screen that consumes it, and update
+[TASKS.md](TASKS.md) in the same PR as the work.

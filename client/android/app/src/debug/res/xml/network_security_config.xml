@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    DEBUG ONLY. Overrides the strict release config above.
+
+    Android 9+ blocks plain HTTP by default, which silently breaks every call to
+    a FastAPI server on a dev machine — the request fails before it leaves the
+    phone. Development needs cleartext to whatever address the laptop happens to
+    have today, so this permits it broadly.
+
+    This file is in the debug source set and is never compiled into a release
+    build.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

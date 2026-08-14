@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import 'app/auth/post_login_router.dart';
 import 'app/intro.dart';
 import 'app/profile/profile_create.dart';
 import 'app/common/reset_password.dart';
 import 'config/supabase_config.dart';
+import 'core/app_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,23 +38,36 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final _appLinks = AppLinks();
   final _navigatorKey = GlobalKey<NavigatorState>();
-  static const ThemeMode _themeMode = ThemeMode.light;
 
   @override
   void initState() {
     super.initState();
     _initDeepLinks();
+    _watchAuth();
   }
 
+  /// supabase_flutter parses the recovery link itself and only then emits
+  /// [AuthChangeEvent.passwordRecovery]. Navigating on a timer instead — as this
+  /// used to — raced that work and landed on the form with no session, so
+  /// `updateUser` failed with "Auth session missing".
+  void _watchAuth() {
+    if (!widget.isSupabaseConfigured) return;
+    Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.passwordRecovery) {
+        _navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ResetPassword()),
+          (route) => false,
+        );
+      }
+    });
+  }
 
   Future<void> _initDeepLinks() async {
-    // Case 1 — app was closed and user tapped the link to open it
     final initialUri = await _appLinks.getInitialLink();
     if (initialUri != null) {
       _handleDeepLink(initialUri);
     }
 
-    // Case 2 — app was already open in background when user tapped the link
     _appLinks.uriLinkStream.listen((uri) {
       _handleDeepLink(uri);
     });
@@ -60,95 +76,139 @@ class _MyAppState extends State<MyApp> {
   void _handleDeepLink(Uri uri) {
     if (uri.scheme == 'io.questboard') {
       if (uri.host == 'signup-callback') {
-        // Supabase SDK automatically restores session from the link
-        // Wait a moment for Supabase to process the session, then navigate
         Future.delayed(const Duration(milliseconds: 300), () {
           final user = Supabase.instance.client.auth.currentUser;
           if (user != null) {
             _navigatorKey.currentState?.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const ProfileCreate()),
-              (route) => false, // clear all previous routes
+              (route) => false,
             );
           }
         });
       }
 
-      if (uri.host == 'reset-callback') {
-        // For forgot password flow
-        Future.delayed(const Duration(milliseconds: 300), () {
-          _navigatorKey.currentState?.pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const ResetPassword()),
-            (route) => false,
-          );
-        });
-      }
+      // reset-callback is deliberately not handled here: _watchAuth navigates
+      // once the recovery session actually exists.
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
+      value: SystemUiOverlayStyle.dark,
       child: MaterialApp(
         navigatorKey: _navigatorKey,
         title: 'QuestBoard',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepPurple,
-            brightness: Brightness.light,
-          ),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-            ),
-          ),
-        ),
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepPurple,
-            brightness: Brightness.dark,
-          ),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.grey[900],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Colors.deepPurpleAccent, width: 2),
-            ),
-          ),
-        ),
-        themeMode: _themeMode,
+        theme: _buildTheme(),
         home: widget.isSupabaseConfigured
-            ? const Intro()
+            ? const _Launch()
             : const ConfigurationRequiredScreen(),
       ),
+    );
+  }
+
+  ThemeData _buildTheme() {
+    final baseTheme = ThemeData(
+      brightness: Brightness.light,
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
+        surface: AppColors.background,
+        onSurface: AppColors.textPrimary,
+      ),
+      scaffoldBackgroundColor: AppColors.background,
+    );
+
+    return baseTheme.copyWith(
+      textTheme: GoogleFonts.interTextTheme(baseTheme.textTheme).copyWith(
+        displayLarge: GoogleFonts.outfit(
+          textStyle: baseTheme.textTheme.displayLarge,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textPrimary,
+        ),
+        titleLarge: GoogleFonts.outfit(
+          textStyle: baseTheme.textTheme.titleLarge,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 54),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+/// Decides the first screen: the landing page for signed-out visitors, or —
+/// for a restored session — the dashboard or onboarding, depending on whether
+/// the profile was ever completed.
+class _Launch extends StatefulWidget {
+  const _Launch();
+
+  @override
+  State<_Launch> createState() => _LaunchState();
+}
+
+class _LaunchState extends State<_Launch> {
+  late final Future<Widget> _destination = _resolve();
+
+  Future<Widget> _resolve() async {
+    if (Supabase.instance.client.auth.currentSession == null) {
+      return const Intro();
+    }
+    return landingScreenForCurrentUser();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _destination,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return snapshot.data ?? const Intro();
+      },
     );
   }
 }
@@ -158,24 +218,24 @@ class ConfigurationRequiredScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: SafeArea(
+    return Scaffold(
+      body: Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.settings_outlined, size: 48),
-              SizedBox(height: 20),
+              const Icon(Icons.settings_outlined, size: 64, color: AppColors.primary),
+              const SizedBox(height: 24),
               Text(
-                'QuestBoard needs configuration',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                'Configuration Required',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              SizedBox(height: 12),
-              Text(
-                'Add your Supabase URL and publishable key to client/.env, '
-                'then restart the app. Copy client/.env.example as the template.',
+              const SizedBox(height: 16),
+              const Text(
+                'Please add your Supabase credentials to the .env file in the client directory and restart the app.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ],
           ),

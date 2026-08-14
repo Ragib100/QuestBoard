@@ -1,143 +1,375 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class BrowseQuestions extends StatelessWidget {
-  const BrowseQuestions({super.key});
+import '../../../core/app_colors.dart';
+import '../../../core/widgets/async_states.dart';
+import '../../../models/quest.dart';
+import '../../../services/api/api_client.dart';
+import '../../../services/common/quest_service.dart';
+import 'ask_question.dart';
+import 'question_detail.dart';
+
+const _tags = [
+  'dsa',
+  'math',
+  'physics',
+  'chemistry',
+  'calculus',
+  'algorithms',
+  'data-structures',
+  'probability',
+];
+
+class BrowseQuestions extends StatefulWidget {
+  const BrowseQuestions({super.key, this.embedded = false});
+
+  /// True when the dashboard shell already draws an app bar for this tab.
+  /// Standalone pushes keep their own so the screen still has a title and a
+  /// back button.
+  final bool embedded;
+
+  @override
+  State<BrowseQuestions> createState() => _BrowseQuestionsState();
+}
+
+class _BrowseQuestionsState extends State<BrowseQuestions> {
+  final _scroll = ScrollController();
+  final List<Quest> _quests = [];
+
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  String? _error;
+  String _sort = 'latest';
+  String? _tag;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final page = await QuestService.instance.list(sort: _sort, tag: _tag);
+      if (!mounted) return;
+      setState(() {
+        _quests
+          ..clear()
+          ..addAll(page.items);
+        _page = 1;
+        _hasMore = page.hasMore;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_error = e.message, _loading = false));
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _loading) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await QuestService.instance
+          .list(page: _page + 1, sort: _sort, tag: _tag);
+      if (!mounted) return;
+      setState(() {
+        _quests.addAll(page.items);
+        _page += 1;
+        _hasMore = page.hasMore;
+        _loadingMore = false;
+      });
+    } on ApiException {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<void> _openAsk() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const AskQuestion()),
+    );
+    if (created == true) _load();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 900;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF161B22),
-        elevation: 0,
-        title: Text(
-          'Browse Quests',
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+      backgroundColor: AppColors.background,
+      appBar: (!isWeb && !widget.embedded)
+          ? AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              title: Text('Browse Quests',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            )
+          : null,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            children: [
+              if (isWeb) _webHeader(),
+              _filters(),
+              Expanded(child: _body()),
+            ],
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: Color(0xFF7C3AED)),
-            onPressed: () {},
+      ),
+      floatingActionButton: !isWeb
+          ? FloatingActionButton(
+              onPressed: _openAsk,
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
+    );
+  }
+
+  Widget _webHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 32, 20, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('All Quests',
+              style: GoogleFonts.outfit(
+                  fontSize: 24, fontWeight: FontWeight.bold)),
+          ElevatedButton.icon(
+            onPressed: _openAsk,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Ask a Quest'),
+            style: ElevatedButton.styleFrom(minimumSize: const Size(160, 48)),
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: 10,
-        itemBuilder: (context, index) {
-          return const QuestionCard();
-        },
+    );
+  }
+
+  Widget _filters() {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        children: [
+          for (final s in const ['latest', 'bounty', 'votes'])
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(s == 'latest'
+                    ? 'Latest'
+                    : s == 'bounty'
+                        ? 'Top bounty'
+                        : 'Most voted'),
+                selected: _sort == s,
+                onSelected: (_) {
+                  if (_sort != s) setState(() => _sort = s);
+                  _load();
+                },
+              ),
+            ),
+          const VerticalDivider(width: 24),
+          for (final t in _tags)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(t),
+                selected: _tag == t,
+                onSelected: (on) {
+                  setState(() => _tag = on ? t : null);
+                  _load();
+                },
+              ),
+            ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: const Color(0xFF7C3AED),
-        child: const Icon(Icons.add, color: Colors.white),
+    );
+  }
+
+  Widget _body() {
+    if (_loading) return const LoadingState();
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_quests.isEmpty) {
+      return EmptyState(
+        icon: Icons.explore_outlined,
+        title: _tag == null ? 'No quests yet' : 'Nothing tagged "$_tag"',
+        message: _tag == null
+            ? 'Be the first to ask something. Attach a bounty and someone will help.'
+            : 'Try another tag, or ask the first quest on this topic.',
+        actionLabel: 'Ask a Quest',
+        onAction: _openAsk,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        controller: _scroll,
+        padding: const EdgeInsets.all(20),
+        itemCount: _quests.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, i) {
+          if (i >= _quests.length) {
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          return QuestTile(
+            quest: _quests[i],
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => QuestionDetail(questId: _quests[i].id)),
+              );
+              if (mounted) _load();
+            },
+          );
+        },
       ),
     );
   }
 }
 
-class QuestionCard extends StatelessWidget {
-  const QuestionCard({super.key});
+/// One quest in a feed: author, bounty, title, tags and counts. Shared by the
+/// browse list and the dashboard's recent-quests section so the two cannot
+/// drift apart.
+class QuestTile extends StatelessWidget {
+  const QuestTile({super.key, required this.quest, required this.onTap});
+
+  final Quest quest;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 12,
-                backgroundColor: Color(0xFF7C3AED),
-                child: Icon(Icons.person, size: 14, color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Adventurer_42',
-                style: GoogleFonts.inter(
-                  color: const Color(0xFF958DA1),
-                  fontSize: 12,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: AppColors.subtleFill,
+                  child: Text(quest.author.initial,
+                      style: const TextStyle(fontSize: 10)),
                 ),
-              ),
-              const Spacer(),
-              Text(
-                '2h ago',
-                style: GoogleFonts.inter(
-                  color: const Color(0xFF484F58),
-                  fontSize: 12,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(quest.author.displayName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 13)),
                 ),
+                const Spacer(),
+                if (quest.bountyPoints > 0) ...[
+                  PointsBadge(points: quest.bountyPoints),
+                  const SizedBox(width: 8),
+                ],
+                if (quest.isSolved)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: AppColors.successTint,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: const Text('Solved',
+                        style: TextStyle(
+                            color: AppColors.successDark,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(quest.title,
+                style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 16),
+            // Tags and metadata each get their own run. Sharing one Row meant
+            // the counts had a fixed width that a phone at 1.5x text scale
+            // could not afford, and the tags had already shrunk to nothing.
+            if (quest.tags.isNotEmpty) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final t in quest.tags)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Text(t,
+                          style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                ],
               ),
+              const SizedBox(height: 12),
             ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'How to implement complex animations in Flutter using CustomPainter?',
-            style: GoogleFonts.spaceGrotesk(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _meta(Icons.arrow_upward_rounded, '${quest.voteCount}'),
+                _meta(Icons.chat_bubble_outline, '${quest.answerCount}'),
+                Text(timeAgo(quest.createdAt),
+                    style: const TextStyle(
+                        color: AppColors.textMuted, fontSize: 12)),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'I am trying to build a custom progress indicator with a liquid effect...',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              color: const Color(0xFF8B949E),
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildTag('Flutter'),
-              const SizedBox(width: 8),
-              _buildTag('Animation'),
-              const Spacer(),
-              const Icon(Icons.thumb_up_off_alt, size: 18, color: Color(0xFF958DA1)),
-              const SizedBox(width: 4),
-              const Text('24', style: TextStyle(color: Color(0xFF958DA1))),
-              const SizedBox(width: 16),
-              const Icon(Icons.chat_bubble_outline, size: 18, color: Color(0xFF958DA1)),
-              const SizedBox(width: 4),
-              const Text('12', style: TextStyle(color: Color(0xFF958DA1))),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTag(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF21262D),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-          color: const Color(0xFF58A6FF),
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
+          ],
         ),
       ),
     );
   }
+
+  Widget _meta(IconData icon, String value) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.textMuted),
+          const SizedBox(width: 4),
+          Text(value,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+        ],
+      );
 }

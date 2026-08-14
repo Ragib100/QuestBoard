@@ -1,156 +1,205 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class LeaderboardScreen extends StatelessWidget {
-  const LeaderboardScreen({super.key});
+import '../../../core/app_colors.dart';
+import '../../../core/widgets/async_states.dart';
+import '../../../models/gamification.dart';
+import '../../../services/api/api_client.dart';
+import '../../../services/common/gamification_service.dart';
+import '../profile/profile_screen.dart';
+
+class LeaderboardScreen extends StatefulWidget {
+  const LeaderboardScreen({super.key, this.embedded = false});
+
+  /// True when the dashboard shell already draws an app bar for this tab.
+  /// Standalone pushes keep their own so the screen still has a title and a
+  /// back button.
+  final bool embedded;
+
+  @override
+  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+}
+
+class _LeaderboardScreenState extends State<LeaderboardScreen> {
+  Leaderboard? _board;
+  bool _loading = true;
+  String? _error;
+  String _period = 'all_time';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final board = await GamificationService.instance.leaderboard(period: _period);
+      if (mounted) setState(() => (_board = board, _loading = false));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_error = e.message, _loading = false));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 900;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF161B22),
-        elevation: 0,
-        title: Text(
-          'Hall of Fame',
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          _buildTopThree(),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: 20,
-              itemBuilder: (context, index) {
-                if (index < 3) return const SizedBox.shrink();
-                return _buildLeaderboardTile(index + 1);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopThree() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF161B22),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _buildTopUser('Knight_Dev', '2nd', 450, 80, const Color(0xFFC0C0C0)),
-          _buildTopUser('QuestMaster', '1st', 600, 100, const Color(0xFFFFD700)),
-          _buildTopUser('CodeWizard', '3rd', 380, 70, const Color(0xFFCD7F32)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopUser(
-      String name, String rank, int pts, double size, Color color) {
-    return Column(
-      children: [
-        Text(
-          rank,
-          style: GoogleFonts.spaceGrotesk(
-            color: color,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: color, width: 3),
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.3),
-                blurRadius: 15,
-                spreadRadius: 2,
+      backgroundColor: AppColors.background,
+      appBar: (!isWeb && !widget.embedded)
+          ? AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              title: Text('Leaderboard',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            )
+          : null,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            children: [
+              if (isWeb)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 32, 20, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Leaderboard',
+                        style: GoogleFonts.outfit(
+                            fontSize: 24, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'all_time', label: Text('All time')),
+                    ButtonSegment(value: 'weekly', label: Text('This week')),
+                  ],
+                  selected: {_period},
+                  onSelectionChanged: (s) {
+                    setState(() => _period = s.first);
+                    _load();
+                  },
+                ),
               ),
+              Expanded(child: _body()),
             ],
           ),
-          child: const CircleAvatar(
-            backgroundColor: Color(0xFF0D1117),
-            child: Icon(Icons.person, size: 40, color: Colors.white),
-          ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          name,
-          style: GoogleFonts.spaceGrotesk(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          '$pts XP',
-          style: GoogleFonts.inter(
-            color: const Color(0xFF7C3AED),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildLeaderboardTile(int rank) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
-      child: Row(
+  Widget _body() {
+    if (_loading) return const LoadingState();
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+
+    final board = _board!;
+    if (board.entries.isEmpty) {
+      return EmptyState(
+        icon: Icons.emoji_events_outlined,
+        title: _period == 'weekly' ? 'Nothing this week yet' : 'No rankings yet',
+        message: _period == 'weekly'
+            ? 'Points earned in the last seven days show up here. Answer a '
+                'quest to get on the board.'
+            : 'Be the first to earn points by answering a quest.',
+      );
+    }
+
+    final outsideTop = board.me != null &&
+        !board.entries.any((e) => e.user.id == board.me!.user.id);
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          Text(
-            '#$rank',
-            style: GoogleFonts.spaceGrotesk(
-              color: const Color(0xFF958DA1),
-              fontWeight: FontWeight.bold,
+          for (final entry in board.entries)
+            _row(entry, highlight: entry.user.id == board.me?.user.id),
+          if (outsideTop) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                Expanded(child: Divider(color: AppColors.border)),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('Your position',
+                      style: TextStyle(
+                          color: AppColors.textMuted, fontSize: 12)),
+                ),
+                Expanded(child: Divider(color: AppColors.border)),
+              ]),
             ),
-          ),
-          const SizedBox(width: 16),
-          const CircleAvatar(
-            radius: 20,
-            backgroundColor: Color(0xFF21262D),
-            child: Icon(Icons.person, size: 20, color: Colors.white),
-          ),
-          const SizedBox(width: 16),
-          Text(
-            'User_Hero_$rank',
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            '${1000 - (rank * 20)} XP',
-            style: GoogleFonts.spaceGrotesk(
-              color: const Color(0xFF7C3AED),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+            _row(board.me!, highlight: true),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _row(LeaderboardEntry entry, {bool highlight = false}) {
+    final medal = switch (entry.rank) {
+      1 => '🥇',
+      2 => '🥈',
+      3 => '🥉',
+      _ => null,
+    };
+
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ProfileScreen(userId: entry.user.id)),
+      ),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: highlight ? AppColors.primaryTint : AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: highlight ? AppColors.primary : AppColors.border),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 36,
+              child: medal != null
+                  ? Text(medal, style: const TextStyle(fontSize: 22))
+                  : Text(
+                      entry.rank == 0 ? '—' : '${entry.rank}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMuted),
+                    ),
+            ),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.subtleFill,
+              child: Text(entry.user.initial,
+                  style: const TextStyle(fontSize: 13)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                entry.user.displayName,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            PointsBadge(points: entry.score, label: '${entry.score}'),
+          ],
+        ),
       ),
     );
   }

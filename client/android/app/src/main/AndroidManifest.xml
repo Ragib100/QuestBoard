@@ -1,8 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required in the *main* manifest: the debug manifest adds it too, but a
+         release APK without this has no network access at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
-        android:label="client"
+        android:label="QuestBoard"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -23,6 +28,16 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Supabase email links (verification, password reset) redirect to
+                 io.questboard://… — without this filter Android has no idea the
+                 link belongs to this app and the deep link handler in main.dart
+                 never fires. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="io.questboard"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
