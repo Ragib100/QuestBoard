@@ -43,6 +43,23 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _initDeepLinks();
+    _watchAuth();
+  }
+
+  /// supabase_flutter parses the recovery link itself and only then emits
+  /// [AuthChangeEvent.passwordRecovery]. Navigating on a timer instead — as this
+  /// used to — raced that work and landed on the form with no session, so
+  /// `updateUser` failed with "Auth session missing".
+  void _watchAuth() {
+    if (!widget.isSupabaseConfigured) return;
+    Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.passwordRecovery) {
+        _navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ResetPassword()),
+          (route) => false,
+        );
+      }
+    });
   }
 
   Future<void> _initDeepLinks() async {
@@ -70,14 +87,8 @@ class _MyAppState extends State<MyApp> {
         });
       }
 
-      if (uri.host == 'reset-callback') {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          _navigatorKey.currentState?.pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const ResetPassword()),
-            (route) => false,
-          );
-        });
-      }
+      // reset-callback is deliberately not handled here: _watchAuth navigates
+      // once the recovery session actually exists.
     }
   }
 

@@ -36,6 +36,17 @@ class AuthService {
     return res;
   }
 
+  /// Re-sends the signup confirmation mail. Supabase rate-limits this and
+  /// surfaces the wait as an [AuthException], which is worth showing verbatim —
+  /// "try again in 47 seconds" is more useful than a generic failure.
+  Future<void> resendVerification({required String email}) async {
+    await _client.auth.resend(
+      type: OtpType.signup,
+      email: email,
+      emailRedirectTo: 'io.questboard://signup-callback',
+    );
+  }
+
   Future<AuthResponse> login({
     required String email,
     required String password,

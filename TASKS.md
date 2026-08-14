@@ -207,6 +207,39 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] `layout_test.dart` now covers Login, Signup and ForgotPassword, and asserts
       the landing page always offers a way to log in
 
+## Mobile-first pass
+
+- [x] **No logout on mobile.** Logout, notifications, the points balance and the
+      daily challenge lived only in the desktop sidebar — the phone had four tabs
+      and no app bar at all. Added a mobile app bar (balance, bell, overflow menu
+      with Daily Challenge and Log out) and a confirm dialog on sign-out
+- [x] Tabs now take `embedded: true` inside the shell so the phone does not stack
+      two app bars and lose 112px of a 640px screen
+- [x] `EmailVerification` — the screen every signup lands on — clipped its buttons
+      off the bottom by 83px with no scroll. Rewritten, now scrollable
+- [x] Its "Resend Email" button did nothing; wired to `auth.resend` and hidden when
+      there is no address to send to
+- [x] **The daily challenge screen was entirely fictional** — a hardcoded 12:45:30
+      countdown, a hardcoded problem and a dead button. Replaced with an honest
+      "not open yet" state until M4 builds it (ground rule 4)
+- [x] The desktop search box silently swallowed input; disabled until M5 wires it
+- [x] `AskQuestion`'s button row overflowed 60px on a phone; stacked full-width now
+- [x] `QuestTile` overflowed at 1.5x system font scale — tags and metadata now wrap
+      onto separate runs instead of competing for one Row
+- [x] Added `test/mobile_layout_test.dart`: hostile data (long names, 99999 points,
+      8 tags, 1.5x text scale) at 320px and 360px
+- [x] `CLAUDE.md` gained a mobile-first convention and ground rule 5; its
+      terminology bullet still claimed the table was `quests`, reversed back in D14
+
+## Auth fixes
+
+- [x] **Password reset failed on submit.** `main.dart` opened the form on a fixed
+      300ms timer, racing supabase_flutter's parsing of the recovery link — the
+      screen loaded with no session and `updateUser` threw "Auth session missing".
+      Now navigates on `AuthChangeEvent.passwordRecovery`, when the session exists
+- [x] Expired or reused links now say so instead of surfacing a raw exception
+- [x] The reset field gained the reveal toggle (`LabeledField`) and scrolls
+
 ## Chores
 
 - [x] Removed a hardcoded password backdoor in `login.dart` that logged anyone in

@@ -21,7 +21,12 @@ const _tags = [
 ];
 
 class BrowseQuestions extends StatefulWidget {
-  const BrowseQuestions({super.key});
+  const BrowseQuestions({super.key, this.embedded = false});
+
+  /// True when the dashboard shell already draws an app bar for this tab.
+  /// Standalone pushes keep their own so the screen still has a title and a
+  /// back button.
+  final bool embedded;
 
   @override
   State<BrowseQuestions> createState() => _BrowseQuestionsState();
@@ -112,7 +117,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: !isWeb
+      appBar: (!isWeb && !widget.embedded)
           ? AppBar(
               backgroundColor: AppColors.surface,
               elevation: 0,
@@ -315,43 +320,38 @@ class QuestTile extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary)),
             const SizedBox(height: 16),
-            Row(
+            // Tags and metadata each get their own run. Sharing one Row meant
+            // the counts had a fixed width that a phone at 1.5x text scale
+            // could not afford, and the tags had already shrunk to nothing.
+            if (quest.tags.isNotEmpty) ...[
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final t in quest.tags)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Text(t,
+                          style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final t in quest.tags)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                              color: AppColors.primaryTint,
-                              borderRadius: BorderRadius.circular(6)),
-                          child: Text(t,
-                              style: const TextStyle(
-                                  color: AppColors.primary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_upward_rounded,
-                    size: 16, color: AppColors.textMuted),
-                const SizedBox(width: 4),
-                Text('${quest.voteCount}',
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 13)),
-                const SizedBox(width: 16),
-                const Icon(Icons.chat_bubble_outline,
-                    size: 16, color: AppColors.textMuted),
-                const SizedBox(width: 4),
-                Text('${quest.answerCount}',
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 13)),
-                const SizedBox(width: 16),
+                _meta(Icons.arrow_upward_rounded, '${quest.voteCount}'),
+                _meta(Icons.chat_bubble_outline, '${quest.answerCount}'),
                 Text(timeAgo(quest.createdAt),
                     style: const TextStyle(
                         color: AppColors.textMuted, fontSize: 12)),
@@ -362,4 +362,14 @@ class QuestTile extends StatelessWidget {
       ),
     );
   }
+
+  Widget _meta(IconData icon, String value) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.textMuted),
+          const SizedBox(width: 4),
+          Text(value,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+        ],
+      );
 }

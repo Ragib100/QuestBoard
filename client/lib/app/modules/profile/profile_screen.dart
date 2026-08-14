@@ -13,10 +13,15 @@ import '../../../services/common/user_service.dart';
 import 'profile_edit.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, this.userId});
+  const ProfileScreen({super.key, this.userId, this.embedded = false});
 
   /// Whose profile to show. Null means the signed-in user.
   final String? userId;
+
+  /// True when the dashboard shell already draws an app bar for this tab.
+  /// Standalone pushes keep their own so the screen still has a title and a
+  /// back button.
+  final bool embedded;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -84,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: !isWeb
+      appBar: (!isWeb && !widget.embedded)
           ? AppBar(
               backgroundColor: AppColors.surface,
               elevation: 0,

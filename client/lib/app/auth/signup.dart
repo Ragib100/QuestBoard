@@ -56,7 +56,7 @@ class _SignupState extends State<Signup> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const EmailVerification()),
+          MaterialPageRoute(builder: (_) => EmailVerification(email: email)),
         );
       }
     } on AuthException catch (e) {

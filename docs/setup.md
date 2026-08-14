@@ -202,31 +202,88 @@ a network security config that permits cleartext
 (`android/app/src/debug/res/xml/`), while release builds stay HTTPS-only. You do
 not need to change anything; just know that **a deployed API must be HTTPS**.
 
-## 9. Do you need to deploy the backend?
+## 9. Deploying the backend to Render
 
-**Not for development.** A phone on the same Wi-Fi as your PC talks to it
-directly over the LAN IP. Note that **signup, login and password reset do not
-involve your backend at all** — the app calls Supabase directly — so those work
-whether or not the API is running. Only profile creation and quests need it.
+**Render's free tier is the right choice here**: it runs a plain FastAPI process,
+deploys from GitHub on push, and gives you HTTPS — which Android requires. Fly.io
+needs a card, Vercel/Netlify only run serverless functions, and Railway's free
+tier ended. The one real cost is that a free service **sleeps after 15 minutes
+idle**, so the first request after a pause takes ~50 seconds.
 
-**Yes for anything else:** demoing off your network, letting a teammate use the
-app, installing an APK on someone else's phone, or your final submission. Nobody
-can reach `192.168.x.x` from outside your Wi-Fi.
+You do not need this for development — a phone on your Wi-Fi reaches your PC
+directly. Deploy when you need the app to work off your network: a demo, a
+teammate's phone, or submission. Note that **signup, login and password reset
+never touch your backend** (the client calls Supabase directly), so those keep
+working regardless.
 
-When that time comes, deploy to [Render](https://render.com) as a Web Service:
+### 9.1 Commit a pinned requirements file
+
+Render installs from `server/requirements.txt`. Confirm it resolves cleanly:
+
+```bash
+cd server && pip install -r requirements.txt
+```
+
+### 9.2 Create the Web Service
+
+Push to GitHub, then on [render.com](https://render.com) → **New → Web Service**
+→ connect the repo:
 
 | Setting | Value |
 |---|---|
 | Root directory | `server` |
+| Runtime | Python 3 |
 | Build command | `pip install -r requirements.txt` |
 | Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
-| Environment | `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `CORS_ORIGINS` |
+| Instance type | Free |
+| Health check path | `/api/` |
 
-Then set `API_URL` in `client/.env` to the Render URL and rebuild the app. Two
-things to expect on the free tier: it sleeps after 15 minutes idle, so the first
-request takes ~50 seconds, and you must use the pooler connection string from
-step 3. Deploying is tracked as an M6 task — do not do it until the quest loop
-works locally.
+`--port $PORT` is not optional: Render assigns the port and a hardcoded 8000
+fails health checks.
+
+### 9.3 Environment variables
+
+Add these under **Environment** — copy the values from `server/.env`:
+
+| Key | Notes |
+|---|---|
+| `DATABASE_URL` | The **pooler** string from step 3 (`...pooler.supabase.com:5432`). The direct host is IPv6-only and Render cannot reach it |
+| `SUPABASE_URL` | Same as local |
+| `SUPABASE_PUBLISHABLE_KEY` | Same as local |
+| `CORS_ORIGINS` | Your web origin, or `*` while testing |
+
+### 9.4 Verify before touching the client
+
+```bash
+curl https://<your-app>.onrender.com/api/
+# {"message":"QuestBoard API is running!"}
+```
+
+If this 500s, open the Render logs — it is almost always `DATABASE_URL`.
+
+### 9.5 Point the app at it
+
+In `client/.env` replace the candidate list with the single HTTPS entry:
+
+```
+API_URL=https://<your-app>.onrender.com
+```
+
+Then **rebuild** — `.env` is a bundled asset, so hot reload will not pick it up:
+
+```bash
+cd client && flutter run            # or: flutter build apk --release
+```
+
+HTTPS also means the cleartext exemption no longer matters, so release APKs work
+with the strict network config unchanged.
+
+### 9.6 Expect the cold start
+
+The first request after 15 idle minutes takes ~50s and the app will show "could
+not reach the server" before it wakes. Options: hit `/api/` yourself a minute
+before a demo, or point a free uptime pinger (UptimeRobot, 5-minute interval) at
+`/api/` on the day. Do not add a background pinger inside the app.
 
 ---
 

@@ -165,32 +165,7 @@ class _AskQuestionState extends State<AskQuestion> {
                   const SizedBox(height: 28),
                   _bountyPicker(),
                   const SizedBox(height: 32),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: _submitting
-                            ? null
-                            : () => Navigator.pop(context, false),
-                        child: const Text('Cancel',
-                            style:
-                                TextStyle(color: AppColors.textSecondary)),
-                      ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: _submitting ? null : _submit,
-                        style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(180, 52)),
-                        child: _submitting
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : const Text('Post Quest'),
-                      ),
-                    ],
-                  ),
+                  _actions(context),
                 ],
               ),
             ),
@@ -232,6 +207,38 @@ class _AskQuestionState extends State<AskQuestion> {
           ],
         ),
       ],
+    );
+  }
+
+  /// Stacked and full-width on a phone, side by side once there is room. The
+  /// primary action sits on top so it stays above the keyboard-shrunk fold.
+  Widget _actions(BuildContext context) {
+    final post = ElevatedButton(
+      onPressed: _submitting ? null : _submit,
+      style: ElevatedButton.styleFrom(minimumSize: const Size(180, 52)),
+      child: _submitting
+          ? const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                  color: Colors.white, strokeWidth: 2))
+          : const Text('Post Quest'),
+    );
+
+    final cancel = TextButton(
+      onPressed: _submitting ? null : () => Navigator.pop(context, false),
+      style: TextButton.styleFrom(minimumSize: const Size(0, 52)),
+      child: const Text('Cancel',
+          style: TextStyle(color: AppColors.textSecondary)),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth < 420
+          ? Column(children: [post, const SizedBox(height: 4), cancel])
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [cancel, const SizedBox(width: 16), post],
+            ),
     );
   }
 

@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../../core/app_colors.dart';
 
+/// Placeholder for the M4 daily challenge.
+///
+/// The `daily_challenges` and `challenge_attempts` tables exist but are empty,
+/// and there is no endpoint yet. This screen previously showed a hardcoded
+/// countdown ("12:45:30"), a hardcoded problem and a button that did nothing —
+/// which reads as a working feature. An honest disabled state is the rule
+/// (CLAUDE.md ground rule 4), so that is what it shows until the API lands.
 class DailyChallengeScreen extends StatelessWidget {
   const DailyChallengeScreen({super.key});
 
@@ -10,96 +18,54 @@ class DailyChallengeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
         elevation: 0,
-        title: Text('Daily Challenge', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        title: Text('Daily Challenge',
+            style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
+          constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Container(
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 64),
-                  const SizedBox(height: 24),
-                  Text('Today\'s Challenge', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  const Text('Solve the challenge and earn bonus points.', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
-                  const SizedBox(height: 40),
-                  _buildTimer(),
-                  const SizedBox(height: 48),
-                  _buildChallengeDetail(),
-                  const SizedBox(height: 48),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 60)),
-                    child: const Text('SOLVE CHALLENGE'),
-                  ),
-                ],
-              ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.auto_awesome_rounded,
+                    color: AppColors.primary, size: 56),
+                const SizedBox(height: 20),
+                Text(
+                  'Not open yet',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                      fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'One problem a day, pulled from Codeforces, with bonus points '
+                  'for solving it. It is still being built — there is nothing '
+                  'to show here until it is.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: AppColors.textSecondary, fontSize: 15, height: 1.5),
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton(
+                  onPressed: null,
+                  style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 52)),
+                  child: const Text('Solve challenge'),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.maybePop(context),
+                  child: const Text('Back to quests'),
+                ),
+              ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTimer() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _timeBox('12', 'Hours'),
-        const SizedBox(width: 16),
-        _timeBox('45', 'Minutes'),
-        const SizedBox(width: 16),
-        _timeBox('30', 'Seconds'),
-      ],
-    );
-  }
-
-  Widget _timeBox(String val, String label) {
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(color: AppColors.subtleFill, borderRadius: BorderRadius.circular(12)),
-          child: Center(child: Text(val, style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary))),
-        ),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-      ],
-    );
-  }
-
-  Widget _buildChallengeDetail() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Reverse a String', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          const Text('Given a string s, reverse the string and return it.', style: TextStyle(color: AppColors.textSecondary)),
-          const SizedBox(height: 20),
-          const Text('Example:', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(16),
-            width: double.infinity,
-            decoration: BoxDecoration(color: AppColors.textPrimary, borderRadius: BorderRadius.circular(8)),
-            child: const Text('Input: s = "hello"\nOutput: "olleh"', style: TextStyle(color: Colors.white, fontFamily: 'monospace')),
-          ),
-        ],
       ),
     );
   }

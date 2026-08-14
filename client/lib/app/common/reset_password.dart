@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../core/widgets/labeled_field.dart';
 
 import '../../services/common/auth_service.dart';
 import '../auth/login.dart';
@@ -22,13 +25,25 @@ class _ResetPasswordState extends State<ResetPassword> {
     super.dispose();
   }
 
+  void _tell(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _submit() async {
     if (_passwordController.text.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Use at least 8 characters.')),
-      );
+      _tell('Use at least 8 characters.');
       return;
     }
+    // Recovery links are single-use and expire. Without a session the update
+    // fails with a raw "Auth session missing" — say what actually went wrong.
+    if (Supabase.instance.client.auth.currentSession == null) {
+      _tell('This reset link has expired or was already used. Request a new '
+          'one from the login screen.');
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await AuthService.instance
@@ -44,10 +59,10 @@ class _ResetPasswordState extends State<ResetPassword> {
         MaterialPageRoute(builder: (_) => const Login()),
         (route) => false,
       );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$error')));
+    } on AuthException catch (e) {
+      _tell(e.message);
+    } catch (_) {
+      _tell('Could not update your password. Check your connection.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -65,8 +80,8 @@ class _ResetPasswordState extends State<ResetPassword> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,12 +90,13 @@ class _ResetPasswordState extends State<ResetPassword> {
                 const SizedBox(height: 8),
                 const Text('Choose a new, strong password for your account.', style: TextStyle(color: AppColors.textSecondary)),
                 const SizedBox(height: 40),
-                const Text('New Password', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                TextField(
+                LabeledField(
+                  label: 'New Password',
                   controller: _passwordController,
+                  hint: 'Enter at least 8 characters',
                   obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Enter at least 8 characters'),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _isLoading ? null : _submit(),
                 ),
                 const SizedBox(height: 40),
                 ElevatedButton(

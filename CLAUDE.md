@@ -50,8 +50,15 @@ client/lib/
 
 ## Conventions
 
-- **Terminology:** a question is a **quest** everywhere — table `quests`, model `Quest`,
-  route `/api/quests`, UI "Browse Quests". Never "question" in new code.
+- **Terminology:** "quest" is the product word, `question` is the schema word. UI strings
+  and Dart types say Quest (`Quest`, "Browse Quests"); the table, the ORM model, the JSON
+  keys and the route stay `question` / `/api/questions` (decisions.md D1, D14).
+- **Mobile-first.** This is a phone app that also runs on desktop. Build the phone layout
+  first and treat `isWeb` (`width > 900`) as the variant. Concretely: no fixed widths on
+  anything a phone renders, `Wrap`/`Flexible` over hard `Row`s, full-width buttons, every
+  screen scrollable, and anything the desktop sidebar offers must also be reachable on a
+  phone. New screens get a case in `test/mobile_layout_test.dart`, which fails on overflow
+  at 320px and 360px.
 - **Auth:** the Flutter client talks to Supabase Auth directly (`supabase_flutter`).
   FastAPI never issues tokens — it only verifies the bearer JWT via
   `Depends(get_current_user_id)` and trusts the `sub` claim.
@@ -87,5 +94,6 @@ client/lib/
 3. **Keep docs true.** If code and docs disagree, the code wins — fix the doc in the same PR.
 4. **Never fake success.** A screen with no backend shows an honest disabled state,
    not a "Saved!" toast. Never invent statistics or seed the UI with fictional numbers.
-5. **Before every PR:** `flutter analyze` and `flutter test` in `client/`, `ruff check app`
+5. **A phone is the target.** If it does not work at 360px wide, it does not work.
+6. **Before every PR:** `flutter analyze` and `flutter test` in `client/`, `ruff check app`
    and `black app` in `server/`. All must be clean.

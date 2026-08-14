@@ -9,7 +9,12 @@ import '../../../services/common/gamification_service.dart';
 import '../profile/profile_screen.dart';
 
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({super.key});
+  const LeaderboardScreen({super.key, this.embedded = false});
+
+  /// True when the dashboard shell already draws an app bar for this tab.
+  /// Standalone pushes keep their own so the screen still has a title and a
+  /// back button.
+  final bool embedded;
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -46,7 +51,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: !isWeb
+      appBar: (!isWeb && !widget.embedded)
           ? AppBar(
               backgroundColor: AppColors.surface,
               elevation: 0,

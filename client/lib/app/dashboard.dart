@@ -74,11 +74,13 @@ class _DashboardState extends State<Dashboard> {
   Widget build(BuildContext context) {
     final bool isWeb = MediaQuery.of(context).size.width > 960;
 
+    // `embedded` suppresses each tab's own app bar: the phone shell already
+    // draws one, and two stacked bars would eat 112px of a 640px screen.
     final pages = [
       UserHome(onBrowseAll: () => setState(() => _currentIndex = 1)),
-      const BrowseQuestions(),
-      const LeaderboardScreen(),
-      const ProfileScreen(),
+      BrowseQuestions(embedded: !isWeb),
+      LeaderboardScreen(embedded: !isWeb),
+      ProfileScreen(embedded: !isWeb),
     ];
 
     return Scaffold(
@@ -89,7 +91,7 @@ class _DashboardState extends State<Dashboard> {
           Expanded(
             child: Scaffold(
               backgroundColor: Colors.transparent,
-              appBar: isWeb ? _buildWebTopBar() : null,
+              appBar: isWeb ? _buildWebTopBar() : _buildMobileTopBar(),
               body: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1400),
@@ -107,6 +109,109 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  /// The phone shell's only chrome. Everything the sidebar offers on desktop
+  /// has to live here or be unreachable — the bottom bar holds four tabs and
+  /// there is nowhere else to put a balance, a bell, or a way to sign out.
+  PreferredSizeWidget _buildMobileTopBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      titleSpacing: 16,
+      shape: const Border(bottom: BorderSide(color: AppColors.border)),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_currentIndex == 0) ...[
+            const Icon(Icons.bolt_rounded, color: AppColors.primary, size: 24),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(
+              const ['QuestBoard', 'Browse Quests', 'Leaderboard', 'My Profile']
+                  .elementAtOrNull(_currentIndex) ??
+                  'QuestBoard',
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (_me != null) PointsBadge(points: _me!.points),
+        _NotificationBell(count: _unread, onPressed: _openNotifications),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: AppColors.textSecondary),
+          tooltip: 'More',
+          onSelected: (value) {
+            if (value == 'challenge') {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const DailyChallengeScreen()));
+            }
+            if (value == 'logout') _logout();
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: 'challenge',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.track_changes_outlined),
+                title: Text('Daily Challenge'),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'logout',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.logout_rounded, color: AppColors.danger),
+                title: Text('Log out', style: TextStyle(color: AppColors.danger)),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Signing out is destructive enough to confirm — an accidental tap on a
+  /// phone would otherwise drop the session and the unsaved draft with it.
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will need to sign in again to post or answer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Log out',
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await AuthService.instance.logout();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const Login()),
+      (route) => false,
+    );
+  }
+
   PreferredSizeWidget _buildWebTopBar() {
     return AppBar(
       backgroundColor: Colors.white,
@@ -120,9 +225,12 @@ class _DashboardState extends State<Dashboard> {
           color: AppColors.subtleFill,
           borderRadius: BorderRadius.circular(20),
         ),
+        // Not wired up yet (M5). Disabled rather than left looking functional —
+        // a search box that silently swallows input is a lie (ground rule 4).
         child: const TextField(
+          enabled: false,
           decoration: InputDecoration(
-            hintText: 'Search questions...',
+            hintText: 'Search — coming soon',
             hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
             prefixIcon: Icon(Icons.search, size: 20, color: AppColors.textMuted),
             border: InputBorder.none,
@@ -205,8 +313,7 @@ class _DashboardState extends State<Dashboard> {
       child: ListTile(
         onTap: () async {
           if (isLogout) {
-            await AuthService.instance.logout();
-            if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Login()));
+            await _logout();
           } else {
             setState(() => _currentIndex = index >= 0 ? index : _currentIndex);
             if (index == -2) _openNotifications();
