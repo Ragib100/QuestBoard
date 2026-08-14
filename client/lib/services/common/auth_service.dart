@@ -7,6 +7,14 @@ class AuthService {
 
   final SupabaseClient _client = Supabase.instance.client;
 
+  /// Registers a new account and sends the verification email.
+  ///
+  /// Throws an [AuthException] if the email is already registered. Supabase
+  /// does not do this for us: to stop attackers probing which emails exist, it
+  /// returns a normal-looking success with an obfuscated user whose
+  /// `identities` list is empty. That empty list is the only signal, so we
+  /// translate it into a real error here rather than showing "check your
+  /// inbox" for a mail that will never arrive.
   Future<AuthResponse> signUp({
     required String email,
     required String password,
@@ -16,6 +24,15 @@ class AuthService {
       password: password,
       emailRedirectTo: 'io.questboard://signup-callback',
     );
+
+    final identities = res.user?.identities;
+    if (identities != null && identities.isEmpty) {
+      throw const AuthException(
+        'That email is already registered. Try logging in, or reset your '
+        'password if you have forgotten it.',
+      );
+    }
+
     return res;
   }
 

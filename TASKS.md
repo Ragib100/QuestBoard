@@ -17,7 +17,7 @@ milestones are ordered by dependency, not preference.
 | M6 · Ship | 🔴 not started |
 
 **Verified green** (2026-08-14): `flutter analyze` → no issues · `flutter test` → 4/4
-passing · `flutter build web` → succeeds · `ruff check app` + `black --check app` →
+passing (6 tests) · `flutter build web` → succeeds · `ruff check app` + `black --check app` →
 clean · `GET /api/` → 200 · `/api/ping` → 401 without a valid token · CORS preflight
 → 200 · both ORM models registered and the `User.quests` relationship resolves.
 
@@ -43,7 +43,9 @@ setup steps — follow [docs/setup.md](docs/setup.md).
 - [x] Android intent filter for `io.questboard://` — email links did not open the app
 - [ ] Fill in a real `DATABASE_URL` in `server/.env` (see [docs/setup.md](docs/setup.md) step 3)
 - [ ] Run `server/schema.sql` and create the public `profile_image` storage bucket
-- [ ] Configure Brevo SMTP + the two redirect URLs in Supabase (steps 4–5)
+- [x] Custom SMTP configured (Resend) — verification email delivers
+- [ ] Set Supabase **Site URL** + both redirect URLs, then reinstall the Android app
+      — until then email links dead-end on `localhost:3000` ([setup.md](docs/setup.md) step 5)
 
 ## M1 · Auth & profiles 🟡
 
@@ -53,6 +55,8 @@ setup steps — follow [docs/setup.md](docs/setup.md).
 - [x] Avatar upload to the `profile_image` bucket
 - [x] Email format and password-confirmation validation on signup
 - [x] Forgot-password screen reachable from the login form
+- [x] Signup reports "already registered" instead of Supabase's silent fake success
+- [x] Show/hide toggle on every password field
 - [ ] `GET /api/users/{id}` — profile read
 - [ ] `PATCH /api/users/{id}` — profile edit (`ProfileEdit` is built and waiting on it)
 - [ ] Wire `profile_screen.dart` to real data (still shows placeholder content)

@@ -66,4 +66,46 @@ void main() {
     expect(field.obscureText, isTrue);
     expect(field.maxLines, 1);
   });
+
+  testWidgets('password fields can be revealed and hidden again',
+      (WidgetTester tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: LabeledField(
+          label: 'Password',
+          controller: controller,
+          obscureText: true,
+        ),
+      ),
+    ));
+
+    bool isHidden() => tester.widget<TextField>(find.byType(TextField)).obscureText;
+
+    expect(isHidden(), isTrue, reason: 'must start hidden');
+
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+    expect(isHidden(), isFalse);
+
+    await tester.tap(find.byIcon(Icons.visibility_off_outlined));
+    await tester.pump();
+    expect(isHidden(), isTrue);
+  });
+
+  testWidgets('non-password fields get no reveal toggle',
+      (WidgetTester tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: LabeledField(label: 'Username', controller: controller),
+      ),
+    ));
+
+    expect(find.byType(IconButton), findsNothing);
+  });
 }

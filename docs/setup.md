@@ -59,14 +59,20 @@ Two traps worth knowing:
 
 If your password contains `@ : / ?` or `#`, percent-encode it.
 
-## 4. Email delivery via Brevo
+## 4. Email delivery (custom SMTP)
 
-You need your own SMTP provider. **Brevo is a good fit** — 300 emails/day free
-forever, no credit card, and no per-domain verification needed to start. That is
-far more than this project will ever use.
+You need your own SMTP provider — Supabase's built-in mailer only reaches your own
+team members. Any provider works; Supabase wants **SMTP credentials, not a REST
+API key**, so ignore the "API" section of whichever provider you pick.
 
-Supabase needs **SMTP credentials, not Brevo's REST API**, so ignore the API key
-section of their docs.
+- **Resend** — Supabase has a one-click integration; the free tier covers 3,000
+  emails/month. Sending from their shared `onboarding@resend.dev` sender works
+  immediately with no domain setup.
+- **Brevo** — 300 emails/day free, no domain verification needed to start.
+
+Either is far more than this project will use. Steps below are for Brevo; Resend
+follows the same shape (host `smtp.resend.com`, port `587`, username `resend`,
+password = your API key).
 
 1. Sign up at [brevo.com](https://www.brevo.com) and verify your own email.
 2. Go to **Senders, Domains & Dedicated IPs → Senders** and add a sender address
@@ -91,24 +97,36 @@ section of their docs.
 **The sender address must be the verified Brevo sender.** A mismatch is the most
 common cause of mail that silently fails after this is configured.
 
-## 5. Redirect URLs
+## 5. Redirect URLs — where broken email links come from
 
-The app catches email links through the custom scheme `io.questboard://`. Supabase
-refuses to redirect anywhere it has not been told about.
+**If your verification or reset link lands on a blank / "cannot be reached" page,
+this step is the reason.** Supabase only redirects to URLs on its allow-list. When
+the requested address is not on it, Supabase silently falls back to your **Site
+URL**, which defaults to `http://localhost:3000` — a server you are not running.
+That is the "unknown area that doesn't load".
 
-**Authentication → URL Configuration → Redirect URLs**, add both:
+Go to **Authentication → URL Configuration** and set both:
+
+**Redirect URLs** — add each on its own line:
 
 ```
 io.questboard://signup-callback
 io.questboard://reset-callback
 ```
 
-The Android side of this is already wired: `AndroidManifest.xml` declares an
-intent filter for the `io.questboard` scheme, so tapping the link opens the app.
+**Site URL** — set it to `io.questboard://signup-callback` too. It is the fallback
+for any link that misses the allow-list, so pointing it at the app means even a
+stale email opens something real instead of a dead localhost page.
 
-> On **desktop and web** the custom scheme will not resolve. Test the email flow
-> on Android, or confirm the account manually in **Authentication → Users** while
-> developing on desktop.
+Then **rebuild the Android app** (`flutter run` again, not hot reload).
+`AndroidManifest.xml` now declares an intent filter for the `io.questboard`
+scheme, but a manifest change only takes effect on a fresh install.
+
+> **The custom scheme only resolves on Android.** A browser on desktop or web has
+> no idea what `io.questboard://` means and will show an error page no matter how
+> Supabase is configured — that is expected, not a bug. Test the email flow on a
+> phone or emulator. While developing on desktop, confirm accounts by hand in
+> **Authentication → Users**.
 
 ## 6. Environment files
 
@@ -187,7 +205,9 @@ works locally.
 |---|---|
 | No verification email | Custom SMTP not configured — step 4 |
 | "Invalid login credentials" right after signing up | The account exists but is unconfirmed. Confirm via the email, or flip the user to confirmed in **Authentication → Users** |
-| Email arrives, link does nothing | Redirect URL missing from step 5, or you opened it on desktop/web instead of Android |
+| Link opens a blank or "site cannot be reached" page | Redirect URLs / Site URL not set — step 5. Supabase fell back to `localhost:3000` |
+| Link looks right but the app never opens | Manifest intent filter needs a full rebuild, or you opened it on desktop/web where `io.questboard://` cannot resolve |
+| "Check your inbox" but no mail, for an email you used before | Fixed in the app: signup now reports "already registered". Supabase itself returns a fake success to prevent email enumeration |
 | `role "username" does not exist` | `DATABASE_URL` is still the placeholder — step 3 |
 | `could not translate host name` / connection timeout | Using the IPv6-only direct host instead of the pooler — step 3 |
 | Profile creation fails with 401 | The API cannot verify the token; check `SUPABASE_URL` matches in both `.env` files |
