@@ -158,38 +158,41 @@ flutter run -d chrome        # or -d linux, or a connected phone
 
 ## 8. Connecting a phone to your API
 
-**Use `adb reverse`.** It is the most reliable option for a USB-connected Android
-device and needs no IP address at all:
+**`API_URL` takes a comma-separated list and the app finds the live one itself.**
+On the first request it probes every candidate at once, keeps whichever answers,
+and caches it. That is why the shipped default covers all three dev setups:
 
-```bash
-adb reverse tcp:8000 tcp:8000     # run once per USB connection
-flutter run
+```
+API_URL=http://localhost:8000,http://10.0.2.2:8000,http://192.168.1.10:8000
 ```
 
-This tunnels `localhost:8000` *on the phone* to port 8000 on your PC, so
-`API_URL=http://localhost:8000` just works — no LAN IP to look up, nothing to
-change when your network does, and no firewall involvement. Re-run the command
-after unplugging or rebooting the phone.
-
-Other targets:
-
-| Running on | `API_URL` |
+| Candidate | Covers |
 |---|---|
-| Phone over USB (recommended) | `http://localhost:8000` + `adb reverse` |
-| Desktop or web on the same PC | `http://localhost:8000` |
-| Android emulator | `http://10.0.2.2:8000` |
-| Phone on the same Wi-Fi, no USB | `http://<your-pc-lan-ip>:8000` |
-| Phone anywhere else | your deployed URL (step 9) |
+| `http://localhost:8000` | desktop and web; a USB phone if you ran `adb reverse tcp:8000 tcp:8000` |
+| `http://10.0.2.2:8000` | the Android emulator's alias for the host machine |
+| `http://<your-pc-lan-ip>:8000` | a phone on the same Wi-Fi — **edit this one to your own IP** |
 
-For the Wi-Fi option, find your LAN IP with `ip addr` (Linux) or `ipconfig`
-(Windows) — and check it every time, because DHCP reassigns it. Start the server
-with `--host 0.0.0.0`, and confirm from the PC first:
+Find your LAN IP with `hostname -I` (Linux) or `ipconfig` (Windows). Because the
+list is probed rather than trusted, a stale entry costs nothing: it simply loses
+the race. When one host stops answering mid-session the app re-probes on the next
+request, so moving between Wi-Fi and USB recovers without a restart.
+
+**Always start the server with `--host 0.0.0.0`** — bound to `127.0.0.1` (the
+default) it is unreachable from the phone no matter which URL you use:
 
 ```bash
-curl http://<your-pc-lan-ip>:8000/api/
+uvicorn app.main:app --reload --host 0.0.0.0
 ```
 
-If that fails, the phone has no chance; it is a firewall or binding problem.
+Confirm from the PC before blaming the phone:
+
+```bash
+curl http://<your-pc-lan-ip>:8000/api/     # expect {"message":"QuestBoard API is running!"}
+```
+
+If that fails, the phone has no chance — it is a binding or firewall problem.
+
+Once the API is deployed (step 9) a single HTTPS entry replaces the whole list.
 
 ### Cleartext HTTP is handled for you
 
@@ -240,6 +243,6 @@ works locally.
 | `could not translate host name` / connection timeout | Using the IPv6-only direct host instead of the pooler — step 3 |
 | Profile creation fails with 401 | The API cannot verify the token; check `SUPABASE_URL` matches in both `.env` files |
 | Flutter web: "XMLHttpRequest error" | `CORS_ORIGINS` does not include your origin, or the API is not running |
-| Phone cannot reach the API | Run `adb reverse tcp:8000 tcp:8000` and set `API_URL=http://localhost:8000`. Otherwise: server not started with `--host 0.0.0.0`, a stale LAN IP, or a firewall |
+| Phone cannot reach the API | Check `API_URL` lists your current LAN IP (`hostname -I`), and that uvicorn was started with `--host 0.0.0.0`. `curl http://<lan-ip>:8000/api/` from the PC first. USB alternative: `adb reverse tcp:8000 tcp:8000` |
 | App hangs on a blank screen at launch | It no longer can — startup routing gives up after 4s. If it still does, `API_URL` is malformed rather than unreachable |
 | Everything works except calls to your own API | Cleartext HTTP blocked. Only affects release builds now; a deployed API must be HTTPS |

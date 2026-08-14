@@ -171,8 +171,7 @@ consecutive, gap) and badge idempotency are asserted too.
       would have had no network access at all
 - [x] **Android blocked all cleartext HTTP**, so every call to the local API failed
       before leaving the phone. Debug builds now permit it; release stays HTTPS-only
-- [x] `API_URL` pointed at `192.168.137.35`, an address this machine does not have.
-      Switched to `adb reverse` + `localhost`, which survives network changes
+- [x] `API_URL` pointed at `192.168.137.35`, an address this machine does not have
 - [x] Startup blocked on a 20s network timeout before drawing anything — now 4s for
       routing, 10s elsewhere, and the dashboard never blocks the first frame
 - [x] Dashboard made five API calls in sequence; they now run in parallel
@@ -182,6 +181,31 @@ consecutive, gap) and badge idempotency are asserted too.
       (hero buttons); both layouts fixed
 - [x] Added `test/layout_test.dart` — renders screens at 320px and 360px and fails
       on any overflow, so this class of bug cannot come back silently
+
+## Fixed after the second Android round
+
+- [x] **`API_URL` accepts a comma-separated candidate list.** The app probes them
+      all in parallel on the first request, keeps whichever answers, and re-probes
+      after a network failure. A single hardcoded host — the previous
+      `adb reverse` + `localhost` scheme included — broke whenever the setup
+      changed; now desktop, emulator and Wi-Fi phone all work from one `.env`
+- [x] **Android had no way to reach Login**: the app bar's Login button was made
+      web-only to cure an overflow, leaving the landing page's hero as the only
+      entry point. Login is back on phones; the wordmark ellipsizes instead
+- [x] Login and Signup overflowed a 360px phone (logo `Row` 146px, sign-in prompt
+      `Row` 186px) — now `Flexible` + `Wrap`
+- [x] **The dashboard's "Recent Questions" list was three hardcoded fake quests**
+      ("Array vs ArrayList in Java"…) with a dead "See all". It now renders real
+      quests from `GET /api/questions`, opens them, and shows an honest empty or
+      offline state — ground rule 4
+- [x] Reused `QuestTile` across Browse and the dashboard instead of a second,
+      non-interactive card widget
+- [x] Long names and titles could push scores off-screen in the leaderboard,
+      profile stats and section headers — all ellipsize now
+- [x] Four raw `Color(0xFF…)` literals had crept back in; added `AppColors.streak`
+      and `AppColors.warningDark`
+- [x] `layout_test.dart` now covers Login, Signup and ForgotPassword, and asserts
+      the landing page always offers a way to log in
 
 ## Chores
 
@@ -198,6 +222,5 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] Quest creation now returns a clear 400 instead of a raw 500 when the caller has
       no profile row yet
 - [ ] Android `applicationId` is still `com.example.client` — rename before release
-- [ ] Deploy the API so the app works off your Wi-Fi (M6); until then `adb reverse`
-      is the fastest local loop
+- [ ] Deploy the API so the app works off your Wi-Fi (M6)
 - [ ] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR

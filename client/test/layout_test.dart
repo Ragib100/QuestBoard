@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:client/app/auth/forgot_password.dart';
+import 'package:client/app/auth/login.dart';
+import 'package:client/app/auth/signup.dart';
 import 'package:client/app/intro.dart';
 import 'package:client/core/widgets/async_states.dart';
 import 'package:client/core/widgets/labeled_field.dart';
@@ -24,6 +27,31 @@ void main() {
       (WidgetTester tester) async {
     await _pumpAt(tester, const Intro(), _phone);
     expect(tester.takeException(), isNull);
+  });
+
+  /// The auth screens are the only way into the app, so an overflow here is a
+  /// dead end rather than a cosmetic bug. Both of them stacked a logo Row and a
+  /// "Don't have an account? Register" Row that did not fit a 360px phone.
+  testWidgets('auth screens fit a small phone', (WidgetTester tester) async {
+    for (final screen in const [Login(), Signup(), ForgotPassword()]) {
+      await _pumpAt(tester, screen, _phone);
+      expect(tester.takeException(), isNull, reason: '${screen.runtimeType}');
+    }
+  });
+
+  testWidgets('login still fits at 320px', (WidgetTester tester) async {
+    await _pumpAt(tester, const Login(), const Size(320, 560));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Welcome Back!'), findsOneWidget);
+  });
+
+  testWidgets('the landing page always offers a way to log in',
+      (WidgetTester tester) async {
+    // Phones drop the app bar Register button to save width, but Login has to
+    // survive: removing both once left Android with no visible entry point.
+    await _pumpAt(tester, const Intro(), _phone);
+    expect(find.text('Login'), findsOneWidget);
+    expect(find.text('I already have an account'), findsOneWidget);
   });
 
   testWidgets('landing page fits a wide desktop window',

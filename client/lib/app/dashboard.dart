@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/common/auth_service.dart';
 import './auth/login.dart';
 import 'modules/questions/browse_questions.dart';
+import 'modules/questions/question_detail.dart';
 import 'modules/leaderboard/leaderboard_screen.dart';
 import 'modules/daily_challenge/daily_challenge_screen.dart';
 import 'modules/notifications/notifications_screen.dart';
@@ -69,16 +70,16 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
-  final List<Widget> _pages = [
-    const UserHome(),
-    const BrowseQuestions(),
-    const LeaderboardScreen(),
-    const ProfileScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final bool isWeb = MediaQuery.of(context).size.width > 960;
+
+    final pages = [
+      UserHome(onBrowseAll: () => setState(() => _currentIndex = 1)),
+      const BrowseQuestions(),
+      const LeaderboardScreen(),
+      const ProfileScreen(),
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -94,7 +95,7 @@ class _DashboardState extends State<Dashboard> {
                   constraints: const BoxConstraints(maxWidth: 1400),
                   child: IndexedStack(
                     index: _currentIndex,
-                    children: _pages,
+                    children: pages,
                   ),
                 ),
               ),
@@ -301,7 +302,11 @@ class _NotificationBell extends StatelessWidget {
 }
 
 class UserHome extends StatefulWidget {
-  const UserHome({super.key});
+  const UserHome({super.key, required this.onBrowseAll});
+
+  /// Switches the shell to the Browse tab — the home feed only shows the
+  /// newest few quests, so "See all" has to hand off rather than navigate.
+  final VoidCallback onBrowseAll;
 
   @override
   State<UserHome> createState() => _UserHomeState();
@@ -310,8 +315,13 @@ class UserHome extends StatefulWidget {
 class _UserHomeState extends State<UserHome> {
   Profile? _me;
   List<LeaderboardEntry> _top = const [];
+  List<Quest> _recent = const [];
   int _badgeCount = 0;
   int _openQuests = 0;
+
+  /// Distinguishes "the server said there are no quests" from "we never got an
+  /// answer" — the two need different copy, and neither may show fake rows.
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -326,7 +336,7 @@ class _UserHomeState extends State<UserHome> {
       final results = await Future.wait([
         UserService.instance.me(),
         GamificationService.instance.leaderboard(period: 'all_time'),
-        QuestService.instance.list(limit: 1),
+        QuestService.instance.list(limit: 3),
       ]);
 
       final me = results[0] as Profile;
@@ -337,7 +347,9 @@ class _UserHomeState extends State<UserHome> {
       setState(() {
         _me = me;
         _top = board.entries.take(3).toList();
+        _recent = feed.items;
         _openQuests = feed.total;
+        _loadFailed = false;
       });
 
       final badges = await GamificationService.instance.badgesFor(me.id);
@@ -345,6 +357,7 @@ class _UserHomeState extends State<UserHome> {
       setState(() => _badgeCount = badges.where((b) => b.isEarned).length);
     } on ApiException {
       // Leave the tiles at zero rather than showing invented numbers.
+      if (mounted) setState(() => _loadFailed = true);
     }
   }
 
@@ -400,7 +413,7 @@ class _UserHomeState extends State<UserHome> {
       _statCard('$_openQuests', 'Open Quests', Icons.bolt_rounded,
           Colors.orange),
       _statCard('${_me?.streakDays ?? 0}', 'Day Streak',
-          Icons.local_fire_department_rounded, const Color(0xFFF97316)),
+          Icons.local_fire_department_rounded, AppColors.streak),
       _statCard('$_badgeCount', 'Badges', Icons.verified_rounded,
           Colors.purple),
     ];
@@ -484,11 +497,36 @@ class _UserHomeState extends State<UserHome> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('Recent Questions', () {}),
+        _buildSectionHeader('Recent Quests', widget.onBrowseAll),
         const SizedBox(height: 16),
-        _buildQuestionItem('What is the difference between Array and ArrayList in Java?', 'Java', '30m ago'),
-        _buildQuestionItem('How to implement smooth scrolling in Flutter?', 'Flutter', '1h ago'),
-        _buildQuestionItem('Explain the concept of Dependency Injection.', 'Design Patterns', '2h ago'),
+        if (_recent.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              _loadFailed
+                  ? 'Could not load quests. Pull to refresh once you are back online.'
+                  : 'No quests yet. Be the first to ask one.',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          )
+        else
+          for (final quest in _recent)
+            QuestTile(
+              quest: quest,
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => QuestionDetail(questId: quest.id)),
+                );
+                if (mounted) _load();
+              },
+            ),
         if (!isWeb) ...[
           const SizedBox(height: 32),
           _buildDailyChallenge(context),
@@ -513,55 +551,18 @@ class _UserHomeState extends State<UserHome> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+        Flexible(
+          child: Text(
+            title,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
         ),
         TextButton(
           onPressed: onTap,
           child: const Text('See all', style: TextStyle(color: AppColors.primary)),
         ),
       ],
-    );
-  }
-
-  Widget _buildQuestionItem(String title, String tag, String time) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.subtleFill,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(tag, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-              ),
-              const Spacer(),
-              Text(time, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
@@ -647,8 +648,15 @@ class _UserHomeState extends State<UserHome> {
         children: [
           CircleAvatar(radius: 14, backgroundColor: AppColors.subtleFill, child: Text(rank, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary))),
           const SizedBox(width: 12),
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
-          const Spacer(),
+          // A long display name must ellipsize, not push the score off-screen.
+          Expanded(
+            child: Text(name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary)),
+          ),
+          const SizedBox(width: 8),
           Text(pts, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
         ],
       ),

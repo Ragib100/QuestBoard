@@ -48,4 +48,11 @@ class AppColors {
 
   /// Points and bounties — the one place we break from blue.
   static const points = Color(0xFFF59E0B);
+
+  /// Daily streaks. Deliberately a hotter orange than [points] so a flame and
+  /// a coin never read as the same thing.
+  static const streak = Color(0xFFF97316);
+
+  /// The tint behind the amber warning row in [ErrorState].
+  static const warningDark = Color(0xFF92660A);
 }

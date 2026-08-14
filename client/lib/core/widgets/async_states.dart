@@ -139,7 +139,7 @@ class PointsBadge extends StatelessWidget {
           Text(
             label ?? '$points',
             style: const TextStyle(
-              color: Color(0xFF92660A),
+              color: AppColors.warningDark,
               fontWeight: FontWeight.bold,
               fontSize: 12,
             ),

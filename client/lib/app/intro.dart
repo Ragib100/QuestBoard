@@ -5,6 +5,10 @@ import '../core/app_colors.dart';
 import 'auth/login.dart';
 import 'auth/signup.dart';
 
+void _open(BuildContext context, Widget screen) {
+  Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+}
+
 class Intro extends StatelessWidget {
   const Intro({super.key});
 
@@ -17,31 +21,36 @@ class Intro extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
+        // The wordmark yields before the actions do: an app bar that ellipsizes
+        // "QuestBoard" is survivable, one that hides the Login button is not.
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.bolt_rounded, color: AppColors.primary, size: 28),
             const SizedBox(width: 8),
-            Text('QuestBoard',
-                style: GoogleFonts.outfit(
-                    color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+            Flexible(
+              child: Text('QuestBoard',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
-        // On a phone the logo plus two buttons overflows the app bar, and the
-        // hero below already offers both actions — so only the wide layout
-        // carries them up here.
+        // The logo plus both buttons does not fit a phone app bar, but dropping
+        // them entirely leaves no way to reach Login from the top of the page.
+        // Phones keep Login only; Register is the hero's primary button anyway.
         actions: isWeb
             ? [
                 TextButton(
-                  onPressed: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const Login())),
+                  onPressed: () => _open(context, const Login()),
                   child: const Text('Login'),
                 ),
                 const SizedBox(width: 12),
                 Padding(
                   padding: const EdgeInsets.only(right: 20.0),
                   child: ElevatedButton(
-                    onPressed: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const Signup())),
+                    onPressed: () => _open(context, const Signup()),
                     style: ElevatedButton.styleFrom(
                         minimumSize: const Size(100, 40)),
                     child:
@@ -49,7 +58,13 @@ class Intro extends StatelessWidget {
                   ),
                 ),
               ]
-            : null,
+            : [
+                TextButton(
+                  onPressed: () => _open(context, const Login()),
+                  child: const Text('Login'),
+                ),
+                const SizedBox(width: 4),
+              ],
       ),
       body: SingleChildScrollView(
         child: Center(
@@ -168,16 +183,14 @@ class _HeroActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final signUp = ElevatedButton(
-      onPressed: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const Signup())),
+      onPressed: () => _open(context, const Signup()),
       style: ElevatedButton.styleFrom(
           minimumSize: Size(isWeb ? 180 : double.infinity, 56)),
       child: const Text('Get Started'),
     );
 
     final logIn = OutlinedButton(
-      onPressed: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const Login())),
+      onPressed: () => _open(context, const Login()),
       style: OutlinedButton.styleFrom(
         minimumSize: Size(isWeb ? 180 : double.infinity, 56),
         side: const BorderSide(color: AppColors.border),

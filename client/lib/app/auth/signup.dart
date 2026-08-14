@@ -96,9 +96,12 @@ class _SignupState extends State<Signup> {
                           const Icon(Icons.bolt_rounded,
                               color: AppColors.primary, size: 32),
                           const SizedBox(width: 8),
-                          Text('QuestBoard',
-                              style: GoogleFonts.outfit(
-                                  fontSize: 24, fontWeight: FontWeight.bold)),
+                          Flexible(
+                            child: Text('QuestBoard',
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                    fontSize: 24, fontWeight: FontWeight.bold)),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 40),
@@ -163,23 +166,24 @@ class _SignupState extends State<Signup> {
                             : const Text('REGISTER'),
                       ),
                       const SizedBox(height: 24),
-                      Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text("Already have an account? "),
-                            GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const Login()),
-                              ),
-                              child: const Text('Login',
-                                  style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.bold)),
+                      // Wrap, not Row: at a large system font scale the prompt
+                      // and the link together are wider than a phone.
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text("Already have an account? "),
+                          GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const Login()),
                             ),
-                          ],
-                        ),
+                            child: const Text('Login',
+                                style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ],
                       ),
                     ],
                   ),

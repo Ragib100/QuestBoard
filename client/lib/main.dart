@@ -192,7 +192,7 @@ class _LaunchState extends State<_Launch> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
-            backgroundColor: Color(0xFFF8FAFC),
+            backgroundColor: AppColors.background,
             body: Center(child: CircularProgressIndicator()),
           );
         }

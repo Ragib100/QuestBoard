@@ -231,7 +231,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return _QuestTile(
+          return QuestTile(
             quest: _quests[i],
             onTap: () async {
               await Navigator.push(
@@ -248,8 +248,11 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   }
 }
 
-class _QuestTile extends StatelessWidget {
-  const _QuestTile({required this.quest, required this.onTap});
+/// One quest in a feed: author, bounty, title, tags and counts. Shared by the
+/// browse list and the dashboard's recent-quests section so the two cannot
+/// drift apart.
+class QuestTile extends StatelessWidget {
+  const QuestTile({super.key, required this.quest, required this.onTap});
 
   final Quest quest;
   final VoidCallback onTap;

@@ -219,9 +219,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: AppColors.textSecondary)),
-          Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          Flexible(
+            child: Text(value,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary)),
+          ),
         ],
       ),
     );
@@ -240,7 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               if (days > 0) ...[
                 const Icon(Icons.local_fire_department_rounded,
-                    size: 16, color: Color(0xFFF97316)),
+                    size: 16, color: AppColors.streak),
                 const SizedBox(width: 4),
               ],
               Text(days == 1 ? '1 day' : '$days days',

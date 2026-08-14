@@ -10,7 +10,7 @@ University group project (4 members), ~10 weeks.
 
 ```bash
 # Server (run first — client needs it)
-cd server && source .venv/bin/activate && uvicorn app.main:app --reload
+cd server && source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0
 ruff check app && black app          # lint + format
 
 # Client
@@ -20,7 +20,9 @@ flutter analyze && flutter test
 
 Both need a `.env` (see `.env.example` in each dir), plus a Supabase project with
 `server/schema.sql` applied — full walkthrough in [docs/setup.md](docs/setup.md).
-Start uvicorn with `--host 0.0.0.0` when testing on a phone.
+`API_URL` in `client/.env` is a comma-separated candidate list — the app probes
+them and keeps whichever answers, so the same file works on desktop, emulator and
+phone. Bind uvicorn to `0.0.0.0` or a phone can never reach it.
 
 ## Layout
 
