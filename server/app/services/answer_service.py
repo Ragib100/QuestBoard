@@ -17,6 +17,7 @@ from app.services.activity_service import ActivityService
 from app.services.badge_service import BadgeService
 from app.services.notification_service import NotificationService
 from app.services.point_service import PointService
+from app.services.user_service import UserService
 
 
 class AnswerService:
@@ -45,9 +46,7 @@ class AnswerService:
         if question.author_id == user_id:
             raise PermissionError("You cannot answer your own quest.")
 
-        author = db.get(User, user_id)
-        if author is None:
-            raise ValueError("Complete your profile first.")
+        author = UserService.require_active(db, user_id)
 
         answer = Answer(
             question_id=question_id,

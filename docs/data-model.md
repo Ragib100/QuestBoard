@@ -35,6 +35,7 @@ users (
     points              integer     not null default 100,
     streak_days         integer     not null default 0,
     is_admin            boolean     not null default false,
+    is_suspended        boolean     not null default false,
     last_active         timestamptz,
     created_at          timestamptz not null default now(),
     updated_at          timestamptz not null default now()
@@ -43,7 +44,9 @@ users (
 
 `image_url` holds the path inside the `profile_image` bucket (`<uid>/<epoch>.png`);
 the client turns it into a URL with `getPublicUrl`. `points` is a **cache** of the
-`point_transactions` sum — see the ledger rule below.
+`point_transactions` sum — see the ledger rule below. `is_suspended` is set by an
+admin and checked by `UserService.require_active` on every write path, not in the JWT
+dependency ([decisions.md](decisions.md) D22).
 
 ## `questions`
 
@@ -127,7 +130,10 @@ point_transactions (
 ```
 
 Valid `reason` values live in `PointReason` (`app/models/point_transaction.py`) and
-are documented in [product.md](product.md#point-economy).
+are documented in [product.md](product.md#point-economy). A CHECK constraint enforces
+the list; `schema.sql` **drops and recreates** it rather than adding it only when
+absent, because it had already drifted out of sync once and silently broke two
+features ([decisions.md](decisions.md) D24).
 
 ## `tags` / `question_tags`
 
@@ -221,18 +227,20 @@ Every table in the database now has an ORM model and at least one endpoint. The 
 remaining vestige is `questions.difficulty`, which nothing reads or writes —
 difficulty lives on the daily challenge, not on quests.
 
-## Search — not enabled yet
+## Search
 
-Run before building search or duplicate detection (M5):
+Live. `pg_trgm` is enabled and both indexes exist:
 
 ```sql
 create extension if not exists pg_trgm;
-create index questions_title_trgm on questions using gin (title gin_trgm_ops);
-create index questions_body_trgm  on questions using gin (body gin_trgm_ops);
+create index idx_questions_trgm_title on questions using gin (title gin_trgm_ops);
+create index idx_questions_trgm_body  on questions using gin (body gin_trgm_ops);
 ```
 
-Until then `GET /api/questions?search=` uses `ILIKE`, which is correct but does not
-scale past a few thousand rows.
+`GET /api/questions?search=` still matches with `ILIKE '%term%'` — the trigram indexes
+are what make that an index scan instead of a sequential one, so no query rewrite was
+needed. Ranking is a plain title-hit-first ordering rather than `similarity()`, which
+keeps the query working on a database where someone forgot to run the extension line.
 
 ## Row Level Security
 

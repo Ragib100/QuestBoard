@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from uuid import UUID
 
-import anthropic
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,9 @@ HOURLY_LIMIT = 3
 # Generous for a five-sentence hint, because `max_tokens` caps thinking and
 # response text together on Claude Opus 5.
 MAX_TOKENS = 2000
+
+# Free tiers are slower than paid ones; the client allows 60s for this call.
+TIMEOUT = 45.0
 
 SYSTEM_PROMPT = """You are a Socratic tutor for STEM students on QuestBoard.
 
@@ -48,7 +51,7 @@ class AiService:
 
     @staticmethod
     def is_configured() -> bool:
-        return bool(settings.ANTHROPIC_API_KEY)
+        return bool(settings.AI_API_KEY or settings.ANTHROPIC_API_KEY)
 
     @staticmethod
     def _used_this_hour(db: Session, user_id: UUID) -> int:
@@ -64,22 +67,81 @@ class AiService:
         )
 
     @staticmethod
-    def _ask(question: Question) -> str:
+    def _prompt(question: Question) -> str:
+        return f"Title: {question.title}\n\nWhat the student wrote:\n{question.body}"
+
+    @classmethod
+    def _ask(cls, question: Question) -> str:
+        """Whichever backend is configured. The OpenAI-compatible one wins.
+
+        Both return plain text or raise AiHintError; the caller does not care
+        which model produced the hint.
+        """
+        if settings.AI_API_KEY:
+            return cls._ask_openai_compatible(question)
+        return cls._ask_anthropic(question)
+
+    @classmethod
+    def _ask_openai_compatible(cls, question: Question) -> str:
+        """Any `/chat/completions` endpoint — Gemini, Groq, OpenRouter, …
+
+        One shape covers all of them, which is the whole point: swapping
+        providers when a free tier runs out is three lines of `.env`, not a
+        code change.
+        """
+        base = settings.AI_BASE_URL.rstrip("/")
+        if not base or not settings.AI_MODEL:
+            raise AiHintError(
+                "AI hints are half-configured: AI_API_KEY is set but "
+                "AI_BASE_URL or AI_MODEL is missing."
+            )
+
+        response = httpx.post(
+            f"{base}/chat/completions",
+            timeout=TIMEOUT,
+            headers={"Authorization": f"Bearer {settings.AI_API_KEY}"},
+            json={
+                "model": settings.AI_MODEL,
+                "max_tokens": MAX_TOKENS,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": cls._prompt(question)},
+                ],
+            },
+        )
+
+        if response.status_code == 429:
+            raise AiHintError(
+                "The AI provider's free quota is used up for now. "
+                "Try again later — you were not charged."
+            )
+        if response.status_code >= 400:
+            # Surface the provider's own message: a bad key or a retired model
+            # name is the usual cause, and "unavailable" would hide it.
+            raise AiHintError(
+                f"The hint service rejected the request ({response.status_code}). "
+                "You were not charged."
+            )
+
+        choices = response.json().get("choices") or []
+        text = (choices[0]["message"].get("content") or "").strip() if choices else ""
+        if not text:
+            raise AiHintError("The model returned an empty hint. Try again.")
+        return text
+
+    @classmethod
+    def _ask_anthropic(cls, question: Question) -> str:
+        # Imported here so the `anthropic` package is only needed by servers
+        # that actually use it — a free-tier deploy installs nothing extra.
+        import anthropic
+
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         response = client.messages.create(
             model=settings.ANTHROPIC_MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
             output_config={"effort": "low"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Title: {question.title}\n\n"
-                        f"What the student wrote:\n{question.body}"
-                    ),
-                }
-            ],
+            messages=[{"role": "user", "content": cls._prompt(question)}],
         )
 
         if response.stop_reason == "refusal":

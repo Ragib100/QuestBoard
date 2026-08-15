@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -21,12 +23,16 @@ const _tags = [
 ];
 
 class BrowseQuestions extends StatefulWidget {
-  const BrowseQuestions({super.key, this.embedded = false});
+  const BrowseQuestions({super.key, this.embedded = false, this.search = ''});
 
   /// True when the dashboard shell already draws an app bar for this tab.
   /// Standalone pushes keep their own so the screen still has a title and a
   /// back button.
   final bool embedded;
+
+  /// A term handed down from the shell's search box. The phone has no such
+  /// box — it gets the field below instead — so this is usually empty there.
+  final String search;
 
   @override
   State<BrowseQuestions> createState() => _BrowseQuestionsState();
@@ -34,8 +40,10 @@ class BrowseQuestions extends StatefulWidget {
 
 class _BrowseQuestionsState extends State<BrowseQuestions> {
   final _scroll = ScrollController();
+  final _searchController = TextEditingController();
   final List<Quest> _quests = [];
 
+  Timer? _debounce;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = false;
@@ -43,19 +51,46 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   String? _error;
   String _sort = 'latest';
   String? _tag;
+  String _search = '';
 
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    _search = widget.search;
+    _searchController.text = _search;
     _load();
+  }
+
+  /// The shell keeps this tab alive in an IndexedStack, so a new term arrives
+  /// as a rebuild rather than a fresh screen.
+  @override
+  void didUpdateWidget(BrowseQuestions old) {
+    super.didUpdateWidget(old);
+    if (widget.search != old.search && widget.search != _search) {
+      _search = widget.search;
+      _searchController.text = _search;
+      _load();
+    }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// One request per pause in typing, not one per keystroke.
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted || value.trim() == _search) return;
+      setState(() => _search = value.trim());
+      _load();
+    });
   }
 
   void _onScroll() {
@@ -70,7 +105,8 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
       _error = null;
     });
     try {
-      final page = await QuestService.instance.list(sort: _sort, tag: _tag);
+      final page = await QuestService.instance
+          .list(sort: _sort, tag: _tag, search: _search);
       if (!mounted) return;
       setState(() {
         _quests
@@ -90,7 +126,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
     setState(() => _loadingMore = true);
     try {
       final page = await QuestService.instance
-          .list(page: _page + 1, sort: _sort, tag: _tag);
+          .list(page: _page + 1, sort: _sort, tag: _tag, search: _search);
       if (!mounted) return;
       setState(() {
         _quests.addAll(page.items);
@@ -130,7 +166,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
           constraints: const BoxConstraints(maxWidth: 900),
           child: Column(
             children: [
-              if (isWeb) _webHeader(),
+              if (isWeb) _webHeader() else _searchField(),
               _filters(),
               Expanded(child: _body()),
             ],
@@ -163,6 +199,35 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
             style: ElevatedButton.styleFrom(minimumSize: const Size(160, 48)),
           ),
         ],
+      ),
+    );
+  }
+
+  /// The phone's only way to search: the desktop shell puts its box in the top
+  /// bar, which a phone does not have (CLAUDE.md — nothing may be desktop-only).
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search quests',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          isDense: true,
+          suffixIcon: _search.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Clear',
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _search = '');
+                    _load();
+                  },
+                ),
+        ),
       ),
     );
   }
@@ -212,12 +277,27 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
     if (_loading) return const LoadingState();
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);
     if (_quests.isEmpty) {
+      // Three different nothings, and they need different copy: an empty
+      // board, a tag nobody has used, and a search that missed.
+      final (title, message) = switch ((_search.isEmpty, _tag == null)) {
+        (false, _) => (
+            'No quests match "$_search"',
+            'Try a different word, or ask it yourself and put a bounty on it.'
+          ),
+        (true, false) => (
+            'Nothing tagged "$_tag"',
+            'Try another tag, or ask the first quest on this topic.'
+          ),
+        (true, true) => (
+            'No quests yet',
+            'Be the first to ask something. Attach a bounty and someone will help.'
+          ),
+      };
+
       return EmptyState(
-        icon: Icons.explore_outlined,
-        title: _tag == null ? 'No quests yet' : 'Nothing tagged "$_tag"',
-        message: _tag == null
-            ? 'Be the first to ask something. Attach a bounty and someone will help.'
-            : 'Try another tag, or ask the first quest on this topic.',
+        icon: _search.isEmpty ? Icons.explore_outlined : Icons.search_off_rounded,
+        title: title,
+        message: message,
         actionLabel: 'Ask a Quest',
         onAction: _openAsk,
       );

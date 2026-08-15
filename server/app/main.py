@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.dependencies.auth import get_current_user_id
+from app.routers.admin import router as admin_router
 from app.routers.ai import router as ai_router
 from app.routers.answer import router as answer_router
 from app.routers.challenge import router as challenge_router
@@ -38,6 +39,7 @@ api_router.include_router(answer_router)
 api_router.include_router(gamification_router)
 api_router.include_router(challenge_router)
 api_router.include_router(ai_router)
+api_router.include_router(admin_router)
 
 
 @api_router.get("/ping")

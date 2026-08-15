@@ -1,9 +1,8 @@
 -- QuestBoard schema — the tables that exist today.
 --
 -- Run this once in the Supabase SQL editor on a new project. It is idempotent,
--- so re-running it is safe. Keep it in sync with app/models/ and
--- docs/data-model.md; the planned tables (answers, votes, point_transactions…)
--- are documented there and are NOT created here yet.
+-- so re-running it is safe. Every table the API touches is here — keep it in
+-- sync with app/models/ and docs/data-model.md.
 
 -- ---------------------------------------------------------------- users -----
 -- Mirrors app/models/user.py. Shares its primary key with auth.users; the email
@@ -20,10 +19,15 @@ create table if not exists public.users (
     points              integer     not null default 100,
     streak_days         integer     not null default 0,
     is_admin            boolean     not null default false,
+    is_suspended        boolean     not null default false,
     last_active         timestamptz,
     created_at          timestamptz not null default now(),
     updated_at          timestamptz not null default now()
 );
+
+-- `create table if not exists` skips an existing table entirely, so columns
+-- added after the first run need their own line.
+alter table public.users add column if not exists is_suspended boolean not null default false;
 
 -- ------------------------------------------------------------ questions -----
 -- Mirrors app/models/question.py. Named `questions`; the product calls it a
@@ -85,6 +89,20 @@ create table if not exists public.point_transactions (
     reference_id uuid,
     created_at   timestamptz not null default now()
 );
+
+-- The list must match PointReason in app/models/point_transaction.py exactly.
+-- It drifted once already: the constraint still said `hint_used` and had never
+-- heard of `bounty_refunded`, so deleting a quest with a bounty and buying an
+-- AI hint both died on an insert. Dropped and recreated rather than added, so
+-- re-running this file repairs an out-of-date constraint instead of skipping it.
+alter table public.point_transactions
+    drop constraint if exists point_transactions_reason_check;
+alter table public.point_transactions
+    add constraint point_transactions_reason_check check (reason in (
+        'ai_hint', 'bounty_awarded', 'bounty_posted', 'bounty_refunded',
+        'challenge_solved', 'daily_bonus', 'signup_bonus',
+        'vote_lost', 'vote_received'
+    ));
 
 create table if not exists public.tags (
     id   uuid primary key default gen_random_uuid(),
@@ -192,6 +210,13 @@ create index if not exists votes_target_idx on public.votes (target_type, target
 create index if not exists point_tx_user_idx on public.point_transactions (user_id, created_at desc);
 create index if not exists idx_hints_user_question on public.ai_hints (user_id, question_id, created_at desc);
 create index if not exists idx_challenges_date on public.daily_challenges (challenge_date desc);
+
+-- GET /api/questions?search= matches with ILIKE '%term%', which no B-tree can
+-- serve. A GIN trigram index can, so search stays a index scan as the board
+-- grows instead of degrading into a sequential scan of every quest.
+create extension if not exists pg_trgm;
+create index if not exists idx_questions_trgm_title on public.questions using gin (title gin_trgm_ops);
+create index if not exists idx_questions_trgm_body on public.questions using gin (body gin_trgm_ops);
 
 -- ------------------------------------------------------- updated_at ---------
 -- The ORM sets updated_at on its own writes; this keeps it honest for rows

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:client/app/admin/admin_dashboard.dart';
+import 'package:client/app/admin/content_moderation.dart';
+import 'package:client/app/admin/user_management.dart';
 import 'package:client/app/auth/email_verification.dart';
 import 'package:client/app/common/reset_password.dart';
 import 'package:client/app/modules/daily_challenge/daily_challenge_screen.dart';
 import 'package:client/app/modules/profile/codeforces_verify.dart';
 import 'package:client/app/modules/questions/browse_questions.dart';
 import 'package:client/core/widgets/async_states.dart';
+import 'package:client/models/admin.dart';
 import 'package:client/models/challenge.dart';
 import 'package:client/models/quest.dart';
 
@@ -234,6 +238,72 @@ void main() {
     for (final size in const [_phone, _narrow]) {
       await _pumpAt(tester, const CodeforcesInstructions(task: task), size);
       expect(tester.takeException(), isNull, reason: 'at $size');
+    }
+  });
+
+  testWidgets('the admin screens fit a phone', (WidgetTester tester) async {
+    const stats = AdminStats(
+      // Six figures on every tile: the point supply is the number most likely
+      // to grow past what a 320px tile can hold.
+      totalUsers: 128400,
+      suspendedUsers: 1024,
+      totalQuests: 987654,
+      openQuests: 45678,
+      totalAnswers: 234567,
+      pointsInCirculation: 9876543,
+    );
+
+    final users = [
+      AdminUser(
+        id: 'u1',
+        username: 'bartholomew_featherstonehaugh',
+        firstName: 'Bartholomew',
+        lastName: 'Featherstonehaugh-Cholmondeley',
+        points: 99999,
+        isAdmin: true,
+        isSuspended: true,
+        createdAt: DateTime.now(),
+      ),
+      AdminUser(
+        id: 'u2',
+        username: 'ada',
+        firstName: '',
+        lastName: '',
+        points: 0,
+        isAdmin: false,
+        isSuspended: false,
+        createdAt: DateTime.now(),
+      ),
+    ];
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(
+        tester,
+        AdminDashboardView(stats: stats, onOpen: (_) {}),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'dashboard at $size');
+
+      // Both rows at once: an admin who is also suspended carries two chips
+      // and the button, which is what pushes the Wrap onto a second run.
+      await _pumpAt(
+        tester,
+        ListView(
+          children: [
+            for (final user in users)
+              AdminUserTile(
+                  user: user, busy: false, onToggleSuspended: () {}),
+            ModeratedQuestTile(
+              quest: _quest(bounty: 99999, solved: true),
+              busy: true,
+              onOpen: () {},
+              onDelete: () {},
+            ),
+          ],
+        ),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'moderation at $size');
     }
   });
 

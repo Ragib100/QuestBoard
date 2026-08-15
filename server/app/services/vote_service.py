@@ -14,6 +14,7 @@ from app.models import (
 )
 from app.services.activity_service import ActivityService
 from app.services.point_service import PointService
+from app.services.user_service import UserService
 
 
 class VoteService:
@@ -66,6 +67,10 @@ class VoteService:
         if target_type not in (TARGET_QUESTION, TARGET_ANSWER):
             raise ValueError("Unknown vote target.")
 
+        # Before anything is written: a suspended account may read, but the
+        # ±1 a vote moves is real points changing hands.
+        voter = UserService.require_active(db, user_id)
+
         target = cls._load_target(db, target_type, target_id)
 
         if target.author_id == user_id:
@@ -98,9 +103,7 @@ class VoteService:
             existing.value = value
             new_value = value
 
-        voter = db.get(User, user_id)
-        if voter is not None:
-            ActivityService.record(db, voter)
+        ActivityService.record(db, voter)
 
         delta = new_value - previous
         if delta:

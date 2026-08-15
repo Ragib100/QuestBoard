@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/common/auth_service.dart';
 import './auth/login.dart';
+import 'admin/admin_dashboard.dart';
 import 'modules/questions/browse_questions.dart';
 import 'modules/questions/question_detail.dart';
 import 'modules/leaderboard/leaderboard_screen.dart';
@@ -26,14 +27,33 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
+  final _searchController = TextEditingController();
+
   int _currentIndex = 0;
   Profile? _me;
   int _unread = 0;
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Hands the term to the Browse tab and switches to it. Searching from the
+  /// dashboard has to land somewhere that can show a list, and Browse already
+  /// owns paging, empty states and the tag filters.
+  void _search(String query) {
+    setState(() {
+      _query = query.trim();
+      _currentIndex = 1;
+    });
   }
 
   /// Balance and unread count, pulled together whenever the user navigates.
@@ -78,7 +98,7 @@ class _DashboardState extends State<Dashboard> {
     // draws one, and two stacked bars would eat 112px of a 640px screen.
     final pages = [
       UserHome(onBrowseAll: () => setState(() => _currentIndex = 1)),
-      BrowseQuestions(embedded: !isWeb),
+      BrowseQuestions(embedded: !isWeb, search: _query),
       LeaderboardScreen(embedded: !isWeb),
       ProfileScreen(embedded: !isWeb),
     ];
@@ -92,14 +112,21 @@ class _DashboardState extends State<Dashboard> {
             child: Scaffold(
               backgroundColor: Colors.transparent,
               appBar: isWeb ? _buildWebTopBar() : _buildMobileTopBar(),
-              body: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1400),
-                  child: IndexedStack(
-                    index: _currentIndex,
-                    children: pages,
+              body: Column(
+                children: [
+                  if (_me?.isSuspended ?? false) const _SuspendedBanner(),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1400),
+                        child: IndexedStack(
+                          index: _currentIndex,
+                          children: pages,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
               bottomNavigationBar: !isWeb ? _buildMobileNav() : null,
             ),
@@ -153,10 +180,11 @@ class _DashboardState extends State<Dashboard> {
                   MaterialPageRoute(
                       builder: (_) => const DailyChallengeScreen()));
             }
+            if (value == 'admin') _openAdmin();
             if (value == 'logout') _logout();
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(
+          itemBuilder: (_) => [
+            const PopupMenuItem(
               value: 'challenge',
               child: ListTile(
                 dense: true,
@@ -165,7 +193,19 @@ class _DashboardState extends State<Dashboard> {
                 title: Text('Daily Challenge'),
               ),
             ),
-            PopupMenuItem(
+            // Admins only — the endpoints behind it 403 for everyone else, so
+            // showing the entry to a normal user would only ever disappoint.
+            if (_me?.isAdmin ?? false)
+              const PopupMenuItem(
+                value: 'admin',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.shield_outlined),
+                  title: Text('Admin'),
+                ),
+              ),
+            const PopupMenuItem(
               value: 'logout',
               child: ListTile(
                 dense: true,
@@ -178,6 +218,12 @@ class _DashboardState extends State<Dashboard> {
         ),
       ],
     );
+  }
+
+  Future<void> _openAdmin() async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const AdminDashboard()));
+    if (mounted) _refresh();
   }
 
   /// Signing out is destructive enough to confirm — an accidental tap on a
@@ -225,18 +271,30 @@ class _DashboardState extends State<Dashboard> {
           color: AppColors.subtleFill,
           borderRadius: BorderRadius.circular(20),
         ),
-        // Not wired up yet (M5). Disabled rather than left looking functional —
-        // a search box that silently swallows input is a lie (ground rule 4).
-        child: const TextField(
-          enabled: false,
+        child: TextField(
+          controller: _searchController,
+          textInputAction: TextInputAction.search,
+          onSubmitted: _search,
           decoration: InputDecoration(
-            hintText: 'Search — coming soon',
-            hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
-            prefixIcon: Icon(Icons.search, size: 20, color: AppColors.textMuted),
+            hintText: 'Search quests',
+            hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+            prefixIcon: const Icon(Icons.search,
+                size: 20, color: AppColors.textMuted),
+            suffixIcon: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    color: AppColors.textMuted,
+                    tooltip: 'Clear',
+                    onPressed: () {
+                      _searchController.clear();
+                      _search('');
+                    },
+                  ),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
           ),
         ),
       ),
@@ -275,6 +333,8 @@ class _DashboardState extends State<Dashboard> {
           _sidebarItem(3, Icons.person_outline, Icons.person_rounded, 'My Profile'),
           _sidebarItem(-2, Icons.notifications_none_outlined, Icons.notifications, 'Notifications'),
           _sidebarItem(-3, Icons.track_changes_outlined, Icons.track_changes, 'Daily Challenge'),
+          if (_me?.isAdmin ?? false)
+            _sidebarItem(-4, Icons.shield_outlined, Icons.shield, 'Admin'),
           const Spacer(),
           _sidebarItem(-1, Icons.logout_rounded, Icons.logout_rounded, 'Logout', isLogout: true),
           const SizedBox(height: 24),
@@ -318,6 +378,7 @@ class _DashboardState extends State<Dashboard> {
             setState(() => _currentIndex = index >= 0 ? index : _currentIndex);
             if (index == -2) _openNotifications();
             if (index == -3) Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen()));
+            if (index == -4) _openAdmin();
           }
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -358,6 +419,34 @@ class _DashboardState extends State<Dashboard> {
         BottomNavigationBarItem(icon: Icon(Icons.emoji_events_rounded), label: 'Ranks'),
         BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
       ],
+    );
+  }
+}
+
+/// Shown to a suspended account instead of letting them find out by tapping
+/// Post and getting a 403 they did not expect.
+class _SuspendedBanner extends StatelessWidget {
+  const _SuspendedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: AppColors.dangerTint,
+      child: const Row(
+        children: [
+          Icon(Icons.block_rounded, size: 18, color: AppColors.danger),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Your account is suspended. You can still read QuestBoard, '
+              'but not post, answer or vote.',
+              style: TextStyle(color: AppColors.danger, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

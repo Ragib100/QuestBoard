@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/widgets/labeled_field.dart';
+import '../../services/api/api_client.dart';
 import '../../services/common/user_service.dart';
 import '../dashboard.dart';
 import '../../core/app_colors.dart';
@@ -36,6 +37,11 @@ class _ProfileCreateState extends State<ProfileCreate> {
     super.dispose();
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) setState(() => _selectedImage = File(image.path));
@@ -53,8 +59,13 @@ class _ProfileCreateState extends State<ProfileCreate> {
         imageFile: _selectedImage,
       );
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Dashboard()));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      // Avatar upload goes straight to Supabase Storage, so a failure here can
+      // be a StorageException whose toString() is a stack of internals. Never
+      // put that in front of a student finishing signup.
+      _showError('Could not save your profile. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

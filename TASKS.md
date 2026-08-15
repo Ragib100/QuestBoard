@@ -4,8 +4,8 @@ Single source of truth for progress. Check a box only when it meets the definiti
 done in [docs/product.md](docs/product.md#definition-of-done). Work top to bottom —
 milestones are ordered by dependency, not preference.
 
-**Now:** M5 — search, admin and polish. M1–M4 are done and verified against the live
-database; the API is deployed at <https://questboard-mccq.onrender.com>.
+**Now:** M6 — ship. M1–M5 are done and verified against the live database; the API is
+deployed at <https://questboard-mccq.onrender.com>.
 
 | Milestone | Status |
 |---|---|
@@ -14,16 +14,22 @@ database; the API is deployed at <https://questboard-mccq.onrender.com>.
 | M2 · Quest loop (MVP core) | ✅ done |
 | M3 · Gamification & notifications | ✅ done |
 | M4 · AI & daily challenge | ✅ done |
-| M5 · Search, admin & polish | 🔴 not started |
-| M6 · Ship | 🔴 not started |
+| M5 · Search, admin & polish | ✅ done |
+| M6 · Ship | 🟡 API deployed, apps not released |
 
-**Verified green** (2026-08-14): `flutter analyze` → no issues · `flutter test` → 6/6
-passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **26 API
+**Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` → 23/23
+passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **30 API
 endpoints live**, exercised against the real database along with every guard
 (self-vote, self-answer, accept-by-non-author, double accept, overspend, unknown tag,
-delete-with-answers, reading someone else's notification). The economy ledger nets to
-zero — points are conserved, never minted. Streak transitions (first ever, same day,
+delete-with-answers, reading someone else's notification, admin-only, self-suspend,
+suspending an admin, writing while suspended). The economy ledger nets to zero —
+points are conserved, never minted. Streak transitions (first ever, same day,
 consecutive, gap) and badge idempotency are asserted too.
+
+Destructive paths — admin force-delete and the AI hint charge — were run against the
+live database inside a transaction that was then rolled back, so the refund, the
+cascade, the vote cleanup and the no-charge-on-failure guarantee are all verified on
+real rows without having altered any.
 
 ---
 
@@ -129,8 +135,11 @@ consecutive, gap) and badge idempotency are asserted too.
 ## M4 · AI & daily challenge ✅
 
 **AI hints**
-- [x] Anthropic (`claude-opus-5`), key in `server/.env.example` as `ANTHROPIC_API_KEY`.
-      Unset is a supported state: the endpoint 503s and the client hides the button
+- [x] Any OpenAI-compatible provider via `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` —
+      Gemini, Groq and OpenRouter all have a free tier, and switching is an `.env`
+      change ([setup.md](docs/setup.md) step 10). `ANTHROPIC_API_KEY` still works and
+      is used only when `AI_API_KEY` is empty. Unset is a supported state: the
+      endpoint 503s and the client hides the button
 - [x] `AiHint` ORM model + the Socratic prompt — a nudge, never the answer
 - [x] `POST /api/ai/hint` — deducts 5 points *before* the model call and rolls back
       in the same transaction if it fails, so an error always means no charge.
@@ -156,19 +165,53 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] `schema.sql` gained the six tables it was missing (M3's three and M4's three)
       and the badge seed, so it once again matches the live database
 
-## M5 · Search, admin & polish 🔴
+## M5 · Search, admin & polish ✅
 
-- [ ] Enable `pg_trgm` and the GIN indexes — search currently uses `ILIKE`, which is
-      correct but will not scale
-- [ ] Wire the dashboard search box to `GET /api/questions?search=`
-- [x] Tag filter chips and sort control on the feed
-- [ ] Admin endpoints: stats, user list, suspend, force-delete
-- [ ] Wire the five screens in `client/lib/app/admin/`, gated on `is_admin` — they are
-      complete UI but currently unreachable, with every action button inert
-- [ ] Audit every screen for loading / error / empty states
-- [ ] Never surface a raw exception — always the API's `detail`
+**Search**
+- [x] `pg_trgm` and the GIN indexes over `questions.title` / `body` — they were
+      already live but in neither `schema.sql` nor the docs, so both now say so.
+      `ILIKE '%term%'` is index-served by them, which is why no query rewrite was
+      needed ([data-model.md](docs/data-model.md#search))
+- [x] Title hits rank above body-only hits; an explicit `sort=bounty|votes` still wins
+- [x] The desktop top-bar box works and hands its term to the Browse tab. The phone
+      has no top bar, so Browse grew its own field — debounced, clearable, and the
+      empty state now distinguishes "no quests", "nothing tagged X" and "no match for X"
+- [x] `GET /questions/search?q=` dropped rather than built ([decisions.md](docs/decisions.md) D23 table, api.md)
 
-## M6 · Ship 🔴
+**Admin**
+- [x] `users.is_suspended` + `UserService.require_active`, called by every write path.
+      Suspended accounts read normally and get a 403 with a plain sentence on posting,
+      answering or voting ([decisions.md](docs/decisions.md) D22)
+- [x] `require_admin` dependency — reads `is_admin` from the database, so revoking it
+      takes effect on the next request rather than the next login
+- [x] `GET /admin/stats`, `GET /admin/users` (paginated, searchable),
+      `PATCH /admin/users/{id}/suspend`, `DELETE /admin/quests/{id}`
+- [x] Force-delete refunds the bounty unless the quest was already solved — that one
+      is with the helper, and refunding it would mint points. Answers and their
+      polymorphic votes go too
+- [x] Cannot suspend yourself or another admin — either would need a SQL console to undo
+- [x] `admin_dashboard` / `user_management` / `content_moderation` rewritten against
+      the real API; every number on them was fictional before
+- [x] Reachable at last: sidebar entry on desktop, overflow menu on mobile, both only
+      when `is_admin`. A suspended user gets a banner instead of a surprise 403
+- [x] `platform_management.dart` and `reports_analytics.dart` deleted — mockups of
+      features that do not exist and are not planned ([decisions.md](docs/decisions.md) D23)
+
+**Polish**
+- [x] Audited every API-backed screen for loading / error / empty states — the two
+      gaps were the admin screens (rewritten) and nothing else; the rest already had
+      all three
+- [x] `profile_create.dart` showed `e.toString()` on failure, which for a Storage
+      error is a page of internals. It now shows the API's `detail` or one plain
+      sentence — the last raw exception in the client
+- [x] Fixed a live economy bug the admin work uncovered: the
+      `point_transactions_reason_check` constraint still said `hint_used` and had never
+      heard of `bounty_refunded`, so deleting a quest with a bounty (M2) and buying an
+      AI hint (M4) both died on the insert ([decisions.md](docs/decisions.md) D24)
+- [x] Layout tests for all three admin screens at 320px and 360px with six-figure
+      counts and a 30-character surname
+
+## M6 · Ship 🟡
 
 - [x] Deploy the API to Render (<https://questboard-mccq.onrender.com>) and point
       `API_URL` at it. Kept awake by a 10-minute cron ping — that is ~730 of the free
@@ -240,7 +283,7 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] **The daily challenge screen was entirely fictional** — a hardcoded 12:45:30
       countdown, a hardcoded problem and a dead button. Replaced with an honest
       "not open yet" state until M4 builds it (ground rule 4)
-- [x] The desktop search box silently swallowed input; disabled until M5 wires it
+- [x] The desktop search box silently swallowed input; disabled until M5, wired now
 - [x] `AskQuestion`'s button row overflowed 60px on a phone; stacked full-width now
 - [x] `QuestTile` overflowed at 1.5x system font scale — tags and metadata now wrap
       onto separate runs instead of competing for one Row
@@ -273,5 +316,5 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] Quest creation now returns a clear 400 instead of a raw 500 when the caller has
       no profile row yet
 - [ ] Android `applicationId` is still `com.example.client` — rename before release
-- [ ] Deploy the API so the app works off your Wi-Fi (M6)
+- [x] Deploy the API so the app works off your Wi-Fi (M6)
 - [ ] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR

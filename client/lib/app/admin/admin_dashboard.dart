@@ -1,127 +1,235 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'user_management.dart';
-import 'content_moderation.dart';
-import 'platform_management.dart';
-import 'reports_analytics.dart';
-import '../../core/app_colors.dart';
 
-class AdminDashboard extends StatelessWidget {
+import '../../core/app_colors.dart';
+import '../../core/widgets/async_states.dart';
+import '../../models/admin.dart';
+import '../../services/api/api_client.dart';
+import '../../services/common/admin_service.dart';
+import 'content_moderation.dart';
+import 'user_management.dart';
+
+/// Reachable only from the overflow menu / sidebar, and only when the signed-in
+/// profile has `is_admin`. Every endpoint behind it 403s for anyone else, so the
+/// gate is defence in depth rather than the actual protection.
+class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final bool isWeb = MediaQuery.of(context).size.width > 900;
+  State<AdminDashboard> createState() => _AdminDashboardState();
+}
 
+class _AdminDashboardState extends State<AdminDashboard> {
+  AdminStats? _stats;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final stats = await AdminService.instance.stats();
+      if (mounted) setState(() => (_stats = stats, _loading = false));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => (_error = e.message, _loading = false));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
         elevation: 0,
-        title: Text('Admin Dashboard', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        title: Text('Admin',
+            style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildStatsOverview(),
-                const SizedBox(height: 40),
-                Text('Management Modules', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
-                _buildAdminModulesGrid(context, isWeb),
-                const SizedBox(height: 40),
-                Text('Platform Health', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
-                _buildHealthChart(),
-              ],
-            ),
+        actions: [
+          IconButton(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh, color: AppColors.textSecondary),
+            tooltip: 'Refresh',
           ),
-        ),
+        ],
       ),
+      body: _loading
+          ? const LoadingState()
+          : _error != null
+              ? ErrorState(message: _error!, onRetry: _load)
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: AdminDashboardView(
+                    stats: _stats!,
+                    onOpen: (page) =>
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => page))
+                            .then((_) => _load()),
+                  ),
+                ),
     );
   }
+}
 
-  Widget _buildStatsOverview() {
-    return Row(
+/// Split out from the loader so the layout can be pumped at 320px without a
+/// server behind it — see test/mobile_layout_test.dart.
+class AdminDashboardView extends StatelessWidget {
+  const AdminDashboardView({
+    super.key,
+    required this.stats,
+    required this.onOpen,
+  });
+
+  final AdminStats stats;
+  final ValueChanged<Widget> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 900;
+
+    return ListView(
+      padding: EdgeInsets.all(isWeb ? 32 : 20),
       children: [
-        _adminStatCard('1,250', 'Total Users', Icons.people_rounded, Colors.blue),
-        const SizedBox(width: 20),
-        _adminStatCard('3,450', 'Total Quests', Icons.quiz_rounded, Colors.green),
-        const SizedBox(width: 20),
-        _adminStatCard('8,760', 'Answers', Icons.question_answer_rounded, Colors.orange),
-        const SizedBox(width: 20),
-        _adminStatCard('125,000', 'Total XP', Icons.stars_rounded, Colors.purple),
+        Text('Platform at a glance',
+            style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary)),
+        const SizedBox(height: 4),
+        const Text(
+          'Live counts, queried when this screen opened.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 20),
+        _statGrid(),
+        const SizedBox(height: 32),
+        Text('Moderation',
+            style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary)),
+        const SizedBox(height: 12),
+        _moduleTile(
+          icon: Icons.manage_accounts_rounded,
+          title: 'Users',
+          subtitle: stats.suspendedUsers == 0
+              ? '${stats.totalUsers} accounts, none suspended'
+              : '${stats.totalUsers} accounts, ${stats.suspendedUsers} suspended',
+          onTap: () => onOpen(const UserManagement()),
+        ),
+        _moduleTile(
+          icon: Icons.gavel_rounded,
+          title: 'Quests',
+          subtitle: 'Search and force-delete any quest',
+          onTap: () => onOpen(const ContentModeration()),
+        ),
       ],
     );
   }
 
-  Widget _adminStatCard(String val, String label, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: color, size: 24)),
-            const SizedBox(height: 16),
-            Text(val, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
-            Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminModulesGrid(BuildContext context, bool isWeb) {
-    final modules = [
-      {'title': 'User Management', 'icon': Icons.manage_accounts, 'color': Colors.blue, 'page': const UserManagement()},
-      {'title': 'Content Moderation', 'icon': Icons.gavel_rounded, 'color': Colors.purple, 'page': const ContentModeration()},
-      {'title': 'Platform Settings', 'icon': Icons.settings_rounded, 'color': Colors.teal, 'page': const PlatformManagement()},
-      {'title': 'Reports & Analytics', 'icon': Icons.analytics_rounded, 'color': Colors.pink, 'page': const ReportsAnalytics()},
+  /// Two up on a phone, three on desktop. LayoutBuilder rather than a Row so
+  /// the tiles get a real width instead of overflowing a narrow screen.
+  Widget _statGrid() {
+    final tiles = [
+      _stat('${stats.totalUsers}', 'Users', Icons.people_rounded, AppColors.primary),
+      _stat('${stats.totalQuests}', 'Quests', Icons.bolt_rounded, Colors.orange),
+      _stat('${stats.openQuests}', 'Unsolved', Icons.help_outline_rounded,
+          AppColors.warningDark),
+      _stat('${stats.totalAnswers}', 'Answers', Icons.question_answer_rounded,
+          AppColors.success),
+      _stat('${stats.pointsInCirculation}', 'Points in circulation',
+          Icons.stars_rounded, AppColors.points),
+      _stat('${stats.suspendedUsers}', 'Suspended', Icons.block_rounded,
+          AppColors.danger),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isWeb ? 4 : 2,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20,
-        childAspectRatio: 1.3,
-      ),
-      itemCount: modules.length,
-      itemBuilder: (context, index) {
-        final m = modules[index];
-        return InkWell(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => m['page'] as Widget)),
-          child: Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.border)),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(m['icon'] as IconData, color: m['color'] as Color, size: 40),
-                const SizedBox(height: 12),
-                Text(m['title'] as String, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 700 ? 3 : 2;
+        const gap = 12.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final tile in tiles) SizedBox(width: width, child: tile),
+          ],
         );
       },
     );
   }
 
-  Widget _buildHealthChart() {
+  Widget _stat(String value, String label, IconData icon, Color color) {
     return Container(
-      height: 300,
-      width: double.infinity,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.border)),
-      child: const Center(child: Text('Chart Placeholder', style: TextStyle(color: AppColors.textMuted))),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 10),
+          // Six figures of circulating points must not widen the tile.
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary)),
+          Text(label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _moduleTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    // Material, not a decorated Container: a ListTile paints its ink splash on
+    // the nearest Material, so a coloured box in between swallows the ripple.
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: AppColors.surface,
+        child: ListTile(
+          onTap: onTap,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: Icon(icon, color: AppColors.primary),
+          title: Text(title,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          subtitle: Text(subtitle,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13)),
+          trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+        ),
+      ),
     );
   }
 }

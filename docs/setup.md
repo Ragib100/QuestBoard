@@ -251,7 +251,7 @@ Add these under **Environment** — copy the values from `server/.env`:
 | `SUPABASE_URL` | Same as local |
 | `SUPABASE_PUBLISHABLE_KEY` | Same as local |
 | `CORS_ORIGINS` | Your web **origin** (`https://example.com`), or `*` while testing. This is a browser origin, not a bind address — `0.0.0.0` matches nothing and blocks every web request |
-| `ANTHROPIC_API_KEY` | Optional. Without it `POST /api/ai/hint` returns 503 and the client hides the hint button — see step 10 |
+| `AI_BASE_URL` · `AI_API_KEY` · `AI_MODEL` | Optional. A free AI provider for hints — see step 10. Without any of it `POST /api/ai/hint` returns 503 and the client hides the hint button |
 
 ### 9.4 Verify before touching the client
 
@@ -290,20 +290,58 @@ Pinging every ~10 minutes keeps the service awake permanently, which costs about
 730 of the free tier's 750 instance-hours a month. That covers **one** always-on
 service — a second one will run out partway through the month.
 
-## 10. AI hints (optional)
+## 10. AI hints (optional, and free)
 
-`POST /api/ai/hint` calls Claude. Without a key the endpoint returns 503 and the
-client hides the hint button entirely, so the rest of the app is unaffected.
+`POST /api/ai/hint` asks a model for a Socratic nudge. With nothing configured the
+endpoint returns 503 and the client hides the hint button entirely, so the rest of
+the app is unaffected — leaving this unset is a supported state, not a broken one.
 
-1. Create a key at <https://console.anthropic.com> → **API keys**.
-2. Put it in `server/.env` as `ANTHROPIC_API_KEY=sk-ant-...`, and in Render's
-   **Environment** for the deployed copy.
-3. `ANTHROPIC_MODEL` defaults to `claude-opus-5`; override it if you want a
-   cheaper model.
+Any endpoint that speaks the OpenAI `/chat/completions` shape works, which is most of
+them. **All three options below are free and need no credit card.** Pick one, put the
+three values in `server/.env`, and add the same three in Render's **Environment** for
+the deployed copy.
 
-Hints cost the *user* 5 points and are capped at 3 per hour per user, which is
-what bounds your spend. Each call is a short prompt and at most a few hundred
-output tokens.
+**Google Gemini** — the most generous free tier, and the default recommendation:
+
+```
+AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+AI_API_KEY=<key from https://aistudio.google.com/apikey>
+AI_MODEL=gemini-2.5-flash
+```
+
+**Groq** — noticeably faster, smaller daily allowance:
+
+```
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_API_KEY=<key from https://console.groq.com/keys>
+AI_MODEL=llama-3.3-70b-versatile
+```
+
+**OpenRouter** — a router in front of many models; the free ones end in `:free`:
+
+```
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_API_KEY=<key from https://openrouter.ai/keys>
+AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
+```
+
+Switching providers is an `.env` change, not a code change. If a free quota runs out
+the endpoint returns 503 with a message saying so, and — because the deduction and the
+model call share one transaction — the user is not charged the 5 points.
+
+Verify without opening the app:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8000/api/ai/hint
+# {"available":true,"points_cost":5,"hints_remaining":3}
+```
+
+`ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` still work for a paid Anthropic key and are
+used only when `AI_API_KEY` is empty, so both can sit in `.env` at once. The
+`anthropic` package is imported lazily, so a free-tier deploy never loads it.
+
+Hints cost the *user* 5 points and are capped at 3 per hour per user, which is what
+bounds usage whichever provider you pick.
 
 ## 11. The daily challenge
 

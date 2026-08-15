@@ -73,3 +73,4 @@ class UserResponse(BaseModel):
     updated_at: datetime
 
     is_admin: bool = False
+    is_suspended: bool = False

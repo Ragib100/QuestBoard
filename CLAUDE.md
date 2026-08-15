@@ -45,7 +45,7 @@ client/lib/
   app/auth/            login, signup, forgot_password, email_verification
   app/profile/         profile_create (post-signup onboarding)
   app/modules/         questions, leaderboard, daily_challenge, notifications, profile
-  app/admin/           admin screens (UI only, no backend yet)
+  app/admin/           dashboard, user suspension, quest moderation (gated on is_admin)
 ```
 
 ## Conventions

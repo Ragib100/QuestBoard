@@ -6,7 +6,28 @@ from app.models import PointTransaction, User
 from app.schemas.user import UserCreate, UserUpdate
 
 
+SUSPENDED_MESSAGE = (
+    "Your account is suspended. You can still read QuestBoard, "
+    "but not post, answer or vote."
+)
+
+
 class UserService:
+    @staticmethod
+    def require_active(db: Session, user_id: UUID) -> User:
+        """The caller's profile row, if they are allowed to write.
+
+        Suspension is a column on `users`, not a claim in the Supabase token,
+        so it cannot be checked in `get_current_user_id` — every write path
+        that already loads the user calls this instead.
+        """
+        user = db.get(User, user_id)
+        if user is None:
+            raise ValueError("Complete your profile first.")
+        if user.is_suspended:
+            raise PermissionError(SUSPENDED_MESSAGE)
+        return user
+
     @staticmethod
     def create_user(
         db: Session,

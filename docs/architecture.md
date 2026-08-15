@@ -45,12 +45,16 @@ Request path is always **router → service → model**.
 
 - `routers/` — path, status code, `Depends(get_current_user_id)`, and translating
   service `ValueError`s into `HTTPException`. No DB access, no business rules.
+  `routers/admin.py` is the exception to nothing: it swaps that dependency for
+  `Depends(require_admin)`, which is the only thing standing between the moderation
+  services and any signed-in user.
 - `services/` — static-method classes (`QuestService`, `UserService`) holding the
   logic. They take a `Session` and raise `ValueError` on domain violations.
 - `models/` — SQLAlchemy ORM. `schemas/` — Pydantic in/out shapes, one per direction
   (`QuestCreate` / `QuestResponse`).
 - Config is `pydantic-settings` reading `.env` (`DATABASE_URL`, `SUPABASE_URL`,
-  `SUPABASE_PUBLISHABLE_KEY`). Never read `os.environ` directly.
+  `SUPABASE_PUBLISHABLE_KEY`). Never read `os.environ` directly. Optional keys —
+  the AI provider — default to empty, and the feature checks rather than assumes.
 
 Everything mounts under `/api`. Multi-step point operations (bounty transfer, vote,
 hint purchase) must run in **one** `db` transaction that updates `users.points` and
