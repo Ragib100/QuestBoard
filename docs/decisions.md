@@ -163,3 +163,37 @@ M4 because no key was configured to trigger it. `PointReason` in
 `app/models/point_transaction.py` is canonical; `schema.sql` now drops and recreates
 the constraint from that list rather than adding it only when missing, so re-running
 the file repairs a stale constraint instead of skipping past it.
+
+### D25 — Motion is SDK-only, and nothing repeats forever
+The polish pass added the app's first animations. It added **no** package to do it: no
+shimmer, no lottie, no confetti. Skeletons are `AnimatedBuilder` over one shared
+controller, the celebration burst is a `CustomPainter` in an `Overlay`, and everything
+else is `TweenAnimationBuilder` or `FadeTransition`. Durations and curves live in
+`core/motion.dart` for the same reason colours live in `AppColors` (D13) — the
+alternative is every screen inventing its own 250ms.
+
+Two rules bind all of it, and both exist because of `test/mobile_layout_test.dart`,
+which pumps a single frame at 320px and asserts no overflow:
+
+1. **Animate opacity and transform, never a value the layout measures.** Tween a height
+   and the overflow test is measuring a layout that never reaches the screen. The single
+   exception, `LeaderboardPodium`, is boxed in a fixed-height `SizedBox` so its outer
+   geometry is still constant.
+2. **Nothing repeats forever.** A pending `Timer` fails a `testWidgets` body outright,
+   and an uncapped `controller.repeat()` makes `pumpAndSettle()` time out — a failure
+   that surfaces months later in someone else's test. `SkeletonPulse` therefore stops
+   after six cycles and rests, and a test asserts it settles. Note the irony this
+   replaces: `CircularProgressIndicator` is itself an uncapped repeating animation, so
+   the skeletons are strictly the safer of the two.
+
+Also settled here: `flutter_svg` was rejected. It would have made the three popsy
+illustrations actually render — they had never decoded on any platform we ship, so the
+"illustration" was always the `errorBuilder`'s fallback icon — but it would have put a
+network fetch on the app's first screen. `BrandArt` draws the same idea locally.
+
+### D26 — Markdown and LaTeX rendering stays deferred
+Still the one open Tier 1 item (TASKS.md, product.md "Markdown + code blocks + LaTeX").
+Revisited during the polish pass and deliberately left out: `flutter_math_fork` and a
+markdown renderer are the heaviest dependencies the client would carry, and the call was
+to keep the app light. Plain text stays readable meanwhile. This is a known gap against
+product.md, not an oversight — reopen it if quest bodies start carrying real code.

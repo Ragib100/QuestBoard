@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/widgets/app_snack.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/skeletons.dart';
 import '../../../models/gamification.dart';
 import '../../../models/quest.dart' show timeAgo;
 import '../../../services/api/api_client.dart';
@@ -49,8 +51,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _items = previous);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        showAppSnack(context, e.message, tone: SnackTone.error);
       }
     }
   }
@@ -108,7 +109,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _body() {
-    if (_loading) return const LoadingState();
+    if (_loading) {
+      return ListSkeleton(count: 5, item: NotificationRowSkeleton.new);
+    }
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);
     if (_items.isEmpty) {
       return const EmptyState(

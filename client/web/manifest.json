@@ -1,11 +1,11 @@
 {
-    "name": "client",
-    "short_name": "client",
+    "name": "QuestBoard",
+    "short_name": "QuestBoard",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#0066FF",
+    "description": "A gamified Q&A app for STEM students. Post quests with a point bounty, answer others, and earn the bounty when your answer is accepted.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

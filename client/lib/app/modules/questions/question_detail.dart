@@ -4,11 +4,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/reward_burst.dart';
+import '../../../core/widgets/skeletons.dart';
 import '../../../models/ai_hint.dart';
 import '../../../models/quest.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/hint_service.dart';
 import '../../../services/common/quest_service.dart';
+import '../../../core/widgets/app_snack.dart';
 
 class QuestionDetail extends StatefulWidget {
   const QuestionDetail({super.key, required this.questId});
@@ -62,10 +65,9 @@ class _QuestionDetailState extends State<QuestionDetail> {
     }
   }
 
-  void _notify(String message) {
+  void _notify(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   /// Best effort. A signed-out reader, or a server with no model configured,
@@ -207,7 +209,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
       _answerController.clear();
       if (mounted) FocusScope.of(context).unfocus();
       await _load();
-      _notify('Answer posted.');
+      _notify('Answer posted.', tone: SnackTone.success);
     } on ApiException catch (e) {
       _notify(e.message);
     } finally {
@@ -245,9 +247,20 @@ class _QuestionDetailState extends State<QuestionDetail> {
     try {
       await QuestService.instance.accept(answer.id);
       await _load();
-      _notify(quest.bountyPoints > 0
-          ? '${quest.bountyPoints} points awarded.'
-          : 'Answer accepted.');
+      if (!mounted) return;
+
+      // The bounty moves *away* from whoever tapped Accept, so the copy says
+      // who received it rather than implying the tapper gained anything.
+      if (quest.bountyPoints > 0) {
+        showRewardBurst(
+          context,
+          message: 'Bounty transferred',
+          detail: '${quest.bountyPoints} points to '
+              '${answer.author.displayName}',
+        );
+      } else {
+        _notify('Answer accepted.', tone: SnackTone.success);
+      }
     } on ApiException catch (e) {
       _notify(e.message);
     }
@@ -266,7 +279,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: _loading
-          ? const LoadingState()
+          ? const QuestDetailSkeleton()
           : _error != null
               ? ErrorState(message: _error!, onRetry: _load)
               : _content(),

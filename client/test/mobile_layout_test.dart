@@ -7,11 +7,14 @@ import 'package:client/app/admin/user_management.dart';
 import 'package:client/app/auth/email_verification.dart';
 import 'package:client/app/common/reset_password.dart';
 import 'package:client/app/modules/daily_challenge/daily_challenge_screen.dart';
+import 'package:client/app/modules/leaderboard/leaderboard_podium.dart';
 import 'package:client/app/modules/profile/codeforces_verify.dart';
 import 'package:client/app/modules/questions/browse_questions.dart';
 import 'package:client/core/widgets/async_states.dart';
+import 'package:client/core/widgets/skeletons.dart';
 import 'package:client/models/admin.dart';
 import 'package:client/models/challenge.dart';
+import 'package:client/models/gamification.dart';
 import 'package:client/models/quest.dart';
 
 /// QuestBoard is mobile-first, so "does it fit a phone" is the default question
@@ -136,6 +139,50 @@ void main() {
       _narrow,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  /// view_count was parsed into [Quest] from the first version of the feed and
+  /// then rendered nowhere for the entire life of the project. This pins it.
+  testWidgets('a quest tile shows its view count', (WidgetTester tester) async {
+    await _pumpAt(tester, QuestTile(quest: _quest(), onTap: () {}), _phone);
+    expect(find.text('12345'), findsOneWidget);
+  });
+
+  /// The podium is the one widget in the app that animates a height, so it is
+  /// boxed at a fixed outer size and the pedestals grow inside it. Pumping it
+  /// with a long name and a seven-figure score is what proves the three columns
+  /// still divide 320px cleanly.
+  testWidgets('the leaderboard podium fits a phone', (WidgetTester tester) async {
+    final top3 = [
+      for (var i = 1; i <= 3; i++)
+        LeaderboardEntry(
+          rank: i,
+          score: 9876543,
+          user: _user(
+              first: 'Bartholomew', last: 'Featherstonehaugh-Cholmondeley'),
+        ),
+    ];
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(tester, LeaderboardPodium(top3: top3, meId: 'u1'), size);
+      expect(tester.takeException(), isNull, reason: 'at $size');
+    }
+  });
+
+  /// Skeletons pulse, and a pulse is the kind of animation that quietly makes
+  /// `pumpAndSettle()` time out forever. The cap in [SkeletonPulse] is what
+  /// stops that, and this test is the thing that would catch its removal.
+  testWidgets('skeletons settle instead of pulsing forever',
+      (WidgetTester tester) async {
+    for (final size in const [_phone, _narrow]) {
+      await _pumpScreen(
+        tester,
+        Scaffold(body: ListSkeleton(count: 4, item: QuestTileSkeleton.new)),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'at $size');
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('async states fit the narrowest phone',

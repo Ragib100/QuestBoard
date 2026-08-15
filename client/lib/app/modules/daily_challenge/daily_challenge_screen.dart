@@ -4,10 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/reward_burst.dart';
 import '../../../models/challenge.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/challenge_service.dart';
 import '../profile/codeforces_verify.dart';
+import '../../../core/widgets/app_snack.dart';
 
 /// One Codeforces problem a day, worth bonus points.
 ///
@@ -60,10 +62,9 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     }
   }
 
-  void _tell(String message) {
+  void _tell(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   Future<void> _verify() async {
@@ -81,7 +82,13 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     setState(() => _claiming = true);
     try {
       await ChallengeService.instance.claim(today.challenge.id);
-      _tell('${today.challenge.bonusPoints} points awarded.');
+      if (mounted) {
+        showRewardBurst(
+          context,
+          message: 'Challenge solved',
+          detail: '+${today.challenge.bonusPoints} points',
+        );
+      }
       await _load();
     } on ApiException catch (e) {
       _tell(e.message);
@@ -382,9 +389,8 @@ class CopyableUrl extends StatelessWidget {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: url));
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Link copied.')),
-                );
+                showAppSnack(context, 'Link copied.',
+                    tone: SnackTone.success);
               }
             },
           ),

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/widgets/app_snack.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/skeletons.dart';
 import '../../core/widgets/search_field.dart';
 import '../../models/quest.dart';
 import '../../services/api/api_client.dart';
@@ -95,13 +97,11 @@ class _ContentModerationState extends State<ContentModeration> {
         _quests.removeWhere((q) => q.id == quest.id);
         _busyId = null;
       });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Quest deleted.')));
+      showAppSnack(context, 'Quest deleted.', tone: SnackTone.success);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _busyId = null);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      showAppSnack(context, e.message, tone: SnackTone.error);
     }
   }
 
@@ -138,7 +138,7 @@ class _ContentModerationState extends State<ContentModeration> {
   }
 
   Widget _body() {
-    if (_loading) return const LoadingState();
+    if (_loading) return ListSkeleton(count: 4, item: QuestTileSkeleton.new);
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);
     if (_quests.isEmpty) {
       return EmptyState(

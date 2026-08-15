@@ -4,11 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/widgets/brand_art.dart';
 import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
 import 'forgot_password.dart';
 import 'post_login_router.dart';
 import 'signup.dart';
+import '../../core/widgets/app_snack.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -55,10 +57,9 @@ class _LoginState extends State<Login> {
     }
   }
 
-  void _showError(String message) {
+  void _showError(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   @override
@@ -175,14 +176,7 @@ class _LoginState extends State<Login> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.network(
-                        'https://illustrations.popsy.co/blue/work-from-home.svg',
-                        width: 400,
-                        errorBuilder: (_, __, ___) => const Icon(
-                            Icons.bolt_rounded,
-                            size: 160,
-                            color: AppColors.primary),
-                      ),
+                      const BrandArt(size: 280),
                       const SizedBox(height: 40),
                       Text('Unlock your potential',
                           style: GoogleFonts.outfit(

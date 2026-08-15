@@ -8,6 +8,7 @@ import '../../../core/widgets/labeled_field.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/quest_service.dart';
 import '../../../services/common/user_service.dart';
+import '../../../core/widgets/app_snack.dart';
 
 const _availableTags = [
   'dsa',
@@ -73,10 +74,9 @@ class _AskQuestionState extends State<AskQuestion> {
   int get _maxAffordable =>
       _balance == null ? _maxBounty : _balance!.clamp(0, _maxBounty);
 
-  void _notify(String message) {
+  void _notify(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   Future<void> _submit() async {

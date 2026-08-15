@@ -121,20 +121,9 @@ class _MyAppState extends State<MyApp> {
     );
 
     return baseTheme.copyWith(
-      textTheme: GoogleFonts.interTextTheme(baseTheme.textTheme).copyWith(
-        displayLarge: GoogleFonts.outfit(
-          textStyle: baseTheme.textTheme.displayLarge,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimary,
-        ),
-        titleLarge: GoogleFonts.outfit(
-          textStyle: baseTheme.textTheme.titleLarge,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimary,
-        ),
-      ),
+      textTheme: _buildTextTheme(baseTheme.textTheme),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -158,7 +147,7 @@ class _MyAppState extends State<MyApp> {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.border),
@@ -172,6 +161,171 @@ class _MyAppState extends State<MyApp> {
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
+
+      // Material 3 tints the app bar grey the moment content scrolls under it,
+      // so without scrolledUnderElevation: 0 every bar in the app changes colour
+      // mid-scroll.
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        titleTextStyle: GoogleFonts.outfit(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.textPrimary,
+        contentTextStyle: GoogleFonts.inter(fontSize: 14, color: Colors.white),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        insetPadding: const EdgeInsets.all(16),
+        elevation: 0,
+      ),
+      // elevation: 0 — design-system.md allows no shadows anywhere. The nav bar
+      // gets its separation from a top border drawn by the shell instead.
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: AppColors.surface,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textMuted,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+        selectedLabelStyle:
+            GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: GoogleFonts.inter(fontSize: 12),
+      ),
+      // Without this the leaderboard period toggle renders in stock M3
+      // seed-tinted lavender, which is the only non-blue chrome in the app.
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.primary
+                  : AppColors.surface),
+          foregroundColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : AppColors.textSecondary),
+          side: const WidgetStatePropertyAll(
+              BorderSide(color: AppColors.border)),
+          textStyle: WidgetStatePropertyAll(
+              GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+          shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12))),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.border,
+        thickness: 1,
+        space: 1,
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textPrimary,
+          minimumSize: const Size(0, 48),
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle:
+              GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle:
+              GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titleTextStyle: GoogleFonts.outfit(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textPrimary,
+        ),
+        contentTextStyle:
+            GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.primary,
+        linearTrackColor: AppColors.subtleFill,
+        circularTrackColor: Colors.transparent,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        textStyle:
+            GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: AppColors.textPrimary,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        textStyle: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+      ),
+      iconTheme: const IconThemeData(color: AppColors.textSecondary),
+    );
+  }
+
+  /// The type scale. Outfit for chrome and numbers, Inter for body — never a
+  /// third family (docs/design-system.md).
+  ///
+  /// Screens still carry local `GoogleFonts.*` calls, which win over this theme,
+  /// so adding it is backwards-compatible; sites migrate to `Theme.of(context)
+  /// .textTheme` opportunistically.
+  TextTheme _buildTextTheme(TextTheme base) {
+    TextStyle outfit(double size, FontWeight weight, {Color? color}) =>
+        GoogleFonts.outfit(
+          fontSize: size,
+          fontWeight: weight,
+          color: color ?? AppColors.textPrimary,
+          height: size >= 28 ? 1.1 : null,
+        );
+
+    TextStyle inter(double size, {FontWeight? weight, Color? color}) =>
+        GoogleFonts.inter(
+          fontSize: size,
+          fontWeight: weight,
+          color: color ?? AppColors.textPrimary,
+        );
+
+    return GoogleFonts.interTextTheme(base).copyWith(
+      displayLarge: outfit(56, FontWeight.bold),
+      displayMedium: outfit(44, FontWeight.bold),
+      displaySmall: outfit(38, FontWeight.bold),
+      headlineLarge: outfit(32, FontWeight.bold),
+      headlineMedium: outfit(28, FontWeight.bold),
+      headlineSmall: outfit(24, FontWeight.bold),
+      titleLarge: outfit(20, FontWeight.bold),
+      titleMedium: outfit(18, FontWeight.w600),
+      titleSmall: outfit(16, FontWeight.w600),
+      bodyLarge: inter(16),
+      bodyMedium: inter(14),
+      bodySmall: inter(13, color: AppColors.textSecondary),
+      labelLarge: outfit(16, FontWeight.bold),
+      labelMedium: inter(13, weight: FontWeight.w600),
+      labelSmall: inter(12, color: AppColors.textSecondary),
     );
   }
 }
@@ -202,13 +356,63 @@ class _LaunchState extends State<_Launch> {
       future: _destination,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const _SplashView();
         }
         return snapshot.data ?? const Intro();
       },
+    );
+  }
+}
+
+/// Shown while [_Launch] resolves the restored session — which is the very first
+/// thing anyone sees after the Android splash hands over. It used to be a bare
+/// centred spinner on an otherwise empty background.
+///
+/// The indefinite [LinearProgressIndicator] here is an uncapped animation, which
+/// would hang `pumpAndSettle`. That is safe only because no test pumps this
+/// widget: `widget_test.dart` passes `isSupabaseConfigured: false`, which routes
+/// to [ConfigurationRequiredScreen] instead. Do not reuse it elsewhere.
+class _SplashView extends StatelessWidget {
+  const _SplashView();
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: const BoxDecoration(
+                color: AppColors.primaryTint,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.bolt_rounded,
+                  size: 52, color: AppColors.primary),
+            ),
+            const SizedBox(height: 24),
+            Text('QuestBoard', style: text.displaySmall),
+            const SizedBox(height: 8),
+            Text(
+              'Ask. Answer. Earn.',
+              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+            const Spacer(),
+            const SizedBox(
+              width: 140,
+              child: ClipRRect(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+                child: LinearProgressIndicator(minHeight: 3),
+              ),
+            ),
+            const SizedBox(height: 48),
+          ],
+        ),
+      ),
     );
   }
 }

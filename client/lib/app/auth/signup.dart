@@ -4,10 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/widgets/brand_art.dart';
 import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
 import 'email_verification.dart';
 import 'login.dart';
+import '../../core/widgets/app_snack.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
@@ -68,10 +70,9 @@ class _SignupState extends State<Signup> {
     }
   }
 
-  void _showError(String message) {
+  void _showError(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   @override
@@ -199,14 +200,7 @@ class _SignupState extends State<Signup> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.network(
-                        'https://illustrations.popsy.co/blue/meditating.svg',
-                        width: 400,
-                        errorBuilder: (_, __, ___) => const Icon(
-                            Icons.bolt_rounded,
-                            size: 160,
-                            color: AppColors.primary),
-                      ),
+                      const BrandArt(size: 280),
                       const SizedBox(height: 40),
                       Text('Built by students, for students',
                           style: GoogleFonts.outfit(

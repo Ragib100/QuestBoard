@@ -8,6 +8,7 @@ import '../../services/api/api_client.dart';
 import '../../services/common/user_service.dart';
 import '../dashboard.dart';
 import '../../core/app_colors.dart';
+import '../../core/widgets/app_snack.dart';
 
 class ProfileCreate extends StatefulWidget {
   const ProfileCreate({super.key});
@@ -37,9 +38,9 @@ class _ProfileCreateState extends State<ProfileCreate> {
     super.dispose();
   }
 
-  void _showError(String message) {
+  void _showError(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   Future<void> _pickImage() async {

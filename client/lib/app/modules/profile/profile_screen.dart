@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/motion.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/skeletons.dart';
 import '../../../models/gamification.dart';
 import '../../../models/profile.dart';
 import '../../../models/quest.dart';
@@ -98,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )
           : null,
       body: _loading
-          ? const LoadingState()
+          ? const ProfileSkeleton()
           : _error != null
               ? ErrorState(message: _error!, onRetry: _load)
               : _content(isWeb),
@@ -295,7 +297,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: [for (final badge in _badges) _badgeChip(badge)],
+              children: [
+                for (final (i, badge) in _badges.indexed)
+                  FadeSlideIn(index: i, child: _badgeChip(badge)),
+              ],
             ),
         ],
       ),
@@ -304,8 +309,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Locked badges stay visible but greyed out — seeing what is still
   /// achievable is the point of a badge list.
+  ///
+  /// There is deliberately no "just unlocked!" moment: the server exposes
+  /// `awarded_at` and nothing else, so a first-time-unlock animation would be
+  /// asserting something we cannot actually know. A badge earned in the last
+  /// day gets a dot instead, which is derived from real data.
   Widget _badgeChip(AchievementBadge badge) {
     final earned = badge.isEarned;
+    final fresh = earned &&
+        badge.awardedAt!
+            .isAfter(DateTime.now().subtract(const Duration(days: 1)));
     return Tooltip(
       message: earned
           ? '${badge.description}\nEarned ${timeAgo(badge.awardedAt!)}'
@@ -335,6 +348,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fontSize: 13,
               ),
             ),
+            if (fresh) ...[
+              const SizedBox(width: 6),
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: AppColors.points,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -368,10 +392,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: TextStyle(color: AppColors.textMuted),
               ),
             )
-          else
+          else ...[
+            _earnedVsSpent(),
+            const SizedBox(height: 24),
             for (final entry in _entries) _ledgerRow(entry),
+          ],
         ],
       ),
+    );
+  }
+
+  /// Earned against spent, folded from the ledger rows already on screen.
+  ///
+  /// Deliberately *not* labelled "all time". `GET /users/{id}/points` caps the
+  /// transaction list at 50 server-side and the client sends no limit, so these
+  /// totals cover the entries we actually fetched and the caption says exactly
+  /// that — inventing an all-time figure from a partial page is the kind of
+  /// number decisions.md D12 exists to prevent.
+  Widget _earnedVsSpent() {
+    var earned = 0;
+    var spent = 0;
+    for (final entry in _entries) {
+      if (entry.amount >= 0) {
+        earned += entry.amount;
+      } else {
+        spent -= entry.amount;
+      }
+    }
+
+    // Flex factors must be positive integers, so a side with nothing in it
+    // still keeps a sliver rather than collapsing the bar.
+    final total = earned + spent;
+    final earnedFlex = total == 0 ? 1 : (earned * 100 ~/ total).clamp(1, 99);
+
+    Widget figure(String label, int value, Color color) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 12)),
+            const SizedBox(height: 2),
+            Text('$value',
+                style: GoogleFonts.outfit(
+                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+          ],
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            figure('Earned', earned, AppColors.successDark),
+            figure('Spent', spent, AppColors.danger),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
+            height: 8,
+            child: Row(
+              children: [
+                Expanded(
+                  flex: earnedFlex,
+                  child: Container(color: AppColors.success),
+                ),
+                Expanded(
+                  flex: 100 - earnedFlex,
+                  child: Container(color: AppColors.danger),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Across your last ${_entries.length} '
+          '${_entries.length == 1 ? 'entry' : 'entries'}.',
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+        ),
+      ],
     );
   }
 

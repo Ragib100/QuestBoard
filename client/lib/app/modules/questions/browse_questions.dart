@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/motion.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/skeletons.dart';
 import '../../../core/widgets/search_field.dart';
 import '../../../models/quest.dart';
 import '../../../services/api/api_client.dart';
@@ -244,7 +246,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   }
 
   Widget _body() {
-    if (_loading) return const LoadingState();
+    if (_loading) return ListSkeleton(count: 4, item: QuestTileSkeleton.new);
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);
     if (_quests.isEmpty) {
       // Three different nothings, and they need different copy: an empty
@@ -286,16 +288,20 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return QuestTile(
-            quest: _quests[i],
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => QuestionDetail(questId: _quests[i].id)),
-              );
-              if (mounted) _load();
-            },
+          // Wrapped here rather than inside QuestTile so the tile itself stays
+          // animation-free for the tests that pump it directly.
+          return FadeSlideIn(
+            index: i,
+            child: QuestTile(
+              quest: _quests[i],
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  appRoute((_) => QuestionDetail(questId: _quests[i].id)),
+                );
+                if (mounted) _load();
+              },
+            ),
           );
         },
       ),
@@ -402,6 +408,10 @@ class QuestTile extends StatelessWidget {
               children: [
                 _meta(Icons.arrow_upward_rounded, '${quest.voteCount}'),
                 _meta(Icons.chat_bubble_outline, '${quest.answerCount}'),
+                // The server has counted these all along — question_service
+                // increments view_count on every detail read — but nothing has
+                // ever rendered the number.
+                _meta(Icons.visibility_outlined, '${quest.viewCount}'),
                 Text(timeAgo(quest.createdAt),
                     style: const TextStyle(
                         color: AppColors.textMuted, fontSize: 12)),
