@@ -97,6 +97,87 @@ create table if not exists public.question_tags (
     primary key (question_id, tag_id)
 );
 
+-- ------------------------------------------------- gamification (M3) -------
+create table if not exists public.notifications (
+    id           uuid primary key     default gen_random_uuid(),
+    user_id      uuid        not null references public.users (id) on delete cascade,
+    type         varchar(30) not null
+                 check (type in ('answer_received', 'answer_accepted',
+                                 'bounty_awarded', 'vote_received',
+                                 'badge_earned')),
+    message      text        not null,
+    -- The quest, answer or badge this points at. Polymorphic, so no FK.
+    reference_id uuid,
+    is_read      boolean     not null default false,
+    created_at   timestamp   not null default now()
+);
+
+create table if not exists public.badges (
+    id          uuid primary key default gen_random_uuid(),
+    name        varchar(50) not null unique,
+    description text        not null,
+    icon_url    text
+);
+
+-- The composite primary key is what makes awarding idempotent: a second
+-- award of the same badge conflicts instead of duplicating.
+create table if not exists public.user_badges (
+    user_id    uuid      not null references public.users (id) on delete cascade,
+    badge_id   uuid      not null references public.badges (id) on delete cascade,
+    awarded_at timestamp not null default now(),
+    primary key (user_id, badge_id)
+);
+
+-- ---------------------------------------- AI hints & daily challenge (M4) ---
+-- One row per hint the model actually returned. Doubles as the rate-limit
+-- ledger (the hourly cap is a COUNT over created_at) and as the evidence for
+-- the ai_skeptic badge, so a failed model call must leave no row behind.
+create table if not exists public.ai_hints (
+    id          uuid primary key  default gen_random_uuid(),
+    question_id uuid    not null  references public.questions (id) on delete cascade,
+    user_id     uuid    not null  references public.users (id) on delete cascade,
+    hint_text   text    not null,
+    points_cost integer not null  default 5,
+    created_at  timestamp not null default now()
+);
+
+-- One Codeforces problem per calendar day (UTC). challenge_date is unique,
+-- which is what makes "today's challenge" a lookup rather than a decision:
+-- the first request of the day creates the row, everyone after reads it.
+create table if not exists public.daily_challenges (
+    id             uuid primary key  default gen_random_uuid(),
+    codeforces_id  text,                       -- "1873/D": contest id + index
+    title          text    not null,
+    body           text    not null,
+    cf_rating      integer,
+    difficulty     varchar(10) check (difficulty in ('easy', 'medium', 'hard')),
+    source_url     text,
+    bonus_points   integer not null default 50,
+    challenge_date date    not null unique,
+    created_at     timestamptz not null default now()
+);
+
+create table if not exists public.challenge_attempts (
+    id           uuid primary key  default gen_random_uuid(),
+    challenge_id uuid    not null  references public.daily_challenges (id) on delete cascade,
+    user_id      uuid    not null  references public.users (id) on delete cascade,
+    is_solved    boolean not null  default false,
+    solved_at    timestamp,
+    created_at   timestamp not null default now(),
+    unique (challenge_id, user_id)
+);
+
+insert into public.badges (name, description) values
+    ('first_answer',  'Submitted your first answer'),
+    ('first_bounty',  'Won your first bounty'),
+    ('bounty_hunter', 'Won 10 bounties total'),
+    ('streak_5',      'Maintained a 5-day activity streak'),
+    ('streak_30',     'Maintained a 30-day activity streak'),
+    ('top_helper',    'Ranked in the top 10 on the weekly leaderboard'),
+    ('challenger',    'Solved 7 daily challenges'),
+    ('ai_skeptic',    'Solved a question without using any AI hints')
+on conflict (name) do nothing;
+
 insert into public.tags (name) values
     ('dsa'), ('math'), ('physics'), ('chemistry'), ('calculus'),
     ('linear-algebra'), ('graph-theory'), ('dynamic-programming'),
@@ -109,6 +190,8 @@ create index if not exists questions_created_at_idx on public.questions (created
 create index if not exists answers_question_idx on public.answers (question_id);
 create index if not exists votes_target_idx on public.votes (target_type, target_id);
 create index if not exists point_tx_user_idx on public.point_transactions (user_id, created_at desc);
+create index if not exists idx_hints_user_question on public.ai_hints (user_id, question_id, created_at desc);
+create index if not exists idx_challenges_date on public.daily_challenges (challenge_date desc);
 
 -- ------------------------------------------------------- updated_at ---------
 -- The ORM sets updated_at on its own writes; this keeps it honest for rows

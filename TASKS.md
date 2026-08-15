@@ -4,8 +4,8 @@ Single source of truth for progress. Check a box only when it meets the definiti
 done in [docs/product.md](docs/product.md#definition-of-done). Work top to bottom —
 milestones are ordered by dependency, not preference.
 
-**Now:** M4 — AI hints and the daily challenge. M1–M3 are done and verified against
-the live database.
+**Now:** M5 — search, admin and polish. M1–M4 are done and verified against the live
+database; the API is deployed at <https://questboard-mccq.onrender.com>.
 
 | Milestone | Status |
 |---|---|
@@ -13,7 +13,7 @@ the live database.
 | M1 · Auth & profiles | ✅ done |
 | M2 · Quest loop (MVP core) | ✅ done |
 | M3 · Gamification & notifications | ✅ done |
-| M4 · AI & daily challenge | 🟡 tables exist, unused |
+| M4 · AI & daily challenge | ✅ done |
 | M5 · Search, admin & polish | 🔴 not started |
 | M6 · Ship | 🔴 not started |
 
@@ -126,19 +126,35 @@ consecutive, gap) and badge idempotency are asserted too.
 - [ ] Vote notifications — intentionally omitted, see
       [decisions.md](docs/decisions.md) D19; revisit as a weekly digest
 
-## M4 · AI & daily challenge 🔴
+## M4 · AI & daily challenge ✅
 
-- [ ] Pick and configure the LLM provider; add the key to `.env.example`
-- [x] `ai_hints` table exists
-- [ ] ORM model + the Socratic prompt (hints only, never the answer)
-- [ ] `ai_skeptic` and `challenger` badges become awardable once this lands
-- [ ] `POST /api/ai/hint` — deduct 5 points, refund on failure, 3/hour rate limit
-- [ ] Hint modal in `question_detail.dart` with the point-cost confirmation
-- [x] `daily_challenges`, `challenge_attempts` tables exist
-- [ ] Daily job pulling one Codeforces problem, with a cached fallback
-- [ ] Codeforces handle verification flow
-- [ ] `GET /api/challenges/today`, `POST /solve`, `GET /leaderboard`
-- [ ] Wire `daily_challenge_screen.dart` (the solve button is inert)
+**AI hints**
+- [x] Anthropic (`claude-opus-5`), key in `server/.env.example` as `ANTHROPIC_API_KEY`.
+      Unset is a supported state: the endpoint 503s and the client hides the button
+- [x] `AiHint` ORM model + the Socratic prompt — a nudge, never the answer
+- [x] `POST /api/ai/hint` — deducts 5 points *before* the model call and rolls back
+      in the same transaction if it fails, so an error always means no charge.
+      3/hour, counted from `ai_hints.created_at` rather than a separate counter
+- [x] `GET /api/ai/hint` — cost and remaining hints, so the button is honest
+      before anyone spends anything
+- [x] Hint modal in `question_detail.dart` with the point-cost confirmation
+
+**Daily challenge**
+- [x] `DailyChallenge` / `ChallengeAttempt` ORM models
+- [x] Today's problem is pulled from the public Codeforces API on the first request
+      of the day — no cron. The unique `challenge_date` makes the race safe
+- [x] Falls back to the last stored challenge when Codeforces is down, and the
+      screen says so rather than passing it off as today's
+- [x] Codeforces handle verification: submit a deliberate compilation error to a
+      problem derived from your user id. Deterministic, so no state to store —
+      and a submission is the only thing that actually proves ownership
+- [x] `GET /api/challenges/today`, `POST /{id}/solve`, `GET /{id}/leaderboard`
+- [x] Solves are verified against Codeforces, never taken on trust
+- [x] `daily_challenge_screen.dart` wired: real problem, claim button, solver list
+- [x] `challenger` (7 solves) and `ai_skeptic` (an accepted answer on a quest you
+      bought no hint for) are now awardable — `top_helper` still needs a schedule
+- [x] `schema.sql` gained the six tables it was missing (M3's three and M4's three)
+      and the badge seed, so it once again matches the live database
 
 ## M5 · Search, admin & polish 🔴
 
@@ -154,7 +170,9 @@ consecutive, gap) and badge idempotency are asserted too.
 
 ## M6 · Ship 🔴
 
-- [ ] Deploy the API (Render or Railway) and point `API_URL` at it
+- [x] Deploy the API to Render (<https://questboard-mccq.onrender.com>) and point
+      `API_URL` at it. Kept awake by a 10-minute cron ping — that is ~730 of the free
+      tier's 750 instance-hours a month, so it covers this one service and no more
 - [ ] Release Android APK, tested off a debug build
 - [ ] Web build deployed (`flutter build web` already succeeds)
 - [ ] Seed demo data

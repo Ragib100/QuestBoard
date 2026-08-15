@@ -9,6 +9,7 @@ import '../../../core/widgets/labeled_field.dart';
 import '../../../models/profile.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/user_service.dart';
+import 'codeforces_verify.dart';
 
 /// Editing form. The fields mirror the `users` table exactly — there is no
 /// `bio` column, so there is no bio field.
@@ -183,6 +184,24 @@ class _ProfileEditState extends State<ProfileEdit> {
                         : 'Used to verify daily challenge solves.',
                     hint: 'e.g. tourist',
                   ),
+                  if (!widget.profile.codeforcesVerified &&
+                      widget.profile.codeforcesHandle.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    // Only offered once a handle is saved: verification checks
+                    // the handle already on the profile, not what is typed here.
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CodeforcesVerify()),
+                        ),
+                        icon: const Icon(Icons.verified_outlined, size: 18),
+                        label: const Text('Verify this handle'),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   ElevatedButton(
                     onPressed: _saving ? null : _save,

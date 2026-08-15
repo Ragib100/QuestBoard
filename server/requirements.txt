@@ -5,6 +5,8 @@ pydantic-settings>=2.14,<3.0
 SQLAlchemy>=2.0,<3.0
 psycopg[binary]>=3.3,<4.0
 supabase>=2.31,<3.0
+anthropic>=0.122,<1.0   # AI hints
+httpx>=0.28,<1.0        # Codeforces API — arrives via supabase too, pinned here because we import it directly
 
 # Tooling — run `ruff check app` and `black app` before every PR
 black>=25,<26

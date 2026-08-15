@@ -4,9 +4,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    AiHint,
     Answer,
     Badge,
     BadgeCode,
+    ChallengeAttempt,
     NotificationType,
     PointReason,
     PointTransaction,
@@ -58,6 +60,38 @@ class BadgeService:
             or 0
         )
 
+    @staticmethod
+    def _challenges_solved(db: Session, user_id: UUID) -> int:
+        return int(
+            db.scalar(
+                select(func.count(ChallengeAttempt.id)).where(
+                    ChallengeAttempt.user_id == user_id,
+                    ChallengeAttempt.is_solved.is_(True),
+                )
+            )
+            or 0
+        )
+
+    @staticmethod
+    def _unaided_solves(db: Session, user_id: UUID) -> int:
+        """Accepted answers on quests the user never bought a hint for.
+
+        This is what `ai_skeptic` means — "solved a question without using any
+        AI hints" — so the check is per quest, not per account: buying a hint
+        once does not disqualify every later answer.
+        """
+        hinted = select(AiHint.question_id).where(AiHint.user_id == user_id)
+        return int(
+            db.scalar(
+                select(func.count(Answer.id)).where(
+                    Answer.author_id == user_id,
+                    Answer.is_accepted.is_(True),
+                    Answer.question_id.notin_(hinted),
+                )
+            )
+            or 0
+        )
+
     @classmethod
     def _qualifying_codes(cls, db: Session, user: User) -> set[str]:
         """Which badges the user's current stats justify."""
@@ -77,7 +111,13 @@ class BadgeService:
         if user.streak_days >= 30:
             earned.add(BadgeCode.STREAK_30)
 
-        # CHALLENGER and AI_SKEPTIC need the daily challenge and AI hints (M4).
+        if cls._challenges_solved(db, user.id) >= 7:
+            earned.add(BadgeCode.CHALLENGER)
+
+        if cls._unaided_solves(db, user.id) >= 1:
+            earned.add(BadgeCode.AI_SKEPTIC)
+
+        # TOP_HELPER still needs a weekly-rank check on a schedule.
         return earned
 
     @classmethod

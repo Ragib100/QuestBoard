@@ -140,12 +140,20 @@ class ApiClient {
     );
   }
 
-  Future<dynamic> post(String path, {Object? body, bool auth = true}) async {
-    return _send(() async => http.post(
-          await _uri(path),
-          headers: _headers(auth: auth),
-          body: jsonEncode(body ?? const {}),
-        ));
+  Future<dynamic> post(
+    String path, {
+    Object? body,
+    bool auth = true,
+    Duration? timeout,
+  }) async {
+    return _send(
+      () async => http.post(
+        await _uri(path),
+        headers: _headers(auth: auth),
+        body: jsonEncode(body ?? const {}),
+      ),
+      timeout: timeout,
+    );
   }
 
   Future<dynamic> patch(String path, {Object? body}) async {

@@ -60,7 +60,7 @@ questions (
     is_solved          boolean not null default false,
     accepted_answer_id uuid    references answers(id),
     view_count         integer not null default 0,
-    difficulty         varchar(10),                        -- unused until M4
+    difficulty         varchar(10),                        -- vestigial, nothing reads it
     created_at         timestamptz not null default now(),
     updated_at         timestamptz not null default now()
 )
@@ -151,20 +151,75 @@ Seeded: `dsa`, `math`, `physics`, `chemistry`, `calculus`, `linear-algebra`,
 
 ---
 
-## Tables that exist but are not used yet
+## `notifications` / `badges` / `user_badges`
 
-These were created up front and are **empty**. No ORM model, no endpoint — treat the
-shapes as a starting point, not a contract, and confirm the columns before building
-against them.
+Mirrors `server/app/models/notification.py` and `badge.py`. `notifications.type` has a
+CHECK constraint listing the five allowed values, so adding a member to
+`NotificationType` without a migration fails at insert time. `badges` is keyed by
+`id` + `name` — there is **no** `code` column — and is seeded with eight rows;
+`user_badges` has a composite primary key, which is what makes awarding idempotent
+([decisions.md](decisions.md) D18).
 
-| Table | Milestone | Notes |
-|---|---|---|
-| `notifications` | M3 | `user_id`, `type` varchar(30), `message`, `reference_id`, `is_read` |
-| `badges` | M3 | 8 seeded: `first_answer`, `first_bounty`, `streak_5`, `streak_30`, `bounty_hunter`, `top_helper`, `challenger`, `ai_skeptic`. Keyed by `id` + `name`, **not** by a `code` column |
-| `user_badges` | M3 | `user_id`, `badge_id`, `awarded_at` |
-| `ai_hints` | M4 | `question_id`, `user_id`, `hint_text`, `points_cost` (default 5) |
-| `daily_challenges` | M4 | `codeforces_id`, `title`, `body`, `cf_rating`, `difficulty`, `source_url`, `bonus_points` (default 50), `challenge_date` |
-| `challenge_attempts` | M4 | `challenge_id`, `user_id`, `is_solved`, `solved_at` |
+## `ai_hints`
+
+One row per hint the model actually returned.
+
+```sql
+ai_hints (
+    id          uuid primary key default gen_random_uuid(),
+    question_id uuid    not null references questions(id) on delete cascade,
+    user_id     uuid    not null references users(id) on delete cascade,
+    hint_text   text    not null,
+    points_cost integer not null default 5,
+    created_at  timestamp not null default now()
+)
+```
+
+The table does double duty. The 3-per-hour rate limit is a COUNT over `created_at`,
+and the `ai_skeptic` badge — "solved a question without using any AI hints" — is the
+absence of a row for `(user_id, question_id)`. Both only work if a **failed** model
+call leaves no row behind, which is why the deduction, the call and the insert share
+one transaction.
+
+## `daily_challenges` / `challenge_attempts`
+
+```sql
+daily_challenges (
+    id             uuid primary key default gen_random_uuid(),
+    codeforces_id  text,                   -- "1873/D": contest id + index
+    title          text    not null,
+    body           text    not null,
+    cf_rating      integer,
+    difficulty     varchar(10) check (difficulty in ('easy','medium','hard')),
+    source_url     text,
+    bonus_points   integer not null default 50,
+    challenge_date date    not null unique,
+    created_at     timestamptz not null default now()
+)
+challenge_attempts (
+    id           uuid primary key default gen_random_uuid(),
+    challenge_id uuid    not null references daily_challenges(id) on delete cascade,
+    user_id      uuid    not null references users(id) on delete cascade,
+    is_solved    boolean not null default false,
+    solved_at    timestamp,
+    created_at   timestamp not null default now(),
+    unique (challenge_id, user_id)
+)
+```
+
+There is no cron job: the unique `challenge_date` is what lets the first request of
+the day create the row and everyone after read it, with a losing INSERT resolving to
+a plain conflict. `body` is **not** the problem statement — Codeforces does not expose
+statements through its API, so it holds the rating and topics and points at
+`source_url`.
+
+The unique `(challenge_id, user_id)` is what stops a bonus being paid twice. An
+unsolved row is meaningful: it records that someone tried and Codeforces had no
+accepted submission yet.
+
+Every table in the database now has an ORM model and at least one endpoint. The one
+remaining vestige is `questions.difficulty`, which nothing reads or writes —
+difficulty lives on the daily challenge, not on quests.
 
 ## Search — not enabled yet
 

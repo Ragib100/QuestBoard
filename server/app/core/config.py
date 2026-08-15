@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     # needs this; "*" is fine for local development.
     CORS_ORIGINS: str = "*"
 
+    # Powers POST /api/ai/hint. Optional: without it the endpoint returns a
+    # 503 saying hints are not configured rather than pretending to work.
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-opus-5"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

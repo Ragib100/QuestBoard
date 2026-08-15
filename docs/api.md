@@ -86,15 +86,18 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `GET /challenges/today` | Today's problem plus the caller's attempt state. |
-| ⬜ | `POST /challenges/{id}/solve` | Verifies against the Codeforces API using the user's handle, then awards `bonus_points`. `409` if already solved. |
-| ⬜ | `GET /challenges/{id}/leaderboard` | Solvers ordered by `solved_at`. |
+| ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
+| ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem, then awards `bonus_points`. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt. |
+| ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. |
+| ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. `400` without a handle on the profile. |
+| ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
 
 ## AI
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `POST /ai/hint` | Body `{ quest_id }`. `402` under 5 points, `429` past 3/hour. Deduct first, refund in-transaction if the model call fails. Returns `{ hint_text, points_remaining }`. |
+| ✅ | `GET /ai/hint` | `{ available, points_cost, hints_remaining }` — what the button should say before anyone spends anything. `available` is false when the server has no `ANTHROPIC_API_KEY`. |
+| ✅ | `POST /ai/hint` | Body `{ question_id }`. `402` under 5 points, `429` past 3/hour, `503` when unconfigured or the model call fails. Deducts first and rolls back in the same transaction on failure, so an error always means nothing was charged. Returns `{ hint_text, points_cost, points_remaining, hints_remaining }`. |
 | ⬜ | `POST /ai/scan` | Tier 3. Multipart image → `{ extracted_text }` to prefill the post form. |
 
 ## Admin

@@ -250,7 +250,8 @@ Add these under **Environment** — copy the values from `server/.env`:
 | `DATABASE_URL` | The **pooler** string from step 3 (`...pooler.supabase.com:5432`). The direct host is IPv6-only and Render cannot reach it |
 | `SUPABASE_URL` | Same as local |
 | `SUPABASE_PUBLISHABLE_KEY` | Same as local |
-| `CORS_ORIGINS` | Your web origin, or `*` while testing |
+| `CORS_ORIGINS` | Your web **origin** (`https://example.com`), or `*` while testing. This is a browser origin, not a bind address — `0.0.0.0` matches nothing and blocks every web request |
+| `ANTHROPIC_API_KEY` | Optional. Without it `POST /api/ai/hint` returns 503 and the client hides the hint button — see step 10 |
 
 ### 9.4 Verify before touching the client
 
@@ -284,6 +285,37 @@ The first request after 15 idle minutes takes ~50s and the app will show "could
 not reach the server" before it wakes. Options: hit `/api/` yourself a minute
 before a demo, or point a free uptime pinger (UptimeRobot, 5-minute interval) at
 `/api/` on the day. Do not add a background pinger inside the app.
+
+Pinging every ~10 minutes keeps the service awake permanently, which costs about
+730 of the free tier's 750 instance-hours a month. That covers **one** always-on
+service — a second one will run out partway through the month.
+
+## 10. AI hints (optional)
+
+`POST /api/ai/hint` calls Claude. Without a key the endpoint returns 503 and the
+client hides the hint button entirely, so the rest of the app is unaffected.
+
+1. Create a key at <https://console.anthropic.com> → **API keys**.
+2. Put it in `server/.env` as `ANTHROPIC_API_KEY=sk-ant-...`, and in Render's
+   **Environment** for the deployed copy.
+3. `ANTHROPIC_MODEL` defaults to `claude-opus-5`; override it if you want a
+   cheaper model.
+
+Hints cost the *user* 5 points and are capped at 3 per hour per user, which is
+what bounds your spend. Each call is a short prompt and at most a few hundred
+output tokens.
+
+## 11. The daily challenge
+
+Nothing to configure. `GET /api/challenges/today` pulls a rated problem from the
+public Codeforces API on the first request of each day and stores it; there is no
+cron job and no API key. If Codeforces is down, the endpoint serves the last
+challenge it stored and flags it so the screen says so.
+
+Claiming the bonus requires a **verified** Codeforces handle: the user submits a
+deliberate compilation error to a problem the server names, and the server looks
+for it in their public submission list. That is the ownership proof — a handle
+existing says nothing about who typed it into our form.
 
 ---
 

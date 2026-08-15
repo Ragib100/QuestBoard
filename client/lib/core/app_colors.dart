@@ -55,4 +55,8 @@ class AppColors {
 
   /// The tint behind the amber warning row in [ErrorState].
   static const warningDark = Color(0xFF92660A);
+
+  /// Background for that same warning row — degraded-but-usable states, like
+  /// a daily challenge served from cache because Codeforces was down.
+  static const warningTint = Color(0xFFFEF3C7);
 }
