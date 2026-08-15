@@ -11,6 +11,7 @@ class Profile {
     required this.points,
     required this.streakDays,
     required this.isAdmin,
+    required this.isSuspended,
     required this.createdAt,
   });
 
@@ -25,6 +26,9 @@ class Profile {
   final int points;
   final int streakDays;
   final bool isAdmin;
+
+  /// Suspended accounts may read, but every write endpoint 403s.
+  final bool isSuspended;
   final DateTime createdAt;
 
   String get displayName {
@@ -44,6 +48,7 @@ class Profile {
         points: json['points'] as int? ?? 0,
         streakDays: json['streak_days'] as int? ?? 0,
         isAdmin: json['is_admin'] as bool? ?? false,
+        isSuspended: json['is_suspended'] as bool? ?? false,
         createdAt:
             DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
                 DateTime.now(),

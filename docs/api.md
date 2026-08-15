@@ -16,11 +16,11 @@ reset all happen client-side through `supabase_flutter`. See
 { "detail": "Username is already taken." }
 ```
 
-`400` invalid input · `401` missing/expired token · `403` not yours · `404` missing ·
+`400` invalid input · `401` missing/expired token · `403` not yours, admin-only, or suspended · `404` missing ·
 `409` conflict (duplicate vote, already solved) · `422` Pydantic validation ·
 `402` insufficient points.
 
-**Status:** ✅ live · ⬜ planned. Add a row here *before* building the screen that uses it.
+**Status:** ✅ live · ⬜ planned · ❌ dropped (with the reason, so it is not re-proposed). Add a row here *before* building the screen that uses it.
 
 ---
 
@@ -33,7 +33,7 @@ reset all happen client-side through `supabase_flutter`. See
 |---|---|---|
 | ✅ | `GET /` | Unauthenticated liveness check |
 | ✅ | `GET /ping` | Returns `{ user_id }` — use it to verify a token end to end |
-| ✅ | `GET /users/me` | The caller's own profile. **404 means signed in but not onboarded** — route to ProfileCreate |
+| ✅ | `GET /users/me` | The caller's own profile, including `is_admin` and `is_suspended`. **404 means signed in but not onboarded** — route to ProfileCreate |
 
 ## Users
 
@@ -51,11 +51,11 @@ reset all happen client-side through `supabase_flutter`. See
 | | Endpoint | Notes |
 |---|---|---|
 | ✅ | `POST /questions` | Body: `title` (≥10), `body` (≥20), `tags[]` (≤5, must exist), `bounty_points` (0–100). Deducts the bounty in the same transaction; `402` if the balance is too low, `400` on an unknown tag. |
-| ✅ | `GET /questions` | Public. Query: `tag`, `search`, `sort=latest\|bounty\|votes`, `page`, `limit` (≤50). Returns `{items, page, limit, total, has_more}`. A token is optional but adds `my_vote`. |
+| ✅ | `GET /questions` | Public. Query: `tag`, `search`, `sort=latest\|bounty\|votes`, `page`, `limit` (≤50). Returns `{items, page, limit, total, has_more}`. A token is optional but adds `my_vote`. `search` matches title or body with `ILIKE`, served by GIN trigram indexes, and ranks title hits first unless an explicit `sort` overrides it. |
 | ✅ | `GET /questions/{id}` | Public. Quest with answers (accepted first, then by score), vote counts and the caller's own votes. Increments `view_count`. |
 | ✅ | `PATCH /questions/{id}` | Author only. Bounty cannot be changed after posting. |
 | ✅ | `DELETE /questions/{id}` | Author only, and only while unanswered (`409` otherwise) — refunds the bounty. |
-| ⬜ | `GET /questions/search?q=` | `pg_trgm` similarity over title and description. |
+| ❌ | ~~`GET /questions/search?q=`~~ | Dropped: a second endpoint would duplicate `GET /questions`'s paging, tag filter and vote counts to add nothing. Search is a query parameter there. |
 | ⬜ | `POST /questions/duplicate-check` | Tier 3. Body `{ title }` → up to 3 similar quests. |
 
 ## Answers
@@ -86,24 +86,29 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `GET /challenges/today` | Today's problem plus the caller's attempt state. |
-| ⬜ | `POST /challenges/{id}/solve` | Verifies against the Codeforces API using the user's handle, then awards `bonus_points`. `409` if already solved. |
-| ⬜ | `GET /challenges/{id}/leaderboard` | Solvers ordered by `solved_at`. |
+| ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
+| ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem, then awards `bonus_points`. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt. |
+| ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. |
+| ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. `400` without a handle on the profile. |
+| ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
 
 ## AI
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `POST /ai/hint` | Body `{ quest_id }`. `402` under 5 points, `429` past 3/hour. Deduct first, refund in-transaction if the model call fails. Returns `{ hint_text, points_remaining }`. |
+| ✅ | `GET /ai/hint` | `{ available, points_cost, hints_remaining }` — what the button should say before anyone spends anything. `available` is false when the server has no AI provider configured. |
+| ✅ | `POST /ai/hint` | Body `{ question_id }`. `402` under 5 points, `429` past 3/hour, `503` when unconfigured or the model call fails (including a provider's free-tier quota running out). Deducts first and rolls back in the same transaction on failure, so an error always means nothing was charged. Returns `{ hint_text, points_cost, points_remaining, hints_remaining }`. |
 | ⬜ | `POST /ai/scan` | Tier 3. Multipart image → `{ extracted_text }` to prefill the post form. |
 
 ## Admin
 
-All require an admin user (`users.is_admin`, pending migration); non-admins get `403`.
+All require `users.is_admin`; everyone else gets `403 Admins only.` The flag is read
+from the database on every call, so revoking admin takes effect on the next request
+rather than the next login.
 
 | | Endpoint | Notes |
 |---|---|---|
-| ⬜ | `GET /admin/stats` | `{ total_users, active_quests, points_in_circulation }` |
-| ⬜ | `GET /admin/users` | Paginated, searchable by username. |
-| ⬜ | `PATCH /admin/users/{id}/suspend` | |
-| ⬜ | `DELETE /admin/quests/{id}` | Bypasses the author check. |
+| ✅ | `GET /admin/stats` | `{ total_users, suspended_users, total_quests, open_quests, total_answers, points_in_circulation }` — all live counts. |
+| ✅ | `GET /admin/users` | Paginated (`page`, `limit` ≤ 50), `search` over username and first/last name. **Not email** — that lives in `auth.users` and is never copied ([data-model.md](data-model.md)). |
+| ✅ | `PATCH /admin/users/{id}/suspend` | Body `{ suspended: bool }` — explicit, not a toggle, so two admins cannot flip each other's decision. `403` on yourself or on another admin. A suspended user can still read; posting, answering and voting return `403`. |
+| ✅ | `DELETE /admin/quests/{id}` | Bypasses the author check *and* the has-answers rule. Refunds the bounty unless the quest was already solved — that bounty is with the helper and refunding it would mint points. Deletes the answers and their votes too. |

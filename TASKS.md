@@ -4,8 +4,11 @@ Single source of truth for progress. Check a box only when it meets the definiti
 done in [docs/product.md](docs/product.md#definition-of-done). Work top to bottom —
 milestones are ordered by dependency, not preference.
 
-**Now:** M4 — AI hints and the daily challenge. M1–M3 are done and verified against
-the live database.
+**Now:** M6 — ship. M1–M5 are done and verified against the live database.
+
+> **The deployed API is behind this branch.** <https://questboard-mccq.onrender.com>
+> is serving a pre-M4 commit — 21 endpoints, with no `/challenges`, `/ai` or `/admin`.
+> Push and it redeploys; the app expects 30.
 
 | Milestone | Status |
 |---|---|
@@ -13,17 +16,24 @@ the live database.
 | M1 · Auth & profiles | ✅ done |
 | M2 · Quest loop (MVP core) | ✅ done |
 | M3 · Gamification & notifications | ✅ done |
-| M4 · AI & daily challenge | 🟡 tables exist, unused |
-| M5 · Search, admin & polish | 🔴 not started |
-| M6 · Ship | 🔴 not started |
+| M4 · AI & daily challenge | ✅ done |
+| M5 · Search, admin & polish | ✅ done |
+| M6 · Ship | 🟡 API deployed, apps not released |
 
-**Verified green** (2026-08-14): `flutter analyze` → no issues · `flutter test` → 6/6
-passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **26 API
-endpoints live**, exercised against the real database along with every guard
-(self-vote, self-answer, accept-by-non-author, double accept, overspend, unknown tag,
-delete-with-answers, reading someone else's notification). The economy ledger nets to
-zero — points are conserved, never minted. Streak transitions (first ever, same day,
-consecutive, gap) and badge idempotency are asserted too.
+**Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` →
+**30/30** · `pytest` → **20/20** against the live database · `flutter build web` and
+`flutter build apk --release --split-per-abi` → succeed · `ruff check` + `black` →
+clean · **30 API endpoints**, exercised against the real database along with every
+guard (self-vote, self-answer, accept-by-non-author, double accept, overspend,
+unknown tag, delete-with-answers, reading someone else's notification, admin-only,
+self-suspend, suspending an admin, writing while suspended). The economy ledger nets
+to zero — points are conserved, never minted.
+
+Destructive paths — admin force-delete and the AI hint charge — were verified against
+the live database inside a transaction that was then rolled back, so the refund, the
+cascade, the vote cleanup and the no-charge-on-failure guarantee are all proven on
+real rows without having altered any. AI hints were confirmed end to end against a
+real free-tier provider.
 
 ---
 
@@ -126,41 +136,122 @@ consecutive, gap) and badge idempotency are asserted too.
 - [ ] Vote notifications — intentionally omitted, see
       [decisions.md](docs/decisions.md) D19; revisit as a weekly digest
 
-## M4 · AI & daily challenge 🔴
+## M4 · AI & daily challenge ✅
 
-- [ ] Pick and configure the LLM provider; add the key to `.env.example`
-- [x] `ai_hints` table exists
-- [ ] ORM model + the Socratic prompt (hints only, never the answer)
-- [ ] `ai_skeptic` and `challenger` badges become awardable once this lands
-- [ ] `POST /api/ai/hint` — deduct 5 points, refund on failure, 3/hour rate limit
-- [ ] Hint modal in `question_detail.dart` with the point-cost confirmation
-- [x] `daily_challenges`, `challenge_attempts` tables exist
-- [ ] Daily job pulling one Codeforces problem, with a cached fallback
-- [ ] Codeforces handle verification flow
-- [ ] `GET /api/challenges/today`, `POST /solve`, `GET /leaderboard`
-- [ ] Wire `daily_challenge_screen.dart` (the solve button is inert)
+**AI hints**
+- [x] Any OpenAI-compatible provider via `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` —
+      Gemini, Groq and OpenRouter all have a free tier, and switching is an `.env`
+      change ([setup.md](docs/setup.md) step 10). `ANTHROPIC_API_KEY` still works and
+      is used only when `AI_API_KEY` is empty. Unset is a supported state: the
+      endpoint 503s and the client hides the button
+- [x] `AiHint` ORM model + the Socratic prompt — a nudge, never the answer
+- [x] `POST /api/ai/hint` — deducts 5 points *before* the model call and rolls back
+      in the same transaction if it fails, so an error always means no charge.
+      3/hour, counted from `ai_hints.created_at` rather than a separate counter
+- [x] `GET /api/ai/hint` — cost and remaining hints, so the button is honest
+      before anyone spends anything
+- [x] Hint modal in `question_detail.dart` with the point-cost confirmation
 
-## M5 · Search, admin & polish 🔴
+**Daily challenge**
+- [x] `DailyChallenge` / `ChallengeAttempt` ORM models
+- [x] Today's problem is pulled from the public Codeforces API on the first request
+      of the day — no cron. The unique `challenge_date` makes the race safe
+- [x] Falls back to the last stored challenge when Codeforces is down, and the
+      screen says so rather than passing it off as today's
+- [x] Codeforces handle verification: submit a deliberate compilation error to a
+      problem derived from your user id. Deterministic, so no state to store —
+      and a submission is the only thing that actually proves ownership
+- [x] `GET /api/challenges/today`, `POST /{id}/solve`, `GET /{id}/leaderboard`
+- [x] Solves are verified against Codeforces, never taken on trust
+- [x] `daily_challenge_screen.dart` wired: real problem, claim button, solver list
+- [x] `challenger` (7 solves) and `ai_skeptic` (an accepted answer on a quest you
+      bought no hint for) are now awardable — `top_helper` still needs a schedule
+- [x] `schema.sql` gained the six tables it was missing (M3's three and M4's three)
+      and the badge seed, so it once again matches the live database
 
-- [ ] Enable `pg_trgm` and the GIN indexes — search currently uses `ILIKE`, which is
-      correct but will not scale
-- [ ] Wire the dashboard search box to `GET /api/questions?search=`
-- [x] Tag filter chips and sort control on the feed
-- [ ] Admin endpoints: stats, user list, suspend, force-delete
-- [ ] Wire the five screens in `client/lib/app/admin/`, gated on `is_admin` — they are
-      complete UI but currently unreachable, with every action button inert
-- [ ] Audit every screen for loading / error / empty states
-- [ ] Never surface a raw exception — always the API's `detail`
+## M5 · Search, admin & polish ✅
 
-## M6 · Ship 🔴
+**Search**
+- [x] `pg_trgm` and the GIN indexes over `questions.title` / `body` — they were
+      already live but in neither `schema.sql` nor the docs, so both now say so.
+      `ILIKE '%term%'` is index-served by them, which is why no query rewrite was
+      needed ([data-model.md](docs/data-model.md#search))
+- [x] Title hits rank above body-only hits; an explicit `sort=bounty|votes` still wins
+- [x] The desktop top-bar box works and hands its term to the Browse tab. The phone
+      has no top bar, so Browse grew its own field — debounced, clearable, and the
+      empty state now distinguishes "no quests", "nothing tagged X" and "no match for X"
+- [x] `GET /questions/search?q=` dropped rather than built ([decisions.md](docs/decisions.md) D23 table, api.md)
 
-- [ ] Deploy the API (Render or Railway) and point `API_URL` at it
-- [ ] Release Android APK, tested off a debug build
-- [ ] Web build deployed (`flutter build web` already succeeds)
-- [ ] Seed demo data
-- [ ] Commit the economy tests as a pytest suite — they were run against the live DB
-      but not checked in
-- [ ] Widget tests for the auth screens
+**Admin**
+- [x] `users.is_suspended` + `UserService.require_active`, called by every write path.
+      Suspended accounts read normally and get a 403 with a plain sentence on posting,
+      answering or voting ([decisions.md](docs/decisions.md) D22)
+- [x] `require_admin` dependency — reads `is_admin` from the database, so revoking it
+      takes effect on the next request rather than the next login
+- [x] `GET /admin/stats`, `GET /admin/users` (paginated, searchable),
+      `PATCH /admin/users/{id}/suspend`, `DELETE /admin/quests/{id}`
+- [x] Force-delete refunds the bounty unless the quest was already solved — that one
+      is with the helper, and refunding it would mint points. Answers and their
+      polymorphic votes go too
+- [x] Cannot suspend yourself or another admin — either would need a SQL console to undo
+- [x] `admin_dashboard` / `user_management` / `content_moderation` rewritten against
+      the real API; every number on them was fictional before
+- [x] Reachable at last: sidebar entry on desktop, overflow menu on mobile, both only
+      when `is_admin`. A suspended user gets a banner instead of a surprise 403
+- [x] `platform_management.dart` and `reports_analytics.dart` deleted — mockups of
+      features that do not exist and are not planned ([decisions.md](docs/decisions.md) D23)
+
+**Polish**
+- [x] Audited every API-backed screen for loading / error / empty states — the two
+      gaps were the admin screens (rewritten) and nothing else; the rest already had
+      all three
+- [x] `profile_create.dart` showed `e.toString()` on failure, which for a Storage
+      error is a page of internals. It now shows the API's `detail` or one plain
+      sentence — the last raw exception in the client
+- [x] Fixed a live economy bug the admin work uncovered: the
+      `point_transactions_reason_check` constraint still said `hint_used` and had never
+      heard of `bounty_refunded`, so deleting a quest with a bounty (M2) and buying an
+      AI hint (M4) both died on the insert ([decisions.md](docs/decisions.md) D24)
+- [x] Layout tests for all three admin screens at 320px and 360px with six-figure
+      counts and a 30-character surname
+
+## M6 · Ship 🟡
+
+- [x] Deploy the API to Render (<https://questboard-mccq.onrender.com>) and point
+      `API_URL` at it. Kept awake by a 10-minute cron ping — that is ~730 of the free
+      tier's 750 instance-hours a month, so it covers this one service and no more
+- [x] `client/.env` is now the single HTTPS entry, not a LAN candidate list. The LAN
+      address was the cause of "it worked yesterday, not today" — it changes with the
+      network, and a release APK cannot use it anyway (cleartext is blocked)
+- [x] Android `applicationId` renamed `com.example.client` → **`io.questboard.app`**,
+      matching the `io.questboard://` deep-link scheme. Package directory, namespace
+      and `MainActivity.kt` moved with it
+- [x] Release APKs built and inspected: `--split-per-abi` gives arm64 20.3 MB /
+      armv7 18.0 MB / x86_64 21.8 MB (universal is 54.9 MB). Verified in the merged
+      manifest that the release build is **not** debuggable, keeps `INTERNET`, keeps
+      the HTTPS-only network config, and bundles the Render URL — the four things that
+      differ from a debug build and have each broken networking here before
+- [x] Web build succeeds and bundles the right `API_URL`; deploy steps for a Render
+      Static Site in [setup.md](docs/setup.md) §12.3
+- [x] `seed_demo.py` — five students, eight quests, nine answers, 24 votes, all
+      written **through the services** so the ledger balances (the script prints each
+      balance beside its ledger sum). `--undo` removes exactly what it created
+- [x] Economy tests committed as `server/tests/` — 20 tests over the ledger, bounty
+      transfer, refunds, vote deltas, suspension and moderation. They run against the
+      real database inside a transaction that is rolled back, because the schema needs
+      Postgres and a fake one would not test what breaks
+- [x] Widget tests for the auth screens — `client/test/auth_test.dart`, 7 tests over
+      the validation that must fire *without* a network round trip
+- [x] CI: `.github/workflows/ci.yml` runs ruff, black, `flutter analyze`,
+      `flutter test` and a web build on every PR. The economy tests are a separate job
+      that runs only when a `DATABASE_URL` secret exists, so a fork PR does not fail
+      on a database it cannot reach
+- [ ] **Redeploy Render** — it is still serving a pre-M4 commit (21 endpoints, no
+      `/challenges`, `/ai` or `/admin`). Push this branch and it picks the new one up
+- [ ] Add `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` to Render's **Environment** so
+      hints work in production; they are only in the local `.env` today
+- [ ] Real signing keystore before any Play Store submission — release APKs are signed
+      with the debug key today
 - [ ] Final report and demo recording
 
 ---
@@ -222,7 +313,7 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] **The daily challenge screen was entirely fictional** — a hardcoded 12:45:30
       countdown, a hardcoded problem and a dead button. Replaced with an honest
       "not open yet" state until M4 builds it (ground rule 4)
-- [x] The desktop search box silently swallowed input; disabled until M5 wires it
+- [x] The desktop search box silently swallowed input; disabled until M5, wired now
 - [x] `AskQuestion`'s button row overflowed 60px on a phone; stacked full-width now
 - [x] `QuestTile` overflowed at 1.5x system font scale — tags and metadata now wrap
       onto separate runs instead of competing for one Row
@@ -254,6 +345,6 @@ consecutive, gap) and badge idempotency are asserted too.
 - [x] Deleted 1.4 GB of `client/build`, `server/.ruff_cache` and `__pycache__` trees
 - [x] Quest creation now returns a clear 400 instead of a raw 500 when the caller has
       no profile row yet
-- [ ] Android `applicationId` is still `com.example.client` — rename before release
-- [ ] Deploy the API so the app works off your Wi-Fi (M6)
-- [ ] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR
+- [x] Android `applicationId` renamed to `io.questboard.app` (M6)
+- [x] Deploy the API so the app works off your Wi-Fi (M6)
+- [x] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
@@ -16,6 +16,7 @@ from app.models import (
 from app.schemas.question import QuestionCreate, QuestionUpdate
 from app.services.activity_service import ActivityService
 from app.services.point_service import PointService
+from app.services.user_service import UserService
 from app.services.vote_service import VoteService
 
 SORTS = ("latest", "bounty", "votes")
@@ -40,10 +41,7 @@ class QuestionService:
 
     @staticmethod
     def _require_author(db: Session, user_id: UUID) -> User:
-        author = db.get(User, user_id)
-        if author is None:
-            raise ValueError("Complete your profile first.")
-        return author
+        return UserService.require_active(db, user_id)
 
     @classmethod
     def create(cls, db: Session, user_id: UUID, data: QuestionCreate) -> Question:
@@ -130,14 +128,23 @@ class QuestionService:
         if tag:
             stmt = stmt.where(Question.tags.any(Tag.name == tag.strip().lower()))
 
+        # Ranks a title hit above a body-only hit. Ordinary `ILIKE '%term%'`
+        # cannot use a B-tree, which is why schema.sql creates GIN trigram
+        # indexes over both columns — they are what keeps this a index scan.
+        title_hit = None
         if search:
             term = f"%{search.strip()}%"
             stmt = stmt.where(Question.title.ilike(term) | Question.body.ilike(term))
+            title_hit = case((Question.title.ilike(term), 0), else_=1)
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = int(db.scalar(count_stmt) or 0)
 
-        if sort == "bounty":
+        if title_hit is not None and sort == "latest":
+            # A search has its own idea of "best first"; an explicit sort by
+            # bounty or votes is the user overriding that, so it still wins.
+            stmt = stmt.order_by(title_hit, Question.created_at.desc())
+        elif sort == "bounty":
             stmt = stmt.order_by(
                 Question.bounty_points.desc(), Question.created_at.desc()
             )

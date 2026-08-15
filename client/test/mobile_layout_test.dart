@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:client/app/admin/admin_dashboard.dart';
+import 'package:client/app/admin/content_moderation.dart';
+import 'package:client/app/admin/user_management.dart';
 import 'package:client/app/auth/email_verification.dart';
 import 'package:client/app/common/reset_password.dart';
 import 'package:client/app/modules/daily_challenge/daily_challenge_screen.dart';
+import 'package:client/app/modules/profile/codeforces_verify.dart';
 import 'package:client/app/modules/questions/browse_questions.dart';
 import 'package:client/core/widgets/async_states.dart';
+import 'package:client/models/admin.dart';
+import 'package:client/models/challenge.dart';
 import 'package:client/models/quest.dart';
 
 /// QuestBoard is mobile-first, so "does it fit a phone" is the default question
@@ -67,7 +73,6 @@ void main() {
     const screens = <String, Widget>{
       'EmailVerification': EmailVerification(email: 'student@example.edu'),
       'ResetPassword': ResetPassword(),
-      'DailyChallenge': DailyChallengeScreen(),
     };
 
     for (final entry in screens.entries) {
@@ -152,6 +157,153 @@ void main() {
       await _pumpAt(tester, state, _narrow);
       expect(tester.takeException(), isNull,
           reason: '${state.runtimeType} at $_narrow');
+    }
+  });
+
+  /// The daily challenge screen loads from the API, so the layout lives in
+  /// [DailyChallengeView] and is exercised here directly. The three branches
+  /// of its action block are what actually differ, so all three are pumped.
+  testWidgets('the daily challenge fits a phone in every state',
+      (WidgetTester tester) async {
+    final challenge = DailyChallenge.fromJson({
+      'id': 'c1',
+      'codeforces_id': '1873/D',
+      'title': 'Prefix Sums with Antidisestablishmentarianism Constraints',
+      'body': 'Codeforces problem 1873/D — rated 1500.\n'
+          'Topics: binary search, data structures, dp, greedy, implementation, '
+          'math, sortings, two pointers.\n\n'
+          'Read the full statement and submit your solution on Codeforces, '
+          'then come back and claim your bonus.',
+      'cf_rating': 1500,
+      'difficulty': 'hard',
+      'source_url': 'https://codeforces.com/problemset/problem/1873/D',
+      'bonus_points': 99999,
+      'challenge_date': '2026-08-15',
+    });
+
+    final solvers = [
+      for (var i = 1; i <= 3; i++)
+        ChallengeSolver(
+          rank: i,
+          solvedAt: DateTime.now(),
+          user: _user(
+              first: 'Bartholomew', last: 'Featherstonehaugh-Cholmondeley'),
+        ),
+    ];
+
+    final states = <String, TodayChallenge>{
+      'unverified': TodayChallenge(
+          challenge: challenge,
+          isToday: true,
+          solverCount: 3,
+          myAttempt: null,
+          codeforcesVerified: false),
+      'claimable, stale': TodayChallenge(
+          challenge: challenge,
+          isToday: false,
+          solverCount: 3,
+          myAttempt: null,
+          codeforcesVerified: true),
+      'solved': TodayChallenge(
+          challenge: challenge,
+          isToday: true,
+          solverCount: 4,
+          myAttempt:
+              ChallengeAttempt(isSolved: true, solvedAt: DateTime.now()),
+          codeforcesVerified: true),
+    };
+
+    for (final entry in states.entries) {
+      for (final size in const [_phone, _narrow]) {
+        await _pumpAt(
+          tester,
+          DailyChallengeView(today: entry.value, solvers: solvers),
+          size,
+        );
+        expect(tester.takeException(), isNull,
+            reason: '${entry.key} at $size');
+      }
+    }
+  });
+
+  testWidgets('the Codeforces verification sheet fits a phone',
+      (WidgetTester tester) async {
+    const task = CodeforcesVerification(
+      handle: 'a_very_long_codeforces_handle_indeed',
+      codeforcesId: '1873/D',
+      problemUrl: 'https://codeforces.com/problemset/problem/1873/D',
+      windowMinutes: 30,
+    );
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(tester, const CodeforcesInstructions(task: task), size);
+      expect(tester.takeException(), isNull, reason: 'at $size');
+    }
+  });
+
+  testWidgets('the admin screens fit a phone', (WidgetTester tester) async {
+    const stats = AdminStats(
+      // Six figures on every tile: the point supply is the number most likely
+      // to grow past what a 320px tile can hold.
+      totalUsers: 128400,
+      suspendedUsers: 1024,
+      totalQuests: 987654,
+      openQuests: 45678,
+      totalAnswers: 234567,
+      pointsInCirculation: 9876543,
+    );
+
+    final users = [
+      AdminUser(
+        id: 'u1',
+        username: 'bartholomew_featherstonehaugh',
+        firstName: 'Bartholomew',
+        lastName: 'Featherstonehaugh-Cholmondeley',
+        points: 99999,
+        isAdmin: true,
+        isSuspended: true,
+        createdAt: DateTime.now(),
+      ),
+      AdminUser(
+        id: 'u2',
+        username: 'ada',
+        firstName: '',
+        lastName: '',
+        points: 0,
+        isAdmin: false,
+        isSuspended: false,
+        createdAt: DateTime.now(),
+      ),
+    ];
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(
+        tester,
+        AdminDashboardView(stats: stats, onOpen: (_) {}),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'dashboard at $size');
+
+      // Both rows at once: an admin who is also suspended carries two chips
+      // and the button, which is what pushes the Wrap onto a second run.
+      await _pumpAt(
+        tester,
+        ListView(
+          children: [
+            for (final user in users)
+              AdminUserTile(
+                  user: user, busy: false, onToggleSuspended: () {}),
+            ModeratedQuestTile(
+              quest: _quest(bounty: 99999, solved: true),
+              busy: true,
+              onOpen: () {},
+              onDelete: () {},
+            ),
+          ],
+        ),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'moderation at $size');
     }
   });
 

@@ -250,7 +250,8 @@ Add these under **Environment** — copy the values from `server/.env`:
 | `DATABASE_URL` | The **pooler** string from step 3 (`...pooler.supabase.com:5432`). The direct host is IPv6-only and Render cannot reach it |
 | `SUPABASE_URL` | Same as local |
 | `SUPABASE_PUBLISHABLE_KEY` | Same as local |
-| `CORS_ORIGINS` | Your web origin, or `*` while testing |
+| `CORS_ORIGINS` | Your web **origin** (`https://example.com`), or `*` while testing. This is a browser origin, not a bind address — `0.0.0.0` matches nothing and blocks every web request |
+| `AI_BASE_URL` · `AI_API_KEY` · `AI_MODEL` | Optional. A free AI provider for hints — see step 10. Without any of it `POST /api/ai/hint` returns 503 and the client hides the hint button |
 
 ### 9.4 Verify before touching the client
 
@@ -285,6 +286,150 @@ not reach the server" before it wakes. Options: hit `/api/` yourself a minute
 before a demo, or point a free uptime pinger (UptimeRobot, 5-minute interval) at
 `/api/` on the day. Do not add a background pinger inside the app.
 
+Pinging every ~10 minutes keeps the service awake permanently, which costs about
+730 of the free tier's 750 instance-hours a month. That covers **one** always-on
+service — a second one will run out partway through the month.
+
+## 10. AI hints (optional, and free)
+
+`POST /api/ai/hint` asks a model for a Socratic nudge. With nothing configured the
+endpoint returns 503 and the client hides the hint button entirely, so the rest of
+the app is unaffected — leaving this unset is a supported state, not a broken one.
+
+Any endpoint that speaks the OpenAI `/chat/completions` shape works, which is most of
+them. **All three options below are free and need no credit card.** Pick one, put the
+three values in `server/.env`, and add the same three in Render's **Environment** for
+the deployed copy.
+
+**Google Gemini** — the most generous free tier, and the default recommendation:
+
+```
+AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+AI_API_KEY=<key from https://aistudio.google.com/apikey>
+AI_MODEL=gemini-2.5-flash
+```
+
+**Groq** — noticeably faster, smaller daily allowance:
+
+```
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_API_KEY=<key from https://console.groq.com/keys>
+AI_MODEL=llama-3.3-70b-versatile
+```
+
+**OpenRouter** — a router in front of many models; the free ones end in `:free`:
+
+```
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_API_KEY=<key from https://openrouter.ai/keys>
+AI_MODEL=meta-llama/llama-3.3-70b-instruct:free
+```
+
+Switching providers is an `.env` change, not a code change. If a free quota runs out
+the endpoint returns 503 with a message saying so, and — because the deduction and the
+model call share one transaction — the user is not charged the 5 points.
+
+Verify without opening the app:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8000/api/ai/hint
+# {"available":true,"points_cost":5,"hints_remaining":3}
+```
+
+`ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` still work for a paid Anthropic key and are
+used only when `AI_API_KEY` is empty, so both can sit in `.env` at once. The
+`anthropic` package is imported lazily, so a free-tier deploy never loads it.
+
+Hints cost the *user* 5 points and are capped at 3 per hour per user, which is what
+bounds usage whichever provider you pick.
+
+## 11. The daily challenge
+
+Nothing to configure. `GET /api/challenges/today` pulls a rated problem from the
+public Codeforces API on the first request of each day and stores it; there is no
+cron job and no API key. If Codeforces is down, the endpoint serves the last
+challenge it stored and flags it so the screen says so.
+
+Claiming the bonus requires a **verified** Codeforces handle: the user submits a
+deliberate compilation error to a problem the server names, and the server looks
+for it in their public submission list. That is the ownership proof — a handle
+existing says nothing about who typed it into our form.
+
+## 12. Releasing the apps
+
+### 12.1 Point the client at the deployed API
+
+`client/.env` should be a single HTTPS entry — not a candidate list:
+
+```
+API_URL=https://<your-app>.onrender.com
+```
+
+This is the setting that survives changing Wi-Fi networks, which a LAN address
+does not. A release APK also blocks cleartext HTTP outright, so a local
+`http://192.168.…` server is unreachable from one no matter what `.env` says.
+
+`.env` is a **bundled asset**: it is read at build time, so changing it means
+rebuilding, not hot-reloading.
+
+### 12.2 Android APK
+
+```bash
+cd client
+flutter build apk --release --split-per-abi
+```
+
+Three APKs land in `build/app/outputs/flutter-apk/`. Hand out
+**`app-arm64-v8a-release.apk`** (~20 MB) — every Android phone made in the last
+decade is arm64. `armeabi-v7a` is for older 32-bit devices and `x86_64` is for
+emulators. A single universal `flutter build apk --release` also works and is
+~55 MB, which is the same app three times over.
+
+Two things worth checking on a release build, because debug builds hide both:
+
+- **It is signed with the debug key.** `android/app/build.gradle.kts` still says
+  so. That is fine for handing an APK to a marker or a teammate, and unacceptable
+  for the Play Store — that needs a real keystore.
+- **Test the release APK, not the debug one.** The `INTERNET` permission and the
+  cleartext policy differ between the two, and both have broken networking here
+  before ([TASKS.md](../TASKS.md) — "Fixed after M3 field testing").
+
+The application ID is `io.questboard.app`, matching the `io.questboard://`
+deep-link scheme. Changing it after release orphans every existing install.
+
+### 12.3 Web
+
+```bash
+cd client
+flutter build web
+```
+
+`build/web` is a static directory — any static host serves it. On Render:
+**New → Static Site**, same repository, root directory `client`, build command
+`flutter build web`, publish directory `build/web`.
+
+Two things the web build needs that the phone does not:
+
+- `CORS_ORIGINS` on the API must include the site's origin (or be `*`). A
+  browser will not send the request otherwise, and the failure shows up as a
+  network error with no server log to match it.
+- Add the site URL to Supabase's redirect list (step 5), or email links from a
+  browser signup dead-end.
+
+### 12.4 Demo data
+
+```bash
+cd server && source .venv/bin/activate
+python seed_demo.py          # five students, eight quests, answers, votes
+python seed_demo.py --undo   # removes exactly what it created
+```
+
+Every point it creates is earned through the normal services, so the ledger
+balances and the leaderboard shows numbers somebody actually earned — the script
+prints each balance next to its ledger sum so you can see they agree. The demo
+accounts are real Supabase logins (`nadia@questboard.test` / `questboard-demo`),
+so you can sign in as one while presenting.
+
 ---
 
 ## Troubleshooting
@@ -303,3 +448,7 @@ before a demo, or point a free uptime pinger (UptimeRobot, 5-minute interval) at
 | Phone cannot reach the API | Check `API_URL` lists your current LAN IP (`hostname -I`), and that uvicorn was started with `--host 0.0.0.0`. `curl http://<lan-ip>:8000/api/` from the PC first. USB alternative: `adb reverse tcp:8000 tcp:8000` |
 | App hangs on a blank screen at launch | It no longer can — startup routing gives up after 4s. If it still does, `API_URL` is malformed rather than unreachable |
 | Everything works except calls to your own API | Cleartext HTTP blocked. Only affects release builds now; a deployed API must be HTTPS |
+| Hints 503 with "not configured" | No `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` — step 10. On Render they must be set in **Environment**, not just in your local `.env` |
+| Hints 503 with "rejected the request (404)" | `AI_MODEL` is not a model that provider serves. Groq's names differ from OpenRouter's: `llama-3.3-70b-versatile`, not `meta-llama/llama-3.3-70b-instruct:free`. List them with `curl $AI_BASE_URL/models -H "Authorization: Bearer $AI_API_KEY"` |
+| A new endpoint 404s on Render but works locally | Render is serving an older commit. Check **Events** for a deploy after your push |
+| `pytest` fails with a connection timeout | The tests talk to the real database; that is a network failure, not a test failure. Re-run |

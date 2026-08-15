@@ -93,5 +93,15 @@ class User(Base):
         server_default="false",
     )
 
+    # Set by an admin. A suspended account can still read — banning someone
+    # from a Q&A board they may be cited in helps nobody — but cannot post,
+    # answer or vote. Enforced in the services, not in the JWT dependency,
+    # because the token knows nothing about this column.
+    is_suspended = Column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+
     questions = relationship("Question", back_populates="author")
     answers = relationship("Answer", back_populates="author")

@@ -1,9 +1,8 @@
 -- QuestBoard schema — the tables that exist today.
 --
 -- Run this once in the Supabase SQL editor on a new project. It is idempotent,
--- so re-running it is safe. Keep it in sync with app/models/ and
--- docs/data-model.md; the planned tables (answers, votes, point_transactions…)
--- are documented there and are NOT created here yet.
+-- so re-running it is safe. Every table the API touches is here — keep it in
+-- sync with app/models/ and docs/data-model.md.
 
 -- ---------------------------------------------------------------- users -----
 -- Mirrors app/models/user.py. Shares its primary key with auth.users; the email
@@ -20,10 +19,15 @@ create table if not exists public.users (
     points              integer     not null default 100,
     streak_days         integer     not null default 0,
     is_admin            boolean     not null default false,
+    is_suspended        boolean     not null default false,
     last_active         timestamptz,
     created_at          timestamptz not null default now(),
     updated_at          timestamptz not null default now()
 );
+
+-- `create table if not exists` skips an existing table entirely, so columns
+-- added after the first run need their own line.
+alter table public.users add column if not exists is_suspended boolean not null default false;
 
 -- ------------------------------------------------------------ questions -----
 -- Mirrors app/models/question.py. Named `questions`; the product calls it a
@@ -86,6 +90,20 @@ create table if not exists public.point_transactions (
     created_at   timestamptz not null default now()
 );
 
+-- The list must match PointReason in app/models/point_transaction.py exactly.
+-- It drifted once already: the constraint still said `hint_used` and had never
+-- heard of `bounty_refunded`, so deleting a quest with a bounty and buying an
+-- AI hint both died on an insert. Dropped and recreated rather than added, so
+-- re-running this file repairs an out-of-date constraint instead of skipping it.
+alter table public.point_transactions
+    drop constraint if exists point_transactions_reason_check;
+alter table public.point_transactions
+    add constraint point_transactions_reason_check check (reason in (
+        'ai_hint', 'bounty_awarded', 'bounty_posted', 'bounty_refunded',
+        'challenge_solved', 'daily_bonus', 'signup_bonus',
+        'vote_lost', 'vote_received'
+    ));
+
 create table if not exists public.tags (
     id   uuid primary key default gen_random_uuid(),
     name varchar(50) not null unique
@@ -96,6 +114,87 @@ create table if not exists public.question_tags (
     tag_id      uuid not null references public.tags (id) on delete cascade,
     primary key (question_id, tag_id)
 );
+
+-- ------------------------------------------------- gamification (M3) -------
+create table if not exists public.notifications (
+    id           uuid primary key     default gen_random_uuid(),
+    user_id      uuid        not null references public.users (id) on delete cascade,
+    type         varchar(30) not null
+                 check (type in ('answer_received', 'answer_accepted',
+                                 'bounty_awarded', 'vote_received',
+                                 'badge_earned')),
+    message      text        not null,
+    -- The quest, answer or badge this points at. Polymorphic, so no FK.
+    reference_id uuid,
+    is_read      boolean     not null default false,
+    created_at   timestamp   not null default now()
+);
+
+create table if not exists public.badges (
+    id          uuid primary key default gen_random_uuid(),
+    name        varchar(50) not null unique,
+    description text        not null,
+    icon_url    text
+);
+
+-- The composite primary key is what makes awarding idempotent: a second
+-- award of the same badge conflicts instead of duplicating.
+create table if not exists public.user_badges (
+    user_id    uuid      not null references public.users (id) on delete cascade,
+    badge_id   uuid      not null references public.badges (id) on delete cascade,
+    awarded_at timestamp not null default now(),
+    primary key (user_id, badge_id)
+);
+
+-- ---------------------------------------- AI hints & daily challenge (M4) ---
+-- One row per hint the model actually returned. Doubles as the rate-limit
+-- ledger (the hourly cap is a COUNT over created_at) and as the evidence for
+-- the ai_skeptic badge, so a failed model call must leave no row behind.
+create table if not exists public.ai_hints (
+    id          uuid primary key  default gen_random_uuid(),
+    question_id uuid    not null  references public.questions (id) on delete cascade,
+    user_id     uuid    not null  references public.users (id) on delete cascade,
+    hint_text   text    not null,
+    points_cost integer not null  default 5,
+    created_at  timestamp not null default now()
+);
+
+-- One Codeforces problem per calendar day (UTC). challenge_date is unique,
+-- which is what makes "today's challenge" a lookup rather than a decision:
+-- the first request of the day creates the row, everyone after reads it.
+create table if not exists public.daily_challenges (
+    id             uuid primary key  default gen_random_uuid(),
+    codeforces_id  text,                       -- "1873/D": contest id + index
+    title          text    not null,
+    body           text    not null,
+    cf_rating      integer,
+    difficulty     varchar(10) check (difficulty in ('easy', 'medium', 'hard')),
+    source_url     text,
+    bonus_points   integer not null default 50,
+    challenge_date date    not null unique,
+    created_at     timestamptz not null default now()
+);
+
+create table if not exists public.challenge_attempts (
+    id           uuid primary key  default gen_random_uuid(),
+    challenge_id uuid    not null  references public.daily_challenges (id) on delete cascade,
+    user_id      uuid    not null  references public.users (id) on delete cascade,
+    is_solved    boolean not null  default false,
+    solved_at    timestamp,
+    created_at   timestamp not null default now(),
+    unique (challenge_id, user_id)
+);
+
+insert into public.badges (name, description) values
+    ('first_answer',  'Submitted your first answer'),
+    ('first_bounty',  'Won your first bounty'),
+    ('bounty_hunter', 'Won 10 bounties total'),
+    ('streak_5',      'Maintained a 5-day activity streak'),
+    ('streak_30',     'Maintained a 30-day activity streak'),
+    ('top_helper',    'Ranked in the top 10 on the weekly leaderboard'),
+    ('challenger',    'Solved 7 daily challenges'),
+    ('ai_skeptic',    'Solved a question without using any AI hints')
+on conflict (name) do nothing;
 
 insert into public.tags (name) values
     ('dsa'), ('math'), ('physics'), ('chemistry'), ('calculus'),
@@ -109,6 +208,15 @@ create index if not exists questions_created_at_idx on public.questions (created
 create index if not exists answers_question_idx on public.answers (question_id);
 create index if not exists votes_target_idx on public.votes (target_type, target_id);
 create index if not exists point_tx_user_idx on public.point_transactions (user_id, created_at desc);
+create index if not exists idx_hints_user_question on public.ai_hints (user_id, question_id, created_at desc);
+create index if not exists idx_challenges_date on public.daily_challenges (challenge_date desc);
+
+-- GET /api/questions?search= matches with ILIKE '%term%', which no B-tree can
+-- serve. A GIN trigram index can, so search stays a index scan as the board
+-- grows instead of degrading into a sequential scan of every quest.
+create extension if not exists pg_trgm;
+create index if not exists idx_questions_trgm_title on public.questions using gin (title gin_trgm_ops);
+create index if not exists idx_questions_trgm_body on public.questions using gin (body gin_trgm_ops);
 
 -- ------------------------------------------------------- updated_at ---------
 -- The ORM sets updated_at on its own writes; this keeps it honest for rows

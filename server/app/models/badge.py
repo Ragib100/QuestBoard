@@ -8,9 +8,8 @@ from app.db.base import Base
 class BadgeCode:
     """Badge names as seeded in the `badges` table.
 
-    `CHALLENGER` and `AI_SKEPTIC` depend on the daily challenge and AI hints,
-    which do not exist yet — they are listed so the catalogue is complete, but
-    nothing awards them until M4.
+    All are awardable except `TOP_HELPER`, which needs a weekly-rank check on
+    a schedule; it is listed so the catalogue stays complete.
     """
 
     FIRST_ANSWER = "first_answer"

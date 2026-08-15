@@ -51,6 +51,8 @@ def create_question(
 ):
     try:
         question = QuestionService.create(db, user_id, data)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         # A bounty the author cannot afford is a payment problem, not a typo.
         code = (

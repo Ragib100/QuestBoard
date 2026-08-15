@@ -1,0 +1,84 @@
+name: CI
+
+# The six checks CLAUDE.md's ground rule 6 asks for before every PR, run
+# automatically so "I forgot to run them" stops being a possible answer.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  server:
+    name: Server — ruff + black
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tooling
+        # Lint and format only: the runtime dependencies are not needed to
+        # check style, and skipping them keeps this job under ten seconds.
+        run: pip install "black>=25,<26" "ruff>=0.14,<1.0"
+      - run: ruff check app
+        working-directory: server
+      - run: black --check app
+        working-directory: server
+
+  client:
+    name: Client — analyze + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: client
+      - name: Provide a .env
+        # main.dart loads .env as a bundled asset and throws without one. The
+        # values are never used: no test makes a network call.
+        run: cp .env.example .env
+        working-directory: client
+      - run: flutter analyze
+        working-directory: client
+      - run: flutter test
+        working-directory: client
+      - name: Web build still compiles
+        run: flutter build web
+        working-directory: client
+
+  economy:
+    name: Server — economy tests
+    runs-on: ubuntu-latest
+    # These need a real Postgres: the schema uses gen_random_uuid(), uuid
+    # columns, CHECK constraints and a self-referencing FK, and they create
+    # rows in Supabase's auth.users. They run only when DATABASE_URL is
+    # configured as a repository secret, and are skipped on forks — which is
+    # why they are a separate job rather than a step that would fail the PR.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Skip without a database
+        id: guard
+        run: |
+          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+            echo "No DATABASE_URL secret set — skipping. See server/tests/conftest.py."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.guard.outputs.run == 'true'
+        run: pip install -r requirements.txt
+        working-directory: server
+      - if: steps.guard.outputs.run == 'true'
+        run: python -m pytest tests
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}

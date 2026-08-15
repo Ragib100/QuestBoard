@@ -11,7 +11,9 @@ from app.schemas.user import (
     UserResponse,
     UserUpdate,
 )
+from app.schemas.challenge import VerificationChallenge
 from app.schemas.gamification import EarnedBadge, StreakResponse
+from app.services import codeforces_service as cf
 from app.services.badge_service import BadgeService
 from app.services.user_service import UserService
 
@@ -19,6 +21,13 @@ router = APIRouter(
     prefix="/users",
     tags=["Users"],
 )
+
+
+def _own_profile(db: Session, user_id: UUID):
+    try:
+        return UserService.get(db=db, user_id=user_id)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.post(
@@ -63,6 +72,77 @@ def get_me(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.get("/me/codeforces/verification", response_model=VerificationChallenge)
+def codeforces_verification(
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """What to submit to prove the handle on your profile is yours.
+
+    Reading a handle back from the Codeforces API only proves the handle
+    exists, not who typed it into our form — but only the account's owner can
+    put a submission on it. So we name a problem and ask for a deliberate
+    compilation error, which is harmless and unambiguous.
+    """
+    user = _own_profile(db, user_id)
+    handle = user.codeforces_handle.strip()
+    if not handle:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add your Codeforces handle to your profile first.",
+        )
+
+    try:
+        problem = cf.verification_problem(str(user_id))
+    except cf.CodeforcesError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+    codeforces_id = f"{problem['contestId']}/{problem['index']}"
+    return VerificationChallenge(
+        handle=handle,
+        codeforces_id=codeforces_id,
+        problem_url=cf.problem_url(codeforces_id),
+        window_minutes=int(cf.VERIFICATION_WINDOW.total_seconds() // 60),
+    )
+
+
+@router.post("/me/codeforces/verification", response_model=UserResponse)
+def confirm_codeforces_verification(
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Checks Codeforces for the compilation error and marks the handle verified."""
+    user = _own_profile(db, user_id)
+    handle = user.codeforces_handle.strip()
+    if not handle:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add your Codeforces handle to your profile first.",
+        )
+
+    try:
+        problem = cf.verification_problem(str(user_id))
+        codeforces_id = f"{problem['contestId']}/{problem['index']}"
+        proved = cf.has_compile_error(handle, codeforces_id)
+    except cf.CodeforcesError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+    if not proved:
+        minutes = int(cf.VERIFICATION_WINDOW.total_seconds() // 60)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"No compilation error from {handle} on problem {codeforces_id} "
+                f"in the last {minutes} minutes. Submit one, then try again."
+            ),
+        )
+
+    user.codeforces_verified = True
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.get("/{user_id}", response_model=UserResponse)

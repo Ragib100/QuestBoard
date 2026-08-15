@@ -4,8 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../models/ai_hint.dart';
 import '../../../models/quest.dart';
 import '../../../services/api/api_client.dart';
+import '../../../services/common/hint_service.dart';
 import '../../../services/common/quest_service.dart';
 
 class QuestionDetail extends StatefulWidget {
@@ -25,6 +27,12 @@ class _QuestionDetailState extends State<QuestionDetail> {
   bool _submitting = false;
   String? _error;
 
+  /// Null until the status call answers; the hint button stays hidden until
+  /// then rather than promising something the server may not offer.
+  HintStatus? _hintStatus;
+  String? _hint;
+  bool _hintLoading = false;
+
   String? get _myId => Supabase.instance.client.auth.currentUser?.id;
   bool get _isAuthor => _quest != null && _quest!.author.id == _myId;
 
@@ -32,6 +40,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
   void initState() {
     super.initState();
     _load();
+    _loadHintStatus();
   }
 
   @override
@@ -57,6 +66,68 @@ class _QuestionDetailState extends State<QuestionDetail> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Best effort. A signed-out reader, or a server with no model configured,
+  /// simply never sees the hint button.
+  Future<void> _loadHintStatus() async {
+    if (_myId == null) return;
+    try {
+      final status = await HintService.instance.status();
+      if (mounted) setState(() => _hintStatus = status);
+    } on ApiException {
+      // Leave it null — the button stays hidden.
+    }
+  }
+
+  /// Buys one hint, after showing exactly what it costs. The server deducts
+  /// and refunds in one transaction, so a failure here never leaves the user
+  /// out of pocket — which is what the error message promises.
+  Future<void> _askForHint() async {
+    final status = _hintStatus;
+    if (status == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Get an AI hint?'),
+        content: Text(
+          'This costs ${status.pointsCost} points and gives you a nudge, not '
+          'the answer. You have ${status.hintsRemaining} '
+          '${status.hintsRemaining == 1 ? 'hint' : 'hints'} left this hour.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(minimumSize: const Size(120, 44)),
+              child: Text('Spend ${status.pointsCost}')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _hintLoading = true);
+    try {
+      final hint = await HintService.instance.forQuest(widget.questId);
+      if (mounted) {
+        setState(() {
+          _hint = hint.hintText;
+          _hintStatus = HintStatus(
+            available: true,
+            pointsCost: hint.pointsCost,
+            hintsRemaining: hint.hintsRemaining,
+          );
+        });
+      }
+    } on ApiException catch (e) {
+      _notify(e.message);
+    } finally {
+      if (mounted) setState(() => _hintLoading = false);
+    }
   }
 
   /// Votes update the UI immediately and roll back if the server disagrees —
@@ -338,8 +409,78 @@ class _QuestionDetailState extends State<QuestionDetail> {
               ),
           ],
         ),
+        ..._hintSection(),
       ],
     );
+  }
+
+  List<Widget> _hintSection() {
+    final status = _hintStatus;
+    final hint = _hint;
+
+    if (hint != null) {
+      return [
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.primaryTint,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.lightbulb_outline_rounded,
+                      color: AppColors.primary, size: 18),
+                  SizedBox(width: 8),
+                  Text('AI hint',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SelectableText(hint,
+                  style: const TextStyle(
+                      color: AppColors.textPrimary, height: 1.5)),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    // Hidden entirely when hints are not configured on this server — an
+    // always-visible button that only ever errors is worse than no button.
+    if (status == null || !status.available) return const [];
+
+    final exhausted = status.hintsRemaining <= 0;
+    return [
+      const SizedBox(height: 24),
+      OutlinedButton.icon(
+        onPressed: (_hintLoading || exhausted) ? null : _askForHint,
+        icon: _hintLoading
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.lightbulb_outline_rounded, size: 18),
+        label: Text(
+          _hintLoading
+              ? 'Thinking...'
+              : exhausted
+                  ? 'No hints left this hour'
+                  : 'Get a hint — ${status.pointsCost} pts',
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.primary),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    ];
   }
 
   Widget _answerTile(Quest quest, Answer answer) {

@@ -1,4 +1,4 @@
-package com.example.client
+package io.questboard.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -135,3 +135,31 @@ The profile shows all eight badges, greyed out until earned, rather than only th
 earned ones. Seeing what is still achievable is most of what a badge list is for.
 `challenger` and `ai_skeptic` are in the catalogue but unreachable until M4 — they
 show as locked, which is honest.
+
+### D22 — Suspension is a column, not a token claim
+`users.is_suspended` is checked by `UserService.require_active`, which every write
+path calls, rather than in `get_current_user_id`. The Supabase JWT knows nothing about
+our tables, so a token-level check would need a database read on *every* request
+including the public ones — and it would let a suspension take effect only after the
+token expired. A suspended account can still read: banning someone from a Q&A board
+their answers are still cited on helps nobody, and the point of suspending is to stop
+them adding more.
+
+### D23 — Two admin screens deleted rather than wired
+`platform_management.dart` (maintenance mode, "XP per upvote") and
+`reports_analytics.dart` (daily-active charts, activity logs) were pure mockups of
+features that do not exist and are not planned: the point economy has no per-upvote
+setting, nothing records logins, and there is no reporting or flagging anywhere in the
+app. Ground rule 4 says a screen with no backend shows an honest disabled state — but
+a permanently disabled screen for a feature that will never be built is just a
+different lie. The three that survived (`admin_dashboard`, `user_management`,
+`content_moderation`) map one-to-one onto the four real `/api/admin` endpoints.
+
+### D24 — The reason CHECK constraint follows `PointReason`
+The live `point_transactions_reason_check` had drifted: it still listed `hint_used`
+and had never heard of `bounty_refunded`, so deleting a quest with a bounty and buying
+an AI hint both failed on the insert — the first a live M2 bug, the second latent in
+M4 because no key was configured to trigger it. `PointReason` in
+`app/models/point_transaction.py` is canonical; `schema.sql` now drops and recreates
+the constraint from that list rather than adding it only when missing, so re-running
+the file repairs a stale constraint instead of skipping past it.
