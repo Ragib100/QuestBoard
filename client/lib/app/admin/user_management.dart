@@ -1,10 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/search_field.dart';
 import '../../models/admin.dart';
 import '../../services/api/api_client.dart';
 import '../../services/common/admin_service.dart';
@@ -17,10 +16,8 @@ class UserManagement extends StatefulWidget {
 }
 
 class _UserManagementState extends State<UserManagement> {
-  final _searchController = TextEditingController();
   final List<AdminUser> _users = [];
 
-  Timer? _debounce;
   bool _loading = true;
   String? _error;
   String _search = '';
@@ -32,21 +29,9 @@ class _UserManagementState extends State<UserManagement> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  /// One request per pause in typing, not one per keystroke.
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted || value == _search) return;
-      setState(() => _search = value);
-      _load();
-    });
+  void _onSearch(String term) {
+    setState(() => _search = term);
+    _load();
   }
 
   Future<void> _load() async {
@@ -135,15 +120,11 @@ class _UserManagementState extends State<UserManagement> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: const InputDecoration(
-                    // No email: it lives in Supabase's auth.users and is
-                    // deliberately never copied into our table.
-                    hintText: 'Search by username or name',
-                    prefixIcon: Icon(Icons.search),
-                  ),
+                // No email in the hint: it lives in Supabase's auth.users and
+                // is deliberately never copied into our table.
+                child: SearchField(
+                  hintText: 'Search by username or name',
+                  onChanged: _onSearch,
                 ),
               ),
               Expanded(child: _body()),

@@ -108,16 +108,25 @@ class ChallengeService:
         )
 
     @staticmethod
-    def solved_count(db: Session, user_id: UUID) -> int:
+    def _count_solved(db: Session, *filters) -> int:
         return int(
             db.scalar(
                 select(func.count(ChallengeAttempt.id)).where(
-                    ChallengeAttempt.user_id == user_id,
-                    ChallengeAttempt.is_solved.is_(True),
+                    ChallengeAttempt.is_solved.is_(True), *filters
                 )
             )
             or 0
         )
+
+    @classmethod
+    def solved_by(cls, db: Session, user_id: UUID) -> int:
+        """How many challenges this user has solved — the `challenger` badge."""
+        return cls._count_solved(db, ChallengeAttempt.user_id == user_id)
+
+    @classmethod
+    def solver_count(cls, db: Session, challenge_id: UUID) -> int:
+        """How many people solved this challenge — shown on the screen."""
+        return cls._count_solved(db, ChallengeAttempt.challenge_id == challenge_id)
 
     @classmethod
     def claim(cls, db: Session, challenge_id: UUID, user_id: UUID) -> ChallengeAttempt:

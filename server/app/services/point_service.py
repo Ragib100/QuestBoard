@@ -15,10 +15,6 @@ class PointService:
     """
 
     @staticmethod
-    def balance_of(db: Session, user: User) -> int:
-        return user.points
-
-    @staticmethod
     def apply(
         db: Session,
         user: User,

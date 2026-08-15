@@ -51,3 +51,7 @@ app.*.map.json
 # Out of scope for this project - see docs/product.md
 /ios/
 /macos/
+
+# Built APKs, kept out of git — they are 20-55 MB each and regenerable
+# with `flutter build apk --release --split-per-abi` (docs/setup.md 12.2).
+/dist/

@@ -372,24 +372,65 @@ does not. A release APK also blocks cleartext HTTP outright, so a local
 `.env` is a **bundled asset**: it is read at build time, so changing it means
 rebuilding, not hot-reloading.
 
-### 12.2 Android APK
+### 12.2 Android APK — building and sharing it
 
 ```bash
 cd client
 flutter build apk --release --split-per-abi
 ```
 
-Three APKs land in `build/app/outputs/flutter-apk/`. Hand out
-**`app-arm64-v8a-release.apk`** (~20 MB) — every Android phone made in the last
-decade is arm64. `armeabi-v7a` is for older 32-bit devices and `x86_64` is for
-emulators. A single universal `flutter build apk --release` also works and is
-~55 MB, which is the same app three times over.
+Three APKs land in `build/app/outputs/flutter-apk/`:
+
+| File | Size | Who needs it |
+|---|---|---|
+| `app-arm64-v8a-release.apk` | ~20 MB | **Every modern phone.** This is the one to share |
+| `app-armeabi-v7a-release.apk` | ~18 MB | Older 32-bit devices (roughly pre-2016) |
+| `app-x86_64-release.apk` | ~22 MB | Emulators, not real phones |
+
+Copy the one you are sharing somewhere with a name that means something —
+`client/dist/` is already gitignored for this:
+
+```bash
+mkdir -p dist
+cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/questboard-arm64.apk
+```
+
+If you would rather not think about ABIs at all, plain
+`flutter build apk --release` produces a single `app-release.apk` (~55 MB) that
+runs everywhere — it is the same app packaged three times. Good for a
+"just send me the file" situation, wasteful for anything else.
+
+**How to actually send it.** An APK is one file; the only real obstacle is that
+most services refuse the `.apk` extension:
+
+- **Google Drive / OneDrive / Dropbox** — upload, share the link, set it to
+  "anyone with the link". Works, and the file stays put.
+- **WhatsApp / Telegram** — Telegram sends APKs as-is. WhatsApp allows it as a
+  document, but the 100 MB limit means you want the 20 MB split build.
+- **Email** — usually blocked. Gmail rejects `.apk` outright. Zip it first, or
+  use a link instead.
+- **GitHub Releases** — the tidiest option for a group project: tag a release
+  and attach the APK. It gives you a permanent URL and a version history, and
+  markers can download it without a login.
+
+**What the person installing it has to do.** Android blocks APKs from outside
+the Play Store by default, so tell them in advance or they will think it is
+broken:
+
+1. Open the file — Android warns "For your security, your phone is not allowed
+   to install unknown apps from this source".
+2. Tap **Settings** on that prompt, enable **Allow from this source** for
+   whichever app they downloaded it with (Chrome, Drive, Files).
+3. Go back and tap **Install**. Play Protect may add a "scan this app?" prompt —
+   that is normal for any APK it has not seen before.
 
 Two things worth checking on a release build, because debug builds hide both:
 
 - **It is signed with the debug key.** `android/app/build.gradle.kts` still says
   so. That is fine for handing an APK to a marker or a teammate, and unacceptable
-  for the Play Store — that needs a real keystore.
+  for the Play Store — that needs a real keystore. It also means each rebuild
+  from a different machine may not upgrade cleanly over the last one; uninstall
+  first if an install is refused.
 - **Test the release APK, not the debug one.** The `INTERNET` permission and the
   cleartext policy differ between the two, and both have broken networking here
   before ([TASKS.md](../TASKS.md) — "Fixed after M3 field testing").

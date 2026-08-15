@@ -8,7 +8,6 @@ from app.models import (
     Answer,
     Badge,
     BadgeCode,
-    ChallengeAttempt,
     NotificationType,
     PointReason,
     PointTransaction,
@@ -61,18 +60,6 @@ class BadgeService:
         )
 
     @staticmethod
-    def _challenges_solved(db: Session, user_id: UUID) -> int:
-        return int(
-            db.scalar(
-                select(func.count(ChallengeAttempt.id)).where(
-                    ChallengeAttempt.user_id == user_id,
-                    ChallengeAttempt.is_solved.is_(True),
-                )
-            )
-            or 0
-        )
-
-    @staticmethod
     def _unaided_solves(db: Session, user_id: UUID) -> int:
         """Accepted answers on quests the user never bought a hint for.
 
@@ -111,7 +98,12 @@ class BadgeService:
         if user.streak_days >= 30:
             earned.add(BadgeCode.STREAK_30)
 
-        if cls._challenges_solved(db, user.id) >= 7:
+        # Imported here, not at module scope: ChallengeService awards badges
+        # after a solve, so it imports this module — taking the dependency at
+        # import time would close the cycle.
+        from app.services.challenge_service import ChallengeService
+
+        if ChallengeService.solved_by(db, user.id) >= 7:
             earned.add(BadgeCode.CHALLENGER)
 
         if cls._unaided_solves(db, user.id) >= 1:
