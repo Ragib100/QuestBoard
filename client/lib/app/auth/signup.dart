@@ -114,30 +114,45 @@ class _SignupState extends State<Signup> {
                           'Verify your email, then set up your profile.',
                           style: TextStyle(color: AppColors.textSecondary)),
                       const SizedBox(height: 32),
-                      LabeledField(
-                        label: 'Email Address',
-                        controller: _emailController,
-                        hint: 'Enter your email',
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 20),
-                      LabeledField(
-                        label: 'Password',
-                        controller: _passwordController,
-                        hint: 'At least 8 characters',
-                        obscureText: true,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 20),
-                      LabeledField(
-                        label: 'Confirm Password',
-                        controller: _confirmController,
-                        hint: 'Re-enter your password',
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) =>
-                            (_isLoading || !_agreeTerms) ? null : _handleSignup(),
+                      AutofillGroup(
+                        child: Column(
+                          children: [
+                            LabeledField(
+                              label: 'Email Address',
+                              controller: _emailController,
+                              hint: 'Enter your email',
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            LabeledField(
+                              label: 'Password',
+                              controller: _passwordController,
+                              hint: 'At least 8 characters',
+                              obscureText: true,
+                              textInputAction: TextInputAction.next,
+                              // newPassword, not password — this is what makes
+                              // a manager offer to generate and save one.
+                              autofillHints: const [AutofillHints.newPassword],
+                            ),
+                            const SizedBox(height: 20),
+                            LabeledField(
+                              label: 'Confirm Password',
+                              controller: _confirmController,
+                              hint: 'Re-enter your password',
+                              obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              autofillHints: const [AutofillHints.newPassword],
+                              onSubmitted: (_) => (_isLoading || !_agreeTerms)
+                                  ? null
+                                  : _handleSignup(),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Row(

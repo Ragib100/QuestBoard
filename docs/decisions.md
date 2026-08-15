@@ -176,9 +176,19 @@ Two rules bind all of it, and both exist because of `test/mobile_layout_test.dar
 which pumps a single frame at 320px and asserts no overflow:
 
 1. **Animate opacity and transform, never a value the layout measures.** Tween a height
-   and the overflow test is measuring a layout that never reaches the screen. The single
-   exception, `LeaderboardPodium`, is boxed in a fixed-height `SizedBox` so its outer
-   geometry is still constant.
+   and the overflow test is measuring a layout that never reaches the screen.
+
+   `LeaderboardPodium` proved this the hard way. It first shipped tweening each
+   pedestal's `height` inside a fixed-height `SizedBox`, reasoning that a constant outer
+   box kept the parent's constraints honest. It did not: the widget test pumps one
+   frame, the pedestals start at height 0, so the test measured an empty podium and
+   passed — while the *settled* podium overflowed by 1px with a long display name and by
+   13px at 1.5x text scale. The fix was to lay the pedestal out at full height always and
+   animate a `scaleY` transform, which does not participate in layout at all. The test
+   now calls `pumpAndSettle()` and sweeps text scales 1.0–2.0.
+
+   The lesson generalises: **a passing test on an animated widget means nothing unless it
+   settles the animation first.**
 2. **Nothing repeats forever.** A pending `Timer` fails a `testWidgets` body outright,
    and an uncapped `controller.repeat()` makes `pumpAndSettle()` time out — a failure
    that surfaces months later in someone else's test. `SkeletonPulse` therefore stops

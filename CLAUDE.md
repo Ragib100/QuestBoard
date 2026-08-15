@@ -94,6 +94,7 @@ client/lib/
 | [docs/api.md](docs/api.md) | Wiring client↔server — endpoint contract + implementation status |
 | [docs/design-system.md](docs/design-system.md) | Building UI — colors, type, spacing, components |
 | [docs/decisions.md](docs/decisions.md) | Something in the code contradicts your assumption — the "why" lives here |
+| [docs/demo-script.md](docs/demo-script.md) | Recording the demo — shot list, narration, seed data, capture commands |
 
 ## Ground rules
 

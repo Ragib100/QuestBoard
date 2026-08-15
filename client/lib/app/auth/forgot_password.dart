@@ -88,6 +88,7 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           hint: 'Enter your email',
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.username, AutofillHints.email],
           onSubmitted: (_) => _isLoading ? null : _submit(),
         ),
         const SizedBox(height: 40),

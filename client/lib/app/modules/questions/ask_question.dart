@@ -46,17 +46,64 @@ class _AskQuestionState extends State<AskQuestion> {
   int? _balance;
   bool _submitting = false;
 
+  static const _minTitle = 10;
+  static const _minBody = 20;
+
   @override
   void initState() {
     super.initState();
     _loadBalance();
+    // Rebuild as the user types so the length hints and the Post button reflect
+    // what they have written. The rules used to be invisible until submit
+    // bounced them with a snackbar.
+    _titleController.addListener(_onTyped);
+    _bodyController.addListener(_onTyped);
   }
+
+  void _onTyped() => setState(() {});
 
   @override
   void dispose() {
+    _titleController.removeListener(_onTyped);
+    _bodyController.removeListener(_onTyped);
     _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
+  }
+
+  int get _titleLength => _titleController.text.trim().length;
+  int get _bodyLength => _bodyController.text.trim().length;
+  bool get _canPost => _titleLength >= _minTitle && _bodyLength >= _minBody;
+  bool get _hasDraft => _titleLength > 0 || _bodyLength > 0;
+
+  /// Backing out of a half-written quest used to bin it without asking.
+  Future<bool> _confirmDiscard() async {
+    if (!_hasDraft) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard this quest?'),
+        content: const Text(
+            'You have not posted it yet. Leaving now loses what you wrote.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep editing')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Discard',
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
+  }
+
+  Future<void> _discardAndLeave() async {
+    if (!await _confirmDiscard()) return;
+    if (!mounted) return;
+    Navigator.pop(context, false);
   }
 
   Future<void> _loadBalance() async {
@@ -110,6 +157,18 @@ class _AskQuestionState extends State<AskQuestion> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      // Covers the system back gesture and the app bar's back arrow, which
+      // would otherwise bin a half-written quest without asking.
+      canPop: !_hasDraft,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _discardAndLeave();
+      },
+      child: _form(context),
+    );
+  }
+
+  Widget _form(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -150,6 +209,7 @@ class _AskQuestionState extends State<AskQuestion> {
                     helper: 'Be specific — imagine asking another student.',
                     hint: 'e.g. Why does my DP solution time out on n = 10^5?',
                   ),
+                  MinLengthHint(length: _titleLength, minimum: _minTitle),
                   const SizedBox(height: 24),
                   LabeledField(
                     label: 'Description',
@@ -160,6 +220,7 @@ class _AskQuestionState extends State<AskQuestion> {
                     hint: 'Describe the problem...',
                     maxLines: 8,
                   ),
+                  MinLengthHint(length: _bodyLength, minimum: _minBody),
                   const SizedBox(height: 24),
                   _tagPicker(),
                   const SizedBox(height: 28),
@@ -214,7 +275,7 @@ class _AskQuestionState extends State<AskQuestion> {
   /// primary action sits on top so it stays above the keyboard-shrunk fold.
   Widget _actions(BuildContext context) {
     final post = ElevatedButton(
-      onPressed: _submitting ? null : _submit,
+      onPressed: (_submitting || !_canPost) ? null : _submit,
       style: ElevatedButton.styleFrom(minimumSize: const Size(180, 52)),
       child: _submitting
           ? const SizedBox(
@@ -226,7 +287,9 @@ class _AskQuestionState extends State<AskQuestion> {
     );
 
     final cancel = TextButton(
-      onPressed: _submitting ? null : () => Navigator.pop(context, false),
+      onPressed: _submitting
+          ? null
+          : _discardAndLeave,
       style: TextButton.styleFrom(minimumSize: const Size(0, 52)),
       child: const Text('Cancel',
           style: TextStyle(color: AppColors.textSecondary)),

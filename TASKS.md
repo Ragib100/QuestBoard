@@ -6,7 +6,7 @@ milestones are ordered by dependency, not preference.
 
 **Now:** M6 — ship. M1–M5 are done and verified against the live database.
 
-> **Deployed and verified.** <https://questboard-mccq.onrender.com> serves all 30
+> **Deployed and verified.** <https://questboard-mccq.onrender.com> serves all 35
 > endpoints; AI hints are configured in production and answering.
 
 | Milestone | Status |
@@ -20,10 +20,10 @@ milestones are ordered by dependency, not preference.
 | M6 · Ship | 🟡 API deployed, apps not released |
 
 **Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` →
-**35/35** · `pytest` → **20/20** against the live database · **98/98** endpoint
+**37/37** · `pytest` → **20/20** against the live database · **98/98** endpoint
 assertions against the *deployed* API with real tokens · `flutter build web` and
 `flutter build apk --release --split-per-abi` → succeed · `ruff check` + `black` →
-clean · **30 API endpoints**, exercised against the real database along with every
+clean · **35 API endpoints**, exercised against the real database along with every
 guard (self-vote, self-answer, accept-by-non-author, double accept, overspend,
 unknown tag, delete-with-answers, reading someone else's notification, admin-only,
 self-suspend, suspending an admin, writing while suspended). The economy ledger nets
@@ -246,7 +246,7 @@ real free-tier provider.
       `flutter test` and a web build on every PR. The economy tests are a separate job
       that runs only when a `DATABASE_URL` secret exists, so a fork PR does not fail
       on a database it cannot reach
-- [x] Render redeployed and serving all 30 endpoints, with the AI provider set in
+- [x] Render redeployed and serving all 35 endpoints, with the AI provider set in
       its **Environment** — a real hint came back through the deployed API
 - [x] Launcher icons generated (`dart run flutter_launcher_icons` had never been run —
       the app installed with the stock Flutter icon), branded splash on all three
@@ -254,7 +254,11 @@ real free-tier provider.
       while the session resolves, and the web build no longer calls itself "client"
 - [ ] Real signing keystore before any Play Store submission — release APKs are signed
       with the debug key today
-- [ ] Final report and demo recording
+- [x] Final report written — architecture, the closed economy, testing strategy and an
+      honest list of what was left undone. Every figure measured from the repo
+- [x] [docs/demo-script.md](docs/demo-script.md) — shot-by-shot demo plan with
+      narration, the seed data each shot needs, and the capture commands
+- [ ] Record the demo itself against the script (needs a real device and a warm server)
 
 **Visual polish pass** — no feature changes; see [decisions.md](docs/decisions.md) D25
 - [x] `core/motion.dart`: shared durations/curves, `appRoute`, `FadeSlideIn`,

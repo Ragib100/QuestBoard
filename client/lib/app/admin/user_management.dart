@@ -154,6 +154,9 @@ class _UserManagementState extends State<UserManagement> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        // Without this, a list shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: _users.length,
         itemBuilder: (context, i) => AdminUserTile(

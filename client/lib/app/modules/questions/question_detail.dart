@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/labeled_field.dart';
 import '../../../core/widgets/reward_burst.dart';
 import '../../../core/widgets/skeletons.dart';
 import '../../../models/ai_hint.dart';
@@ -39,18 +40,28 @@ class _QuestionDetailState extends State<QuestionDetail> {
   String? get _myId => Supabase.instance.client.auth.currentUser?.id;
   bool get _isAuthor => _quest != null && _quest!.author.id == _myId;
 
+  static const _minAnswer = 10;
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadHintStatus();
+    // Keeps the length hint and the send button in step with what is typed.
+    _answerController.addListener(_onTyped);
   }
+
+  void _onTyped() => setState(() {});
 
   @override
   void dispose() {
+    _answerController.removeListener(_onTyped);
     _answerController.dispose();
     super.dispose();
   }
+
+  int get _answerLength => _answerController.text.trim().length;
+  bool get _canAnswer => _answerLength >= _minAnswer;
 
   Future<void> _load() async {
     setState(() {
@@ -588,12 +599,22 @@ class _QuestionDetailState extends State<QuestionDetail> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: TextField(
-                controller: _answerController,
-                minLines: 1,
-                maxLines: 5,
-                decoration:
-                    const InputDecoration(hintText: 'Write your answer...'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _answerController,
+                    minLines: 1,
+                    maxLines: 5,
+                    decoration:
+                        const InputDecoration(hintText: 'Write your answer...'),
+                  ),
+                  // Only once they have started — an untouched composer does
+                  // not need to nag.
+                  if (_answerLength > 0)
+                    MinLengthHint(length: _answerLength, minimum: _minAnswer),
+                ],
               ),
             ),
             const SizedBox(width: 12),
@@ -606,7 +627,9 @@ class _QuestionDetailState extends State<QuestionDetail> {
                         child: CircularProgressIndicator(strokeWidth: 2)),
                   )
                 : IconButton.filled(
-                    onPressed: _submitAnswer,
+                    // Disabled until the answer is long enough, instead of
+                    // accepting the tap and rejecting it with a snackbar.
+                    onPressed: _canAnswer ? _submitAnswer : null,
                     icon: const Icon(Icons.send_rounded),
                     tooltip: 'Post answer',
                   ),

@@ -279,6 +279,9 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
       onRefresh: _load,
       child: ListView.builder(
         controller: _scroll,
+        // Without this, a list shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         itemCount: _quests.length + (_hasMore ? 1 : 0),
         itemBuilder: (context, i) {

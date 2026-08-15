@@ -153,6 +153,9 @@ class _ContentModerationState extends State<ContentModeration> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        // Without this, a list shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: _quests.length,
         itemBuilder: (context, i) => ModeratedQuestTile(

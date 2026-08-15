@@ -128,6 +128,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        // Without this, a board shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         children: [
           if (hasPodium) ...[
@@ -136,10 +139,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               meId: board.me?.user.id,
               onTap: _openProfile,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
           ],
-          for (final entry in listed)
-            _row(entry, highlight: entry.user.id == board.me?.user.id),
+          // "Score" means two different things depending on the toggle above,
+          // and nothing on screen used to say which.
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              _period == 'weekly'
+                  ? 'Points earned in the last 7 days.'
+                  : 'Total points earned, all time.',
+              style: const TextStyle(
+                  color: AppColors.textMuted, fontSize: 12),
+            ),
+          ),
+          for (final (i, entry) in listed.indexed)
+            FadeSlideIn(
+              index: i,
+              child: _row(entry,
+                  highlight: entry.user.id == board.me?.user.id),
+            ),
           if (outsideTop) ...[
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),

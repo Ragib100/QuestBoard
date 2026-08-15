@@ -29,24 +29,16 @@ class LeaderboardPodium extends StatelessWidget {
 
   final ValueChanged<String>? onTap;
 
-  /// The whole podium is a fixed height, and the pedestals grow *inside* it.
-  ///
-  /// This is the one place in the app that animates something the layout
-  /// measures, so it is boxed deliberately: the podium's contribution to its
-  /// parent's constraints is constant at every frame, which keeps the 320px
-  /// overflow test measuring the real geometry rather than a transient one.
-  static const _height = 178.0;
-
   static const _pedestal = {1: 66.0, 2: 50.0, 3: 38.0};
   static const _avatar = {1: 26.0, 2: 21.0, 3: 21.0};
 
-  static Color _accent(int rank) => switch (rank) {
+  static Color _accent(int place) => switch (place) {
         1 => AppColors.points,
         2 => AppColors.textMuted,
         _ => AppColors.streak,
       };
 
-  static Color _tint(int rank) => switch (rank) {
+  static Color _tint(int place) => switch (place) {
         1 => AppColors.warningTint,
         2 => AppColors.subtleFill,
         _ => AppColors.points.withValues(alpha: 0.12),
@@ -58,41 +50,53 @@ class LeaderboardPodium extends StatelessWidget {
     // does not exist. The caller falls back to flat rows instead.
     if (top3.length < 3) return const SizedBox.shrink();
 
-    final order = [top3[1], top3[0], top3[2]]; // 2 · 1 · 3, tallest centred
+    // Place comes from position in the list, not from `entry.rank`. The server
+    // returns these in rank order, and a tie or a missing rank sends `rank`
+    // back as 0 — which used to paint all three plinths bronze and the same
+    // height.
+    const order = [1, 0, 2]; // 2 · 1 · 3, tallest centred
 
-    return SizedBox(
-      height: _height,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (final entry in order)
-            Expanded(child: _Plinth(
-              entry: entry,
-              isMe: entry.user.id == meId,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (final i in order)
+          Expanded(
+            child: _Plinth(
+              entry: top3[i],
+              place: i + 1,
+              isMe: top3[i].user.id == meId,
               onTap: onTap,
-            )),
-        ],
-      ),
+            ),
+          ),
+      ],
     );
   }
 }
 
 class _Plinth extends StatelessWidget {
-  const _Plinth({required this.entry, required this.isMe, this.onTap});
+  const _Plinth({
+    required this.entry,
+    required this.place,
+    required this.isMe,
+    this.onTap,
+  });
 
   final LeaderboardEntry entry;
+
+  /// 1, 2 or 3 — position on the podium, not `entry.rank`.
+  final int place;
+
   final bool isMe;
   final ValueChanged<String>? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final rank = entry.rank;
-    final accent = LeaderboardPodium._accent(rank);
-    final height = LeaderboardPodium._pedestal[rank] ?? 38.0;
-    final avatarRadius = LeaderboardPodium._avatar[rank] ?? 21.0;
+    final accent = LeaderboardPodium._accent(place);
+    final height = LeaderboardPodium._pedestal[place] ?? 38.0;
+    final avatarRadius = LeaderboardPodium._avatar[place] ?? 21.0;
 
     // Third place rises first, then second, then first.
-    final delay = switch (rank) { 1 => 160, 2 => 80, _ => 0 };
+    final delay = switch (place) { 1 => 160, 2 => 80, _ => 0 };
 
     return InkWell(
       onTap: onTap == null ? null : () => onTap!(entry.user.id),
@@ -100,6 +104,7 @@ class _Plinth extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Container(
@@ -117,7 +122,7 @@ class _Plinth extends StatelessWidget {
                 child: Text(
                   entry.user.initial,
                   style: TextStyle(
-                    fontSize: rank == 1 ? 18 : 15,
+                    fontSize: place == 1 ? 18 : 15,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
@@ -146,8 +151,18 @@ class _Plinth extends StatelessWidget {
               child: PointsBadge(points: entry.score, label: '${entry.score}'),
             ),
             const SizedBox(height: 6),
+            // The pedestal is laid out at its full height from frame 0 and only
+            // *drawn* growing, via a scaleY transform.
+            //
+            // It used to tween the Container's height directly. That made the
+            // podium's real size arrive one frame later than its final layout,
+            // so the widget test — which pumps a single frame — was measuring
+            // the podium at zero pedestal height and passing, while the settled
+            // podium overflowed its fixed-height box by 1px with a long name and
+            // by 13px at 1.5x text scale. Transform does not participate in
+            // layout, so what the test measures is now what the user sees.
             TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: height),
+              tween: Tween(begin: 0.0, end: 1.0),
               duration: Duration(
                   milliseconds: AppMotion.slow.inMilliseconds + delay),
               curve: Interval(
@@ -155,29 +170,32 @@ class _Plinth extends StatelessWidget {
                 1,
                 curve: AppMotion.standard,
               ),
-              builder: (context, h, _) => Container(
-                height: h,
+              builder: (context, t, child) => Transform.scale(
+                scaleY: t,
+                alignment: Alignment.bottomCenter,
+                child: child,
+              ),
+              child: Container(
+                height: height,
                 width: double.infinity,
                 alignment: Alignment.topCenter,
                 decoration: BoxDecoration(
-                  color: LeaderboardPodium._tint(rank),
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(12)),
+                  color: LeaderboardPodium._tint(place),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
                   border: Border.all(color: accent.withValues(alpha: 0.35)),
                 ),
-                child: h < 20
-                    ? null
-                    : Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '$rank',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: accent,
-                          ),
-                        ),
-                      ),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '$place',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: accent,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

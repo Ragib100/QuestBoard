@@ -73,8 +73,16 @@ pending `Timer` fails a `testWidgets` body outright while an uncapped
 cycle-capped. `SkeletonPulse` stops after six cycles for exactly this reason, and a test
 asserts that it does.
 
-The one deliberate exception is `LeaderboardPodium`, whose pedestals grow inside a fixed
-outer `SizedBox` so its contribution to the parent's constraints stays constant.
+There are **no exceptions**. `LeaderboardPodium` looks like one — its pedestals rise —
+but they are laid out at full height from frame 0 and only *drawn* growing, via a
+`scaleY` transform. The first version did tween the height inside a fixed-height box,
+which passed the widget test and overflowed in real use; see [decisions.md](decisions.md)
+D25.
+
+**Testing animated widgets:** a single `pump()` measures frame 0, which for an entry
+animation is the state nobody ever sees. Always `pumpAndSettle()` before asserting, and
+run the text scales — 1.0 through 2.0 — because a layout that fits at default scale is
+not the same layout at 1.5x.
 
 Helpers: `appRoute()` for pushes, `FadeSlideIn(index:)` for staggered list entry (wrap at
 the call site, not inside the tile), `TabTransition` for the dashboard's tabs,

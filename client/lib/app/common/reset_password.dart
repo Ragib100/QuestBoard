@@ -95,6 +95,7 @@ class _ResetPasswordState extends State<ResetPassword> {
                   hint: 'Enter at least 8 characters',
                   obscureText: true,
                   textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.newPassword],
                   onSubmitted: (_) => _isLoading ? null : _submit(),
                 ),
                 const SizedBox(height: 40),

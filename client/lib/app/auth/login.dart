@@ -101,21 +101,35 @@ class _LoginState extends State<Login> {
                       const Text('Login to continue to QuestBoard.',
                           style: TextStyle(color: AppColors.textSecondary)),
                       const SizedBox(height: 32),
-                      LabeledField(
-                        label: 'Email Address',
-                        controller: _emailController,
-                        hint: 'Enter your email',
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 20),
-                      LabeledField(
-                        label: 'Password',
-                        controller: _passwordController,
-                        hint: 'Enter your password',
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _isLoading ? null : _handleLogin(),
+                      // AutofillGroup is what lets Android and the browser
+                      // offer to fill — and then to save — the pair.
+                      AutofillGroup(
+                        child: Column(
+                          children: [
+                            LabeledField(
+                              label: 'Email Address',
+                              controller: _emailController,
+                              hint: 'Enter your email',
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            LabeledField(
+                              label: 'Password',
+                              controller: _passwordController,
+                              hint: 'Enter your password',
+                              obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              autofillHints: const [AutofillHints.password],
+                              onSubmitted: (_) =>
+                                  _isLoading ? null : _handleLogin(),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Align(

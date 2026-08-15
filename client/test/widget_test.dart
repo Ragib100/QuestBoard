@@ -149,4 +149,33 @@ void main() {
     expect(terms, [''], reason: 'clearing must not wait out the debounce');
     expect(find.byTooltip('Clear'), findsNothing, reason: 'button hides when empty');
   });
+
+  /// The quest and answer composers both enforce a minimum length that used to
+  /// stay secret until submit bounced the user with a snackbar. Both now show
+  /// this hint while typing and keep their button disabled until it passes.
+  testWidgets('MinLengthHint counts down, then confirms',
+      (WidgetTester tester) async {
+    Future<void> pumpAt(int length, int minimum) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MinLengthHint(length: length, minimum: minimum),
+            ),
+          ),
+        );
+
+    await pumpAt(0, 20);
+    expect(find.text('20 more characters needed'), findsOneWidget);
+
+    // Singular, not "1 more characters needed".
+    await pumpAt(19, 20);
+    expect(find.text('1 more character needed'), findsOneWidget);
+
+    await pumpAt(20, 20);
+    expect(find.text('Looks good'), findsOneWidget);
+
+    // Stops counting once satisfied rather than reading out a running total.
+    await pumpAt(1204, 20);
+    expect(find.text('Looks good'), findsOneWidget);
+    expect(find.textContaining('character'), findsNothing);
+  });
 }

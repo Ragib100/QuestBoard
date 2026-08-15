@@ -148,11 +148,13 @@ void main() {
     expect(find.text('12345'), findsOneWidget);
   });
 
-  /// The podium is the one widget in the app that animates a height, so it is
-  /// boxed at a fixed outer size and the pedestals grow inside it. Pumping it
-  /// with a long name and a seven-figure score is what proves the three columns
-  /// still divide 320px cleanly.
-  testWidgets('the leaderboard podium fits a phone', (WidgetTester tester) async {
+  /// The podium animates its pedestals, so a single `pump()` measures it at
+  /// zero pedestal height — which is not what anyone ever sees. This settles the
+  /// animation first, and runs the text scales too, because the first version of
+  /// this test passed on frame 0 while the settled podium overflowed by 13px at
+  /// 1.5x scale.
+  testWidgets('the leaderboard podium fits a phone at every text scale',
+      (WidgetTester tester) async {
     final top3 = [
       for (var i = 1; i <= 3; i++)
         LeaderboardEntry(
@@ -164,8 +166,40 @@ void main() {
     ];
 
     for (final size in const [_phone, _narrow]) {
-      await _pumpAt(tester, LeaderboardPodium(top3: top3, meId: 'u1'), size);
-      expect(tester.takeException(), isNull, reason: 'at $size');
+      for (final scale in const [1.0, 1.3, 1.5, 2.0]) {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: Scaffold(
+                body: LeaderboardPodium(top3: top3, meId: 'u1')),
+          ),
+        ));
+        await tester.pump();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull,
+            reason: 'at $size, text scale $scale');
+      }
+    }
+  });
+
+  /// `rank` comes back as 0 when the server cannot resolve one (a tie, or a
+  /// weekly board with no ledger rows). The podium used to read its colours and
+  /// heights straight off it, which painted all three plinths identical.
+  testWidgets('the podium ranks by position, not by a missing rank field',
+      (WidgetTester tester) async {
+    final unranked = [
+      for (var i = 0; i < 3; i++)
+        LeaderboardEntry(rank: 0, score: 10, user: _user()),
+    ];
+
+    await _pumpAt(tester, LeaderboardPodium(top3: unranked), _narrow);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    for (final place in const ['1', '2', '3']) {
+      expect(find.text(place), findsOneWidget, reason: 'plinth $place');
     }
   });
 

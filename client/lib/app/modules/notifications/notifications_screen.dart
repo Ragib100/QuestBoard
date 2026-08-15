@@ -124,6 +124,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        // Without this, a list shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         itemCount: _items.length,
         itemBuilder: (context, i) => _tile(_items[i]),
