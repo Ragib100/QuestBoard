@@ -7,11 +7,14 @@ import 'package:client/app/admin/user_management.dart';
 import 'package:client/app/auth/email_verification.dart';
 import 'package:client/app/common/reset_password.dart';
 import 'package:client/app/modules/daily_challenge/daily_challenge_screen.dart';
+import 'package:client/app/modules/leaderboard/leaderboard_podium.dart';
 import 'package:client/app/modules/profile/codeforces_verify.dart';
 import 'package:client/app/modules/questions/browse_questions.dart';
 import 'package:client/core/widgets/async_states.dart';
+import 'package:client/core/widgets/skeletons.dart';
 import 'package:client/models/admin.dart';
 import 'package:client/models/challenge.dart';
+import 'package:client/models/gamification.dart';
 import 'package:client/models/quest.dart';
 
 /// QuestBoard is mobile-first, so "does it fit a phone" is the default question
@@ -136,6 +139,84 @@ void main() {
       _narrow,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  /// view_count was parsed into [Quest] from the first version of the feed and
+  /// then rendered nowhere for the entire life of the project. This pins it.
+  testWidgets('a quest tile shows its view count', (WidgetTester tester) async {
+    await _pumpAt(tester, QuestTile(quest: _quest(), onTap: () {}), _phone);
+    expect(find.text('12345'), findsOneWidget);
+  });
+
+  /// The podium animates its pedestals, so a single `pump()` measures it at
+  /// zero pedestal height — which is not what anyone ever sees. This settles the
+  /// animation first, and runs the text scales too, because the first version of
+  /// this test passed on frame 0 while the settled podium overflowed by 13px at
+  /// 1.5x scale.
+  testWidgets('the leaderboard podium fits a phone at every text scale',
+      (WidgetTester tester) async {
+    final top3 = [
+      for (var i = 1; i <= 3; i++)
+        LeaderboardEntry(
+          rank: i,
+          score: 9876543,
+          user: _user(
+              first: 'Bartholomew', last: 'Featherstonehaugh-Cholmondeley'),
+        ),
+    ];
+
+    for (final size in const [_phone, _narrow]) {
+      for (final scale in const [1.0, 1.3, 1.5, 2.0]) {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: Scaffold(
+                body: LeaderboardPodium(top3: top3, meId: 'u1')),
+          ),
+        ));
+        await tester.pump();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull,
+            reason: 'at $size, text scale $scale');
+      }
+    }
+  });
+
+  /// `rank` comes back as 0 when the server cannot resolve one (a tie, or a
+  /// weekly board with no ledger rows). The podium used to read its colours and
+  /// heights straight off it, which painted all three plinths identical.
+  testWidgets('the podium ranks by position, not by a missing rank field',
+      (WidgetTester tester) async {
+    final unranked = [
+      for (var i = 0; i < 3; i++)
+        LeaderboardEntry(rank: 0, score: 10, user: _user()),
+    ];
+
+    await _pumpAt(tester, LeaderboardPodium(top3: unranked), _narrow);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    for (final place in const ['1', '2', '3']) {
+      expect(find.text(place), findsOneWidget, reason: 'plinth $place');
+    }
+  });
+
+  /// Skeletons pulse, and a pulse is the kind of animation that quietly makes
+  /// `pumpAndSettle()` time out forever. The cap in [SkeletonPulse] is what
+  /// stops that, and this test is the thing that would catch its removal.
+  testWidgets('skeletons settle instead of pulsing forever',
+      (WidgetTester tester) async {
+    for (final size in const [_phone, _narrow]) {
+      await _pumpScreen(
+        tester,
+        Scaffold(body: ListSkeleton(count: 4, item: QuestTileSkeleton.new)),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'at $size');
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('async states fit the narrowest phone',

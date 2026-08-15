@@ -6,7 +6,7 @@ milestones are ordered by dependency, not preference.
 
 **Now:** M6 — ship. M1–M5 are done and verified against the live database.
 
-> **Deployed and verified.** <https://questboard-mccq.onrender.com> serves all 30
+> **Deployed and verified.** <https://questboard-mccq.onrender.com> serves all 35
 > endpoints; AI hints are configured in production and answering.
 
 | Milestone | Status |
@@ -20,10 +20,10 @@ milestones are ordered by dependency, not preference.
 | M6 · Ship | 🟡 API deployed, apps not released |
 
 **Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` →
-**32/32** · `pytest` → **20/20** against the live database · **98/98** endpoint
+**37/37** · `pytest` → **20/20** against the live database · **98/98** endpoint
 assertions against the *deployed* API with real tokens · `flutter build web` and
 `flutter build apk --release --split-per-abi` → succeed · `ruff check` + `black` →
-clean · **30 API endpoints**, exercised against the real database along with every
+clean · **35 API endpoints**, exercised against the real database along with every
 guard (self-vote, self-answer, accept-by-non-author, double accept, overspend,
 unknown tag, delete-with-answers, reading someone else's notification, admin-only,
 self-suspend, suspending an admin, writing while suspended). The economy ledger nets
@@ -246,11 +246,50 @@ real free-tier provider.
       `flutter test` and a web build on every PR. The economy tests are a separate job
       that runs only when a `DATABASE_URL` secret exists, so a fork PR does not fail
       on a database it cannot reach
-- [x] Render redeployed and serving all 30 endpoints, with the AI provider set in
+- [x] Render redeployed and serving all 35 endpoints, with the AI provider set in
       its **Environment** — a real hint came back through the deployed API
+- [x] Launcher icons generated (`dart run flutter_launcher_icons` had never been run —
+      the app installed with the stock Flutter icon), branded splash on all three
+      surfaces (`drawable/`, `drawable-v21/`, `values-v31/`) plus an in-app splash
+      while the session resolves, and the web build no longer calls itself "client"
 - [ ] Real signing keystore before any Play Store submission — release APKs are signed
       with the debug key today
-- [ ] Final report and demo recording
+- [x] Final report written — architecture, the closed economy, testing strategy and an
+      honest list of what was left undone. Every figure measured from the repo
+- [x] [docs/demo-script.md](docs/demo-script.md) — shot-by-shot demo plan with
+      narration, the seed data each shot needs, and the capture commands
+- [ ] Record the demo itself against the script (needs a real device and a warm server)
+
+**Visual polish pass** — no feature changes; see [decisions.md](docs/decisions.md) D25
+- [x] `core/motion.dart`: shared durations/curves, `appRoute`, `FadeSlideIn`,
+      `TabTransition`, `CountUpText`. Zero new dependencies — the app had no animation
+      of any kind before this
+- [x] `core/widgets/skeletons.dart` replaces the bare spinner on 8 screens; the pulse
+      is cycle-capped so it cannot hang `pumpAndSettle`, and a test asserts that
+- [x] `AppCard` — one card shape, replacing ~15 hand-written `BoxDecoration`s whose
+      radii had drifted across 16/20/24, and deleting the two `boxShadow`/`elevation`
+      uses that contradicted the no-shadow rule
+- [x] Full `TextTheme` scale + `appBarTheme` (`scrolledUnderElevation: 0`, which was
+      tinting every app bar grey mid-scroll), `snackBarTheme`, `segmentedButtonTheme`
+      and eight more themed blocks
+- [x] `LeaderboardPodium` for the top three, replacing the 🥇🥈🥉 emoji in a flat list
+- [x] `showRewardBurst` on bounty transfer and challenge claim — the two moments that
+      previously produced no feedback at all
+- [x] `showAppSnack` with success/error tones across all 19 call sites; they were
+      previously identical whether you posted an answer or lost your session
+- [x] Real data that the server already returned but nothing rendered: `view_count` on
+      quest tiles, and `points_in_circulation` promoted to a hero card on the admin
+      dashboard with the closed-economy note
+- [x] Earned-vs-spent breakdown on the point ledger, labelled "across your last N
+      entries" because `/users/{id}/points` is capped at 50 server-side
+- [x] Three `Image.network` calls pointing at `.svg` URLs replaced with a local
+      `BrandArt` painter. Flutter cannot decode SVG without `flutter_svg`, so those had
+      *never* rendered on any platform — the hero art was always the fallback icon
+- [x] Removed ~1.7MB of bundled assets that no `Image.asset` call ever referenced
+- [ ] `GoogleFonts.*` → `Theme.of(context).textTheme` in the remaining ~29 call sites
+      (intro/login/signup/forgot_password left alone deliberately — they are the
+      screens `layout_test.dart` covers and there is no payoff in touching them)
+- [ ] `GET /users/{id}/streak` is still never called; `last_active` remains unsurfaced
 
 **Final pass**
 - [x] Every endpoint exercised against the **deployed** API with real tokens —

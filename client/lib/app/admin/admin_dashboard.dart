@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/motion.dart';
+import '../../core/widgets/app_card.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/skeletons.dart';
 import '../../models/admin.dart';
 import '../../services/api/api_client.dart';
 import '../../services/common/admin_service.dart';
@@ -63,7 +66,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ],
       ),
       body: _loading
-          ? const LoadingState()
+          ? const StatGridSkeleton()
           : _error != null
               ? ErrorState(message: _error!, onRetry: _load)
               : RefreshIndicator(
@@ -109,6 +112,8 @@ class AdminDashboardView extends StatelessWidget {
           style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
         const SizedBox(height: 20),
+        _circulationCard(context),
+        const SizedBox(height: 12),
         _statGrid(),
         const SizedBox(height: 32),
         Text('Moderation',
@@ -135,18 +140,66 @@ class AdminDashboardView extends StatelessWidget {
     );
   }
 
+  /// Points in circulation, promoted out of the tile grid.
+  ///
+  /// It was a number in a box like any other, which undersold it: it is the one
+  /// figure that demonstrates the closed economy. Points are only ever moved
+  /// between users, never minted or destroyed, because every transfer writes a
+  /// ledger row inside the same transaction (decisions.md D15 and D20) — and
+  /// server/tests asserts that the ledger nets to zero.
+  Widget _circulationCard(BuildContext context) {
+    return AppCard(
+      background: AppColors.warningTint,
+      borderColor: AppColors.points.withValues(alpha: 0.35),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.stars_rounded,
+                  color: AppColors.warningDark, size: 20),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text('Points in circulation',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.warningDark)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          CountUpText(
+            value: stats.pointsInCirculation,
+            style: GoogleFonts.outfit(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: AppColors.warningDark),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Points are never minted or destroyed — every transfer writes a '
+            'ledger row inside the same transaction.',
+            style: GoogleFonts.inter(
+                fontSize: 12, color: AppColors.warningDark, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Two up on a phone, three on desktop. LayoutBuilder rather than a Row so
   /// the tiles get a real width instead of overflowing a narrow screen.
   Widget _statGrid() {
     final tiles = [
       _stat('${stats.totalUsers}', 'Users', Icons.people_rounded, AppColors.primary),
-      _stat('${stats.totalQuests}', 'Quests', Icons.bolt_rounded, Colors.orange),
+      _stat('${stats.totalQuests}', 'Quests', Icons.bolt_rounded,
+          AppColors.streak),
       _stat('${stats.openQuests}', 'Unsolved', Icons.help_outline_rounded,
           AppColors.warningDark),
       _stat('${stats.totalAnswers}', 'Answers', Icons.question_answer_rounded,
           AppColors.success),
-      _stat('${stats.pointsInCirculation}', 'Points in circulation',
-          Icons.stars_rounded, AppColors.points),
       _stat('${stats.suspendedUsers}', 'Suspended', Icons.block_rounded,
           AppColors.danger),
     ];

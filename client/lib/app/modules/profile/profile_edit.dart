@@ -10,6 +10,7 @@ import '../../../models/profile.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/user_service.dart';
 import 'codeforces_verify.dart';
+import '../../../core/widgets/app_snack.dart';
 
 /// Editing form. The fields mirror the `users` table exactly — there is no
 /// `bio` column, so there is no bio field.
@@ -48,10 +49,9 @@ class _ProfileEditState extends State<ProfileEdit> {
     super.dispose();
   }
 
-  void _notify(String message) {
+  void _notify(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   Future<void> _pickImage() async {

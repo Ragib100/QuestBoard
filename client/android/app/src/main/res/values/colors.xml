@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- AppColors.surface. QuestBoard is light-only (decisions.md D2), so the
+         night variants of the splash deliberately point at this same white —
+         an OS-chosen dark splash in front of a light app reads as unfinished. -->
+    <color name="launch_background">#FFFFFF</color>
+</resources>

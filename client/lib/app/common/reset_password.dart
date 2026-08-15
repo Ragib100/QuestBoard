@@ -7,6 +7,7 @@ import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
 import '../auth/login.dart';
 import '../../core/app_colors.dart';
+import '../../core/widgets/app_snack.dart';
 
 class ResetPassword extends StatefulWidget {
   const ResetPassword({super.key});
@@ -25,10 +26,9 @@ class _ResetPasswordState extends State<ResetPassword> {
     super.dispose();
   }
 
-  void _tell(String message) {
+  void _tell(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   Future<void> _submit() async {
@@ -51,9 +51,8 @@ class _ResetPasswordState extends State<ResetPassword> {
       if (!mounted) return;
       // Reached via a deep link with pushAndRemoveUntil, so there is nothing to
       // pop back to — send the user to login with their new password.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password updated. Please sign in.')),
-      );
+      showAppSnack(context, 'Password updated. Please sign in.',
+          tone: SnackTone.success);
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const Login()),
@@ -96,6 +95,7 @@ class _ResetPasswordState extends State<ResetPassword> {
                   hint: 'Enter at least 8 characters',
                   obscureText: true,
                   textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.newPassword],
                   onSubmitted: (_) => _isLoading ? null : _submit(),
                 ),
                 const SizedBox(height: 40),

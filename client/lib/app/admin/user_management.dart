@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/widgets/app_snack.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/skeletons.dart';
 import '../../core/widgets/search_field.dart';
 import '../../models/admin.dart';
 import '../../services/api/api_client.dart';
@@ -96,8 +98,7 @@ class _UserManagementState extends State<UserManagement> {
       setState(() => _busyId = null);
       // The server refuses self-suspension and suspending another admin; both
       // arrive here as a plain sentence worth showing verbatim.
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      showAppSnack(context, e.message, tone: SnackTone.error);
     }
   }
 
@@ -136,7 +137,9 @@ class _UserManagementState extends State<UserManagement> {
   }
 
   Widget _body() {
-    if (_loading) return const LoadingState();
+    if (_loading) {
+      return ListSkeleton(count: 6, item: NotificationRowSkeleton.new);
+    }
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);
     if (_users.isEmpty) {
       return EmptyState(
@@ -151,6 +154,9 @@ class _UserManagementState extends State<UserManagement> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        // Without this, a list shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: _users.length,
         itemBuilder: (context, i) => AdminUserTile(

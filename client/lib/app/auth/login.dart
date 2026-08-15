@@ -4,11 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/widgets/brand_art.dart';
 import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
 import 'forgot_password.dart';
 import 'post_login_router.dart';
 import 'signup.dart';
+import '../../core/widgets/app_snack.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -55,10 +57,9 @@ class _LoginState extends State<Login> {
     }
   }
 
-  void _showError(String message) {
+  void _showError(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   @override
@@ -100,21 +101,35 @@ class _LoginState extends State<Login> {
                       const Text('Login to continue to QuestBoard.',
                           style: TextStyle(color: AppColors.textSecondary)),
                       const SizedBox(height: 32),
-                      LabeledField(
-                        label: 'Email Address',
-                        controller: _emailController,
-                        hint: 'Enter your email',
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 20),
-                      LabeledField(
-                        label: 'Password',
-                        controller: _passwordController,
-                        hint: 'Enter your password',
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _isLoading ? null : _handleLogin(),
+                      // AutofillGroup is what lets Android and the browser
+                      // offer to fill — and then to save — the pair.
+                      AutofillGroup(
+                        child: Column(
+                          children: [
+                            LabeledField(
+                              label: 'Email Address',
+                              controller: _emailController,
+                              hint: 'Enter your email',
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            LabeledField(
+                              label: 'Password',
+                              controller: _passwordController,
+                              hint: 'Enter your password',
+                              obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              autofillHints: const [AutofillHints.password],
+                              onSubmitted: (_) =>
+                                  _isLoading ? null : _handleLogin(),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -175,14 +190,7 @@ class _LoginState extends State<Login> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.network(
-                        'https://illustrations.popsy.co/blue/work-from-home.svg',
-                        width: 400,
-                        errorBuilder: (_, __, ___) => const Icon(
-                            Icons.bolt_rounded,
-                            size: 160,
-                            color: AppColors.primary),
-                      ),
+                      const BrandArt(size: 280),
                       const SizedBox(height: 40),
                       Text('Unlock your potential',
                           style: GoogleFonts.outfit(

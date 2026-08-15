@@ -7,6 +7,7 @@ import '../../../models/challenge.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/challenge_service.dart';
 import '../daily_challenge/daily_challenge_screen.dart' show CopyableUrl;
+import '../../../core/widgets/app_snack.dart';
 
 /// Proves the Codeforces handle on a profile belongs to the person holding it.
 ///
@@ -46,10 +47,9 @@ class _CodeforcesVerifyState extends State<CodeforcesVerify> {
     }
   }
 
-  void _tell(String message) {
+  void _tell(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   Future<void> _check() async {
@@ -57,7 +57,7 @@ class _CodeforcesVerifyState extends State<CodeforcesVerify> {
     try {
       await ChallengeService.instance.confirmVerification();
       if (!mounted) return;
-      _tell('Handle verified.');
+      _tell('Handle verified.', tone: SnackTone.success);
       Navigator.pop(context, true);
     } on ApiException catch (e) {
       _tell(e.message);

@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/motion.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/skeletons.dart';
 import '../../../models/gamification.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/gamification_service.dart';
 import '../profile/profile_screen.dart';
+import 'leaderboard_podium.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key, this.embedded = false});
@@ -97,7 +100,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _body() {
-    if (_loading) return const LoadingState();
+    if (_loading) {
+      return ListSkeleton(count: 7, item: LeaderboardRowSkeleton.new);
+    }
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);
 
     final board = _board!;
@@ -115,13 +120,45 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final outsideTop = board.me != null &&
         !board.entries.any((e) => e.user.id == board.me!.user.id);
 
+    // The podium needs a full set of three; below that it renders nothing and
+    // everyone stays in the flat list, so the two must agree on where to start.
+    final hasPodium = board.entries.length >= 3;
+    final listed = hasPodium ? board.entries.skip(3) : board.entries;
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        // Without this, a board shorter than the screen is not scrollable and
+        // pull-to-refresh silently does nothing.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
         children: [
-          for (final entry in board.entries)
-            _row(entry, highlight: entry.user.id == board.me?.user.id),
+          if (hasPodium) ...[
+            LeaderboardPodium(
+              top3: board.entries.take(3).toList(),
+              meId: board.me?.user.id,
+              onTap: _openProfile,
+            ),
+            const SizedBox(height: 20),
+          ],
+          // "Score" means two different things depending on the toggle above,
+          // and nothing on screen used to say which.
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              _period == 'weekly'
+                  ? 'Points earned in the last 7 days.'
+                  : 'Total points earned, all time.',
+              style: const TextStyle(
+                  color: AppColors.textMuted, fontSize: 12),
+            ),
+          ),
+          for (final (i, entry) in listed.indexed)
+            FadeSlideIn(
+              index: i,
+              child: _row(entry,
+                  highlight: entry.user.id == board.me?.user.id),
+            ),
           if (outsideTop) ...[
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -143,20 +180,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  Widget _row(LeaderboardEntry entry, {bool highlight = false}) {
-    final medal = switch (entry.rank) {
-      1 => '🥇',
-      2 => '🥈',
-      3 => '🥉',
-      _ => null,
-    };
-
-    return InkWell(
-      onTap: () => Navigator.push(
+  void _openProfile(String userId) => Navigator.push(
         context,
-        MaterialPageRoute(
-            builder: (_) => ProfileScreen(userId: entry.user.id)),
-      ),
+        appRoute((_) => ProfileScreen(userId: userId)),
+      );
+
+  Widget _row(LeaderboardEntry entry, {bool highlight = false}) {
+    return InkWell(
+      onTap: () => _openProfile(entry.user.id),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -169,16 +200,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ),
         child: Row(
           children: [
+            // Ranks 1–3 are on the podium above, so this column only ever
+            // renders a plain number now.
             SizedBox(
               width: 36,
-              child: medal != null
-                  ? Text(medal, style: const TextStyle(fontSize: 22))
-                  : Text(
-                      entry.rank == 0 ? '—' : '${entry.rank}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textMuted),
-                    ),
+              child: Text(
+                entry.rank == 0 ? '—' : '${entry.rank}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: AppColors.textMuted),
+              ),
             ),
             CircleAvatar(
               radius: 18,

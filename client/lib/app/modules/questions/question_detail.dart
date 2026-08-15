@@ -4,11 +4,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/labeled_field.dart';
+import '../../../core/widgets/reward_burst.dart';
+import '../../../core/widgets/skeletons.dart';
 import '../../../models/ai_hint.dart';
 import '../../../models/quest.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/hint_service.dart';
 import '../../../services/common/quest_service.dart';
+import '../../../core/widgets/app_snack.dart';
 
 class QuestionDetail extends StatefulWidget {
   const QuestionDetail({super.key, required this.questId});
@@ -36,18 +40,28 @@ class _QuestionDetailState extends State<QuestionDetail> {
   String? get _myId => Supabase.instance.client.auth.currentUser?.id;
   bool get _isAuthor => _quest != null && _quest!.author.id == _myId;
 
+  static const _minAnswer = 10;
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadHintStatus();
+    // Keeps the length hint and the send button in step with what is typed.
+    _answerController.addListener(_onTyped);
   }
+
+  void _onTyped() => setState(() {});
 
   @override
   void dispose() {
+    _answerController.removeListener(_onTyped);
     _answerController.dispose();
     super.dispose();
   }
+
+  int get _answerLength => _answerController.text.trim().length;
+  bool get _canAnswer => _answerLength >= _minAnswer;
 
   Future<void> _load() async {
     setState(() {
@@ -62,10 +76,9 @@ class _QuestionDetailState extends State<QuestionDetail> {
     }
   }
 
-  void _notify(String message) {
+  void _notify(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   /// Best effort. A signed-out reader, or a server with no model configured,
@@ -207,7 +220,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
       _answerController.clear();
       if (mounted) FocusScope.of(context).unfocus();
       await _load();
-      _notify('Answer posted.');
+      _notify('Answer posted.', tone: SnackTone.success);
     } on ApiException catch (e) {
       _notify(e.message);
     } finally {
@@ -245,9 +258,20 @@ class _QuestionDetailState extends State<QuestionDetail> {
     try {
       await QuestService.instance.accept(answer.id);
       await _load();
-      _notify(quest.bountyPoints > 0
-          ? '${quest.bountyPoints} points awarded.'
-          : 'Answer accepted.');
+      if (!mounted) return;
+
+      // The bounty moves *away* from whoever tapped Accept, so the copy says
+      // who received it rather than implying the tapper gained anything.
+      if (quest.bountyPoints > 0) {
+        showRewardBurst(
+          context,
+          message: 'Bounty transferred',
+          detail: '${quest.bountyPoints} points to '
+              '${answer.author.displayName}',
+        );
+      } else {
+        _notify('Answer accepted.', tone: SnackTone.success);
+      }
     } on ApiException catch (e) {
       _notify(e.message);
     }
@@ -266,7 +290,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: _loading
-          ? const LoadingState()
+          ? const QuestDetailSkeleton()
           : _error != null
               ? ErrorState(message: _error!, onRetry: _load)
               : _content(),
@@ -575,12 +599,22 @@ class _QuestionDetailState extends State<QuestionDetail> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: TextField(
-                controller: _answerController,
-                minLines: 1,
-                maxLines: 5,
-                decoration:
-                    const InputDecoration(hintText: 'Write your answer...'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _answerController,
+                    minLines: 1,
+                    maxLines: 5,
+                    decoration:
+                        const InputDecoration(hintText: 'Write your answer...'),
+                  ),
+                  // Only once they have started — an untouched composer does
+                  // not need to nag.
+                  if (_answerLength > 0)
+                    MinLengthHint(length: _answerLength, minimum: _minAnswer),
+                ],
               ),
             ),
             const SizedBox(width: 12),
@@ -593,7 +627,9 @@ class _QuestionDetailState extends State<QuestionDetail> {
                         child: CircularProgressIndicator(strokeWidth: 2)),
                   )
                 : IconButton.filled(
-                    onPressed: _submitAnswer,
+                    // Disabled until the answer is long enough, instead of
+                    // accepting the tap and rejecting it with a snackbar.
+                    onPressed: _canAnswer ? _submitAnswer : null,
                     icon: const Icon(Icons.send_rounded),
                     tooltip: 'Post answer',
                   ),

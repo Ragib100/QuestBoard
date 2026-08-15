@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/app_colors.dart';
+import '../core/widgets/brand_art.dart';
 import 'auth/login.dart';
 import 'auth/signup.dart';
 
@@ -252,11 +253,5 @@ class _HeroArt extends StatelessWidget {
   const _HeroArt();
 
   @override
-  Widget build(BuildContext context) {
-    return Image.network(
-      'https://illustrations.popsy.co/blue/creative-process.svg',
-      errorBuilder: (_, __, ___) =>
-          const Icon(Icons.bolt_rounded, size: 200, color: AppColors.primary),
-    );
-  }
+  Widget build(BuildContext context) => const BrandArt(size: 300);
 }

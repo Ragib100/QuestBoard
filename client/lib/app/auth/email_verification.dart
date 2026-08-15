@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../services/common/auth_service.dart';
 import 'login.dart';
+import '../../core/widgets/app_snack.dart';
 
 /// Where signup lands. The account exists but is unverified until the emailed
 /// link is opened, which deep-links back into ProfileCreate.
@@ -29,7 +30,8 @@ class _EmailVerificationState extends State<EmailVerification> {
     setState(() => _sending = true);
     try {
       await AuthService.instance.resendVerification(email: email);
-      _tell('Sent again. Check your inbox, and your spam folder.');
+      _tell('Sent again. Check your inbox, and your spam folder.',
+          tone: SnackTone.success);
     } on AuthException catch (e) {
       _tell(e.message);
     } catch (_) {
@@ -39,10 +41,9 @@ class _EmailVerificationState extends State<EmailVerification> {
     }
   }
 
-  void _tell(String message) {
+  void _tell(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   @override

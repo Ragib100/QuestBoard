@@ -4,10 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/widgets/brand_art.dart';
 import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
 import 'email_verification.dart';
 import 'login.dart';
+import '../../core/widgets/app_snack.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
@@ -68,10 +70,9 @@ class _SignupState extends State<Signup> {
     }
   }
 
-  void _showError(String message) {
+  void _showError(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   @override
@@ -113,30 +114,45 @@ class _SignupState extends State<Signup> {
                           'Verify your email, then set up your profile.',
                           style: TextStyle(color: AppColors.textSecondary)),
                       const SizedBox(height: 32),
-                      LabeledField(
-                        label: 'Email Address',
-                        controller: _emailController,
-                        hint: 'Enter your email',
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 20),
-                      LabeledField(
-                        label: 'Password',
-                        controller: _passwordController,
-                        hint: 'At least 8 characters',
-                        obscureText: true,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: 20),
-                      LabeledField(
-                        label: 'Confirm Password',
-                        controller: _confirmController,
-                        hint: 'Re-enter your password',
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) =>
-                            (_isLoading || !_agreeTerms) ? null : _handleSignup(),
+                      AutofillGroup(
+                        child: Column(
+                          children: [
+                            LabeledField(
+                              label: 'Email Address',
+                              controller: _emailController,
+                              hint: 'Enter your email',
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            LabeledField(
+                              label: 'Password',
+                              controller: _passwordController,
+                              hint: 'At least 8 characters',
+                              obscureText: true,
+                              textInputAction: TextInputAction.next,
+                              // newPassword, not password — this is what makes
+                              // a manager offer to generate and save one.
+                              autofillHints: const [AutofillHints.newPassword],
+                            ),
+                            const SizedBox(height: 20),
+                            LabeledField(
+                              label: 'Confirm Password',
+                              controller: _confirmController,
+                              hint: 'Re-enter your password',
+                              obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              autofillHints: const [AutofillHints.newPassword],
+                              onSubmitted: (_) => (_isLoading || !_agreeTerms)
+                                  ? null
+                                  : _handleSignup(),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Row(
@@ -199,14 +215,7 @@ class _SignupState extends State<Signup> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.network(
-                        'https://illustrations.popsy.co/blue/meditating.svg',
-                        width: 400,
-                        errorBuilder: (_, __, ___) => const Icon(
-                            Icons.bolt_rounded,
-                            size: 160,
-                            color: AppColors.primary),
-                      ),
+                      const BrandArt(size: 280),
                       const SizedBox(height: 40),
                       Text('Built by students, for students',
                           style: GoogleFonts.outfit(

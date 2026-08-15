@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/widgets/labeled_field.dart';
 import '../../services/common/auth_service.dart';
+import '../../core/widgets/app_snack.dart';
 
 class ForgotPassword extends StatefulWidget {
   const ForgotPassword({super.key});
@@ -42,10 +43,9 @@ class _ForgotPasswordState extends State<ForgotPassword> {
     }
   }
 
-  void _showMessage(String message) {
+  void _showMessage(String message, {SnackTone tone = SnackTone.error}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, tone: tone);
   }
 
   @override
@@ -88,6 +88,7 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           hint: 'Enter your email',
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.username, AutofillHints.email],
           onSubmitted: (_) => _isLoading ? null : _submit(),
         ),
         const SizedBox(height: 40),

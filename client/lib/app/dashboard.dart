@@ -10,6 +10,8 @@ import 'modules/daily_challenge/daily_challenge_screen.dart';
 import 'modules/notifications/notifications_screen.dart';
 import 'modules/profile/profile_screen.dart';
 import '../core/app_colors.dart';
+import '../core/motion.dart';
+import '../core/widgets/app_card.dart';
 import '../core/widgets/async_states.dart';
 import '../core/widgets/search_field.dart';
 import '../models/profile.dart';
@@ -112,9 +114,16 @@ class _DashboardState extends State<Dashboard> {
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1400),
-                        child: IndexedStack(
+                        // Wraps the stack rather than replacing it: an
+                        // AnimatedSwitcher keyed on the index would cross-fade
+                        // identically but rebuild every tab from scratch on
+                        // each tap, re-firing their loads and losing scroll.
+                        child: TabTransition(
                           index: _currentIndex,
-                          children: pages,
+                          child: IndexedStack(
+                            index: _currentIndex,
+                            children: pages,
+                          ),
                         ),
                       ),
                     ),
@@ -373,24 +382,32 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  /// The bar carried `elevation: 10`, the only drop shadow left in the app and
+  /// against docs/design-system.md. Separation now comes from a top border, the
+  /// same treatment the top app bar already uses; the rest of the styling lives
+  /// in `bottomNavigationBarTheme`.
   Widget _buildMobileNav() {
-    return BottomNavigationBar(
-      currentIndex: _currentIndex,
-      onTap: (index) {
-        setState(() => _currentIndex = index);
-        _refresh();
-      },
-      backgroundColor: Colors.white,
-      selectedItemColor: AppColors.primary,
-      unselectedItemColor: AppColors.textMuted,
-      type: BottomNavigationBarType.fixed,
-      elevation: 10,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'Quests'),
-        BottomNavigationBarItem(icon: Icon(Icons.emoji_events_rounded), label: 'Ranks'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
-      ],
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          _refresh();
+        },
+        items: const [
+          BottomNavigationBarItem(
+              icon: Icon(Icons.grid_view_rounded), label: 'Home'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.explore_rounded), label: 'Quests'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.emoji_events_rounded), label: 'Ranks'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded), label: 'Profile'),
+        ],
+      ),
     );
   }
 }
@@ -576,14 +593,14 @@ class _UserHomeState extends State<UserHome> {
   /// a real width to size against instead of letting them overflow.
   Widget _buildStatsRow(bool isWeb) {
     final tiles = [
-      _statCard('${_me?.points ?? 0}', 'Points', Icons.stars_rounded,
+      _statCard(_me?.points ?? 0, 'Points', Icons.stars_rounded,
           AppColors.points),
-      _statCard('$_openQuests', 'Open Quests', Icons.bolt_rounded,
-          Colors.orange),
-      _statCard('${_me?.streakDays ?? 0}', 'Day Streak',
+      _statCard(_openQuests, 'Open Quests', Icons.bolt_rounded,
+          AppColors.primary),
+      _statCard(_me?.streakDays ?? 0, 'Day Streak',
           Icons.local_fire_department_rounded, AppColors.streak),
-      _statCard('$_badgeCount', 'Badges', Icons.verified_rounded,
-          Colors.purple),
+      _statCard(_badgeCount, 'Badges', Icons.verified_rounded,
+          AppColors.success),
     ];
 
     return LayoutBuilder(
@@ -604,60 +621,54 @@ class _UserHomeState extends State<UserHome> {
     );
   }
 
-  Widget _statCard(String value, String label, IconData icon, Color color) {
-    return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.border.withValues(alpha: 0.5),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
+  /// The shadow that used to be here was the only one in the app and
+  /// docs/design-system.md forbids shadows outright, so the tile now takes the
+  /// standard border treatment via [AppCard] like every other card.
+  Widget _statCard(int value, String label, IconData icon, Color color) {
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 12),
-            // Expanded + ellipsis: a four-digit score must never push the
-            // label off the edge of a narrow tile.
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          // Expanded + ellipsis: a four-digit score must never push the
+          // label off the edge of a narrow tile.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // animateFromZero is safe here: no test pumps UserHome, and
+                // the tiles build with 0 before _load() returns, so the roll-up
+                // lands exactly when the real numbers arrive.
+                CountUpText(
+                  value: value,
+                  animateFromZero: true,
+                  style: GoogleFonts.outfit(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
                   ),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -683,17 +694,19 @@ class _UserHomeState extends State<UserHome> {
             ),
           )
         else
-          for (final quest in _recent)
-            QuestTile(
-              quest: quest,
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => QuestionDetail(questId: quest.id)),
-                );
-                if (mounted) _load();
-              },
+          for (final (i, quest) in _recent.indexed)
+            FadeSlideIn(
+              index: i,
+              child: QuestTile(
+                quest: quest,
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    appRoute((_) => QuestionDetail(questId: quest.id)),
+                  );
+                  if (mounted) _load();
+                },
+              ),
             ),
         if (!isWeb) ...[
           const SizedBox(height: 32),
@@ -744,15 +757,19 @@ class _UserHomeState extends State<UserHome> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.local_fire_department, color: Colors.orange, size: 32),
+          const Icon(Icons.local_fire_department,
+              color: AppColors.streak, size: 32),
           const SizedBox(height: 16),
           Text(
             'Daily Challenge',
             style: GoogleFonts.outfit(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
+          // No number here on purpose: this card never fetches the challenge,
+          // so the bonus was hardcoded to 50 and would have quietly lied the
+          // day it changed. The real figure is on the challenge screen.
           const Text(
-            'Solve today\'s challenge and earn 50 bonus points!',
+            'Solve today\'s challenge and earn bonus points.',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 20),
