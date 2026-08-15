@@ -19,7 +19,10 @@ jobs:
       - name: Install tooling
         # Lint and format only: the runtime dependencies are not needed to
         # check style, and skipping them keeps this job under ten seconds.
-        run: pip install "black>=25,<26" "ruff>=0.14,<1.0"
+        # Pinned to a minor version, not a range: ruff 0.16 widened its default
+        # rules and failed a PR that had not touched the server. server/ruff.toml
+        # pins the rule set too, so this is belt and braces.
+        run: pip install "black>=25,<26" "ruff>=0.16,<0.17"
       - run: ruff check app
         working-directory: server
       - run: black --check app
