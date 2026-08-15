@@ -1,10 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
+import '../../../core/widgets/search_field.dart';
 import '../../../models/quest.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/quest_service.dart';
@@ -40,10 +39,8 @@ class BrowseQuestions extends StatefulWidget {
 
 class _BrowseQuestionsState extends State<BrowseQuestions> {
   final _scroll = ScrollController();
-  final _searchController = TextEditingController();
   final List<Quest> _quests = [];
 
-  Timer? _debounce;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = false;
@@ -57,8 +54,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
-    _search = widget.search;
-    _searchController.text = _search;
+    _search = widget.search.trim();
     _load();
   }
 
@@ -67,30 +63,20 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   @override
   void didUpdateWidget(BrowseQuestions old) {
     super.didUpdateWidget(old);
-    if (widget.search != old.search && widget.search != _search) {
-      _search = widget.search;
-      _searchController.text = _search;
-      _load();
-    }
+    if (widget.search.trim() != old.search.trim()) _onSearch(widget.search);
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
   }
 
-  /// One request per pause in typing, not one per keystroke.
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted || value.trim() == _search) return;
-      setState(() => _search = value.trim());
-      _load();
-    });
+  void _onSearch(String term) {
+    if (term.trim() == _search) return;
+    setState(() => _search = term.trim());
+    _load();
   }
 
   void _onScroll() {
@@ -208,26 +194,10 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   Widget _searchField() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _onSearchChanged,
-        textInputAction: TextInputAction.search,
-        decoration: InputDecoration(
-          hintText: 'Search quests',
-          prefixIcon: const Icon(Icons.search, size: 20),
-          isDense: true,
-          suffixIcon: _search.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  tooltip: 'Clear',
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _search = '');
-                    _load();
-                  },
-                ),
-        ),
+      child: SearchField(
+        hintText: 'Search quests',
+        value: widget.search,
+        onChanged: _onSearch,
       ),
     );
   }

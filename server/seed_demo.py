@@ -13,6 +13,7 @@ Demo accounts are real Supabase accounts (`demo1@questboard.test` … password
 """
 
 import argparse
+import json
 import sys
 import uuid
 
@@ -235,17 +236,27 @@ def create_account(db: Session, handle: str, first: str, last: str) -> User:
     user_id = uuid.uuid4()
     db.execute(
         text(
+            # The empty strings are not decoration: GoTrue reads these columns
+            # as strings and returns a 500 on login if any of them is NULL, so
+            # an account seeded without them exists but can never sign in.
             """insert into auth.users
                (id, instance_id, aud, role, email, encrypted_password,
-                email_confirmed_at, created_at, updated_at)
+                email_confirmed_at, created_at, updated_at,
+                raw_app_meta_data, raw_user_meta_data,
+                confirmation_token, recovery_token,
+                email_change, email_change_token_new)
                values (:id, :inst, 'authenticated', 'authenticated', :email,
-                       crypt(:password, gen_salt('bf')), now(), now(), now())"""
+                       crypt(:password, gen_salt('bf')), now(), now(), now(),
+                       '{"provider":"email","providers":["email"]}'::jsonb,
+                       cast(:metadata as jsonb),
+                       '', '', '', '')"""
         ),
         {
             "id": user_id,
             "inst": AUTH_INSTANCE,
             "email": demo_email(handle),
             "password": DEMO_PASSWORD,
+            "metadata": json.dumps({"sub": str(user_id), "email": demo_email(handle)}),
         },
     )
     user = User(id=user_id, username=handle, first_name=first, last_name=last)

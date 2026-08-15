@@ -6,9 +6,8 @@ milestones are ordered by dependency, not preference.
 
 **Now:** M6 — ship. M1–M5 are done and verified against the live database.
 
-> **The deployed API is behind this branch.** <https://questboard-mccq.onrender.com>
-> is serving a pre-M4 commit — 21 endpoints, with no `/challenges`, `/ai` or `/admin`.
-> Push and it redeploys; the app expects 30.
+> **Deployed and verified.** <https://questboard-mccq.onrender.com> serves all 30
+> endpoints; AI hints are configured in production and answering.
 
 | Milestone | Status |
 |---|---|
@@ -21,7 +20,8 @@ milestones are ordered by dependency, not preference.
 | M6 · Ship | 🟡 API deployed, apps not released |
 
 **Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` →
-**30/30** · `pytest` → **20/20** against the live database · `flutter build web` and
+**32/32** · `pytest` → **20/20** against the live database · **98/98** endpoint
+assertions against the *deployed* API with real tokens · `flutter build web` and
 `flutter build apk --release --split-per-abi` → succeed · `ruff check` + `black` →
 clean · **30 API endpoints**, exercised against the real database along with every
 guard (self-vote, self-answer, accept-by-non-author, double accept, overspend,
@@ -246,13 +246,32 @@ real free-tier provider.
       `flutter test` and a web build on every PR. The economy tests are a separate job
       that runs only when a `DATABASE_URL` secret exists, so a fork PR does not fail
       on a database it cannot reach
-- [ ] **Redeploy Render** — it is still serving a pre-M4 commit (21 endpoints, no
-      `/challenges`, `/ai` or `/admin`). Push this branch and it picks the new one up
-- [ ] Add `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` to Render's **Environment** so
-      hints work in production; they are only in the local `.env` today
+- [x] Render redeployed and serving all 30 endpoints, with the AI provider set in
+      its **Environment** — a real hint came back through the deployed API
 - [ ] Real signing keystore before any Play Store submission — release APKs are signed
       with the debug key today
 - [ ] Final report and demo recording
+
+**Final pass**
+- [x] Every endpoint exercised against the **deployed** API with real tokens —
+      98 assertions, 0 failures, including a real AI hint and the full admin
+      surface (see the verified-green block above)
+- [x] Fixed: seeded demo accounts could not sign in. GoTrue reads
+      `confirmation_token` / `recovery_token` / `email_change` /
+      `email_change_token_new` as strings and 500s if any is NULL, so the
+      accounts existed but every login failed
+- [x] Dead code removed — `PointService.balance_of` (pure indirection),
+      `codeforces_service.handle_exists` (verification proves ownership with a
+      submission instead), and the unused `cupertino_icons` dependency
+- [x] De-duplicated: `ChallengeService.solved_count` and
+      `BadgeService._challenges_solved` were the same query written twice, while
+      the router ran a *third* copy inline — a router doing DB work, against the
+      layering rule. Now one `_count_solved` with two named callers
+- [x] Four hand-rolled search debounces became one `SearchField` widget. They had
+      already drifted: one trimmed the term before comparing, the others did not,
+      so a trailing space re-ran the query. Two tests lock the behaviour down
+- [x] 2.6 GB of build output and every `__pycache__` / `.ruff_cache` removed;
+      shareable APKs kept in the gitignored `client/dist/`
 
 ---
 

@@ -11,6 +11,7 @@ import 'modules/notifications/notifications_screen.dart';
 import 'modules/profile/profile_screen.dart';
 import '../core/app_colors.dart';
 import '../core/widgets/async_states.dart';
+import '../core/widgets/search_field.dart';
 import '../models/profile.dart';
 import '../services/api/api_client.dart';
 import '../models/gamification.dart';
@@ -27,8 +28,6 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  final _searchController = TextEditingController();
-
   int _currentIndex = 0;
   Profile? _me;
   int _unread = 0;
@@ -38,12 +37,6 @@ class _DashboardState extends State<Dashboard> {
   void initState() {
     super.initState();
     _refresh();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   /// Hands the term to the Browse tab and switches to it. Searching from the
@@ -271,31 +264,10 @@ class _DashboardState extends State<Dashboard> {
           color: AppColors.subtleFill,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: TextField(
-          controller: _searchController,
-          textInputAction: TextInputAction.search,
-          onSubmitted: _search,
-          decoration: InputDecoration(
-            hintText: 'Search quests',
-            hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-            prefixIcon: const Icon(Icons.search,
-                size: 20, color: AppColors.textMuted),
-            suffixIcon: _searchController.text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    color: AppColors.textMuted,
-                    tooltip: 'Clear',
-                    onPressed: () {
-                      _searchController.clear();
-                      _search('');
-                    },
-                  ),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          ),
+        child: SearchField(
+          hintText: 'Search quests',
+          bare: true,
+          onChanged: _search,
         ),
       ),
       actions: [

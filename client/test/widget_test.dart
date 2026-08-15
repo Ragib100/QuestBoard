@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:client/app/intro.dart';
 import 'package:client/core/widgets/labeled_field.dart';
+import 'package:client/core/widgets/search_field.dart';
 import 'package:client/main.dart';
 
 void main() {
@@ -107,5 +108,45 @@ void main() {
     ));
 
     expect(find.byType(IconButton), findsNothing);
+  });
+
+  testWidgets('SearchField fires once per pause, not per keystroke',
+      (WidgetTester tester) async {
+    final terms = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SearchField(hintText: 'Search', onChanged: terms.add),
+      ),
+    ));
+
+    await tester.enterText(find.byType(TextField), 'd');
+    await tester.enterText(find.byType(TextField), 'di');
+    await tester.enterText(find.byType(TextField), 'dij');
+    expect(terms, isEmpty, reason: 'nothing fires while still typing');
+
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(terms, ['dij'], reason: 'one request for the whole burst');
+
+    // The guard that three hand-rolled copies of this had drifted on: a
+    // trailing space is the same query and must not re-run it.
+    await tester.enterText(find.byType(TextField), 'dij ');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(terms, ['dij']);
+  });
+
+  testWidgets('SearchField clears immediately and reports it',
+      (WidgetTester tester) async {
+    final terms = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SearchField(
+            hintText: 'Search', value: 'dijkstra', onChanged: terms.add),
+      ),
+    ));
+
+    await tester.tap(find.byTooltip('Clear'));
+    await tester.pump();
+    expect(terms, [''], reason: 'clearing must not wait out the debounce');
+    expect(find.byTooltip('Clear'), findsNothing, reason: 'button hides when empty');
   });
 }

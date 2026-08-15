@@ -1,10 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/widgets/async_states.dart';
+import '../../core/widgets/search_field.dart';
 import '../../models/quest.dart';
 import '../../services/api/api_client.dart';
 import '../../services/common/admin_service.dart';
@@ -26,10 +25,8 @@ class ContentModeration extends StatefulWidget {
 }
 
 class _ContentModerationState extends State<ContentModeration> {
-  final _searchController = TextEditingController();
   final List<Quest> _quests = [];
 
-  Timer? _debounce;
   bool _loading = true;
   String? _error;
   String _search = '';
@@ -41,20 +38,9 @@ class _ContentModerationState extends State<ContentModeration> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted || value == _search) return;
-      setState(() => _search = value);
-      _load();
-    });
+  void _onSearch(String term) {
+    setState(() => _search = term);
+    _load();
   }
 
   Future<void> _load() async {
@@ -138,13 +124,9 @@ class _ContentModerationState extends State<ContentModeration> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: const InputDecoration(
-                    hintText: 'Search quests',
-                    prefixIcon: Icon(Icons.search),
-                  ),
+                child: SearchField(
+                  hintText: 'Search quests',
+                  onChanged: _onSearch,
                 ),
               ),
               Expanded(child: _body()),

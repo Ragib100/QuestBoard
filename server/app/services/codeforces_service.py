@@ -90,14 +90,6 @@ def pick_problem(seed: str) -> dict:
     return problems[index]
 
 
-def handle_exists(handle: str) -> bool:
-    try:
-        _get("user.info", {"handles": handle})
-        return True
-    except CodeforcesError:
-        return False
-
-
 def _submissions(handle: str, count: int) -> list[dict]:
     result = _get("user.status", {"handle": handle, "from": 1, "count": count})
     return list(result)

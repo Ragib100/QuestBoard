@@ -2,12 +2,11 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user_id, get_optional_user_id
-from app.models import ChallengeAttempt, User
+from app.models import User
 from app.schemas.challenge import (
     AttemptResponse,
     ChallengeResponse,
@@ -33,16 +32,6 @@ def today(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
         )
 
-    solver_count = int(
-        db.scalar(
-            select(func.count(ChallengeAttempt.id)).where(
-                ChallengeAttempt.challenge_id == challenge.id,
-                ChallengeAttempt.is_solved.is_(True),
-            )
-        )
-        or 0
-    )
-
     attempt = None
     verified = False
     if viewer_id is not None:
@@ -54,7 +43,7 @@ def today(
     return TodayResponse(
         challenge=ChallengeResponse.model_validate(challenge),
         is_today=challenge.challenge_date == datetime.now(timezone.utc).date(),
-        solver_count=solver_count,
+        solver_count=ChallengeService.solver_count(db, challenge.id),
         my_attempt=attempt,
         codeforces_verified=verified,
     )
