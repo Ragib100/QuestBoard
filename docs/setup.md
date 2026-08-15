@@ -355,6 +355,81 @@ deliberate compilation error to a problem the server names, and the server looks
 for it in their public submission list. That is the ownership proof — a handle
 existing says nothing about who typed it into our form.
 
+## 12. Releasing the apps
+
+### 12.1 Point the client at the deployed API
+
+`client/.env` should be a single HTTPS entry — not a candidate list:
+
+```
+API_URL=https://<your-app>.onrender.com
+```
+
+This is the setting that survives changing Wi-Fi networks, which a LAN address
+does not. A release APK also blocks cleartext HTTP outright, so a local
+`http://192.168.…` server is unreachable from one no matter what `.env` says.
+
+`.env` is a **bundled asset**: it is read at build time, so changing it means
+rebuilding, not hot-reloading.
+
+### 12.2 Android APK
+
+```bash
+cd client
+flutter build apk --release --split-per-abi
+```
+
+Three APKs land in `build/app/outputs/flutter-apk/`. Hand out
+**`app-arm64-v8a-release.apk`** (~20 MB) — every Android phone made in the last
+decade is arm64. `armeabi-v7a` is for older 32-bit devices and `x86_64` is for
+emulators. A single universal `flutter build apk --release` also works and is
+~55 MB, which is the same app three times over.
+
+Two things worth checking on a release build, because debug builds hide both:
+
+- **It is signed with the debug key.** `android/app/build.gradle.kts` still says
+  so. That is fine for handing an APK to a marker or a teammate, and unacceptable
+  for the Play Store — that needs a real keystore.
+- **Test the release APK, not the debug one.** The `INTERNET` permission and the
+  cleartext policy differ between the two, and both have broken networking here
+  before ([TASKS.md](../TASKS.md) — "Fixed after M3 field testing").
+
+The application ID is `io.questboard.app`, matching the `io.questboard://`
+deep-link scheme. Changing it after release orphans every existing install.
+
+### 12.3 Web
+
+```bash
+cd client
+flutter build web
+```
+
+`build/web` is a static directory — any static host serves it. On Render:
+**New → Static Site**, same repository, root directory `client`, build command
+`flutter build web`, publish directory `build/web`.
+
+Two things the web build needs that the phone does not:
+
+- `CORS_ORIGINS` on the API must include the site's origin (or be `*`). A
+  browser will not send the request otherwise, and the failure shows up as a
+  network error with no server log to match it.
+- Add the site URL to Supabase's redirect list (step 5), or email links from a
+  browser signup dead-end.
+
+### 12.4 Demo data
+
+```bash
+cd server && source .venv/bin/activate
+python seed_demo.py          # five students, eight quests, answers, votes
+python seed_demo.py --undo   # removes exactly what it created
+```
+
+Every point it creates is earned through the normal services, so the ledger
+balances and the leaderboard shows numbers somebody actually earned — the script
+prints each balance next to its ledger sum so you can see they agree. The demo
+accounts are real Supabase logins (`nadia@questboard.test` / `questboard-demo`),
+so you can sign in as one while presenting.
+
 ---
 
 ## Troubleshooting
@@ -373,3 +448,7 @@ existing says nothing about who typed it into our form.
 | Phone cannot reach the API | Check `API_URL` lists your current LAN IP (`hostname -I`), and that uvicorn was started with `--host 0.0.0.0`. `curl http://<lan-ip>:8000/api/` from the PC first. USB alternative: `adb reverse tcp:8000 tcp:8000` |
 | App hangs on a blank screen at launch | It no longer can — startup routing gives up after 4s. If it still does, `API_URL` is malformed rather than unreachable |
 | Everything works except calls to your own API | Cleartext HTTP blocked. Only affects release builds now; a deployed API must be HTTPS |
+| Hints 503 with "not configured" | No `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` — step 10. On Render they must be set in **Environment**, not just in your local `.env` |
+| Hints 503 with "rejected the request (404)" | `AI_MODEL` is not a model that provider serves. Groq's names differ from OpenRouter's: `llama-3.3-70b-versatile`, not `meta-llama/llama-3.3-70b-instruct:free`. List them with `curl $AI_BASE_URL/models -H "Authorization: Bearer $AI_API_KEY"` |
+| A new endpoint 404s on Render but works locally | Render is serving an older commit. Check **Events** for a deploy after your push |
+| `pytest` fails with a connection timeout | The tests talk to the real database; that is a network failure, not a test failure. Re-run |

@@ -12,6 +12,7 @@ University group project (4 members), ~10 weeks.
 # Server (run first — client needs it)
 cd server && source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0
 ruff check app && black app          # lint + format
+pytest                               # economy tests — needs a live DATABASE_URL
 
 # Client
 cd client && flutter run -d linux    # or: -d chrome, -d <android-device-id>
@@ -20,9 +21,17 @@ flutter analyze && flutter test
 
 Both need a `.env` (see `.env.example` in each dir), plus a Supabase project with
 `server/schema.sql` applied — full walkthrough in [docs/setup.md](docs/setup.md).
-`API_URL` in `client/.env` is a comma-separated candidate list — the app probes
-them and keeps whichever answers, so the same file works on desktop, emulator and
-phone. Bind uvicorn to `0.0.0.0` or a phone can never reach it.
+
+`API_URL` in `client/.env` is the deployed HTTPS URL. It also accepts a
+comma-separated candidate list for local server work — the app probes them all and
+keeps whichever answers — but a LAN address breaks whenever the network changes and
+a release APK cannot use one at all, so plain HTTPS is the default. Bind uvicorn to
+`0.0.0.0` or a phone can never reach it.
+
+`server/tests/` runs against the **real** database inside a transaction that is
+rolled back, so it is safe to point at the live project but needs network. The AI
+hint endpoint is optional: with no provider configured it 503s and the client hides
+the button ([setup.md](docs/setup.md) step 10).
 
 ## Layout
 

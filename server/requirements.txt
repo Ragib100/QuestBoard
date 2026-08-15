@@ -15,3 +15,4 @@ anthropic>=0.122,<1.0
 # Tooling — run `ruff check app` and `black app` before every PR
 black>=25,<26
 ruff>=0.14,<1.0
+pytest>=8,<9         # tests/ — needs a reachable DATABASE_URL, see tests/conftest.py

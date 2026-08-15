@@ -4,8 +4,11 @@ Single source of truth for progress. Check a box only when it meets the definiti
 done in [docs/product.md](docs/product.md#definition-of-done). Work top to bottom —
 milestones are ordered by dependency, not preference.
 
-**Now:** M6 — ship. M1–M5 are done and verified against the live database; the API is
-deployed at <https://questboard-mccq.onrender.com>.
+**Now:** M6 — ship. M1–M5 are done and verified against the live database.
+
+> **The deployed API is behind this branch.** <https://questboard-mccq.onrender.com>
+> is serving a pre-M4 commit — 21 endpoints, with no `/challenges`, `/ai` or `/admin`.
+> Push and it redeploys; the app expects 30.
 
 | Milestone | Status |
 |---|---|
@@ -17,19 +20,20 @@ deployed at <https://questboard-mccq.onrender.com>.
 | M5 · Search, admin & polish | ✅ done |
 | M6 · Ship | 🟡 API deployed, apps not released |
 
-**Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` → 23/23
-passing · `flutter build web` → succeeds · `ruff check` + `black` → clean · **30 API
-endpoints live**, exercised against the real database along with every guard
-(self-vote, self-answer, accept-by-non-author, double accept, overspend, unknown tag,
-delete-with-answers, reading someone else's notification, admin-only, self-suspend,
-suspending an admin, writing while suspended). The economy ledger nets to zero —
-points are conserved, never minted. Streak transitions (first ever, same day,
-consecutive, gap) and badge idempotency are asserted too.
+**Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` →
+**30/30** · `pytest` → **20/20** against the live database · `flutter build web` and
+`flutter build apk --release --split-per-abi` → succeed · `ruff check` + `black` →
+clean · **30 API endpoints**, exercised against the real database along with every
+guard (self-vote, self-answer, accept-by-non-author, double accept, overspend,
+unknown tag, delete-with-answers, reading someone else's notification, admin-only,
+self-suspend, suspending an admin, writing while suspended). The economy ledger nets
+to zero — points are conserved, never minted.
 
-Destructive paths — admin force-delete and the AI hint charge — were run against the
-live database inside a transaction that was then rolled back, so the refund, the
-cascade, the vote cleanup and the no-charge-on-failure guarantee are all verified on
-real rows without having altered any.
+Destructive paths — admin force-delete and the AI hint charge — were verified against
+the live database inside a transaction that was then rolled back, so the refund, the
+cascade, the vote cleanup and the no-charge-on-failure guarantee are all proven on
+real rows without having altered any. AI hints were confirmed end to end against a
+real free-tier provider.
 
 ---
 
@@ -216,12 +220,38 @@ real rows without having altered any.
 - [x] Deploy the API to Render (<https://questboard-mccq.onrender.com>) and point
       `API_URL` at it. Kept awake by a 10-minute cron ping — that is ~730 of the free
       tier's 750 instance-hours a month, so it covers this one service and no more
-- [ ] Release Android APK, tested off a debug build
-- [ ] Web build deployed (`flutter build web` already succeeds)
-- [ ] Seed demo data
-- [ ] Commit the economy tests as a pytest suite — they were run against the live DB
-      but not checked in
-- [ ] Widget tests for the auth screens
+- [x] `client/.env` is now the single HTTPS entry, not a LAN candidate list. The LAN
+      address was the cause of "it worked yesterday, not today" — it changes with the
+      network, and a release APK cannot use it anyway (cleartext is blocked)
+- [x] Android `applicationId` renamed `com.example.client` → **`io.questboard.app`**,
+      matching the `io.questboard://` deep-link scheme. Package directory, namespace
+      and `MainActivity.kt` moved with it
+- [x] Release APKs built and inspected: `--split-per-abi` gives arm64 20.3 MB /
+      armv7 18.0 MB / x86_64 21.8 MB (universal is 54.9 MB). Verified in the merged
+      manifest that the release build is **not** debuggable, keeps `INTERNET`, keeps
+      the HTTPS-only network config, and bundles the Render URL — the four things that
+      differ from a debug build and have each broken networking here before
+- [x] Web build succeeds and bundles the right `API_URL`; deploy steps for a Render
+      Static Site in [setup.md](docs/setup.md) §12.3
+- [x] `seed_demo.py` — five students, eight quests, nine answers, 24 votes, all
+      written **through the services** so the ledger balances (the script prints each
+      balance beside its ledger sum). `--undo` removes exactly what it created
+- [x] Economy tests committed as `server/tests/` — 20 tests over the ledger, bounty
+      transfer, refunds, vote deltas, suspension and moderation. They run against the
+      real database inside a transaction that is rolled back, because the schema needs
+      Postgres and a fake one would not test what breaks
+- [x] Widget tests for the auth screens — `client/test/auth_test.dart`, 7 tests over
+      the validation that must fire *without* a network round trip
+- [x] CI: `.github/workflows/ci.yml` runs ruff, black, `flutter analyze`,
+      `flutter test` and a web build on every PR. The economy tests are a separate job
+      that runs only when a `DATABASE_URL` secret exists, so a fork PR does not fail
+      on a database it cannot reach
+- [ ] **Redeploy Render** — it is still serving a pre-M4 commit (21 endpoints, no
+      `/challenges`, `/ai` or `/admin`). Push this branch and it picks the new one up
+- [ ] Add `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` to Render's **Environment** so
+      hints work in production; they are only in the local `.env` today
+- [ ] Real signing keystore before any Play Store submission — release APKs are signed
+      with the debug key today
 - [ ] Final report and demo recording
 
 ---
@@ -315,6 +345,6 @@ real rows without having altered any.
 - [x] Deleted 1.4 GB of `client/build`, `server/.ruff_cache` and `__pycache__` trees
 - [x] Quest creation now returns a clear 400 instead of a raw 500 when the caller has
       no profile row yet
-- [ ] Android `applicationId` is still `com.example.client` — rename before release
+- [x] Android `applicationId` renamed to `io.questboard.app` (M6)
 - [x] Deploy the API so the app works off your Wi-Fi (M6)
-- [ ] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR
+- [x] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR
