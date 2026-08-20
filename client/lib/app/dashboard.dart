@@ -1,3 +1,4 @@
+import '../core/breakpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/common/auth_service.dart';
@@ -87,7 +88,7 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isWeb = MediaQuery.of(context).size.width > 960;
+    final bool isWeb = isWideLayout(context);
 
     // `embedded` suppresses each tab's own app bar: the phone shell already
     // draws one, and two stacked bars would eat 112px of a 640px screen.
@@ -584,7 +585,7 @@ class _UserHomeState extends State<UserHome> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isWeb = MediaQuery.of(context).size.width > 960;
+    final bool isWeb = isWideLayout(context);
 
     // The empty state has told people to "pull to refresh" since it was
     // written, and there was nothing here to pull. There is now.

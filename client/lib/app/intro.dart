@@ -1,3 +1,4 @@
+import '../core/breakpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -15,7 +16,7 @@ class Intro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isWeb = MediaQuery.of(context).size.width > 900;
+    final bool isWeb = isWideLayout(context);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -67,34 +68,49 @@ class Intro extends StatelessWidget {
                 const SizedBox(width: 4),
               ],
       ),
+      // The 1200px cap is applied per section, not to the page.
+      //
+      // Wrapping the whole Column in it also capped the highlights band, whose
+      // whole job is to be a full-width stripe of a different colour — on a
+      // wide screen it stopped 360px short of each edge and read as a
+      // misaligned block floating in the middle of the page. The band is now
+      // full-bleed and caps its own contents instead.
       body: SingleChildScrollView(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: Column(
-              children: [
-                SizedBox(height: isWeb ? 60 : 32),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: isWeb ? 40 : 24),
-                  child: isWeb
-                      ? Row(
-                          children: [
-                            Expanded(child: _buildHero(context, isWeb)),
-                            const Expanded(child: _HeroArt()),
-                          ],
-                        )
-                      : _buildHero(context, isWeb),
-                ),
-                SizedBox(height: isWeb ? 100 : 56),
-                _buildHighlights(isWeb),
-                const SizedBox(height: 80),
-              ],
+        child: Column(
+          // Stretch, so the full-bleed highlights band actually reaches both
+          // edges. The capped sections centre themselves inside it.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: isWeb ? 60 : 32),
+            _capped(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: isWeb ? 40 : 24),
+                child: isWeb
+                    ? Row(
+                        children: [
+                          Expanded(child: _buildHero(context, isWeb)),
+                          const Expanded(child: _HeroArt()),
+                        ],
+                      )
+                    : _buildHero(context, isWeb),
+              ),
             ),
-          ),
+            SizedBox(height: isWeb ? 100 : 56),
+            _buildHighlights(isWeb),
+            const SizedBox(height: 80),
+          ],
         ),
       ),
     );
   }
+
+  /// Centres [child] and stops it growing past the page's reading width.
+  static Widget _capped({required Widget child}) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: child,
+        ),
+      );
 
   Widget _buildHero(BuildContext context, bool isWeb) {
     return Column(
@@ -153,23 +169,28 @@ class Intro extends StatelessWidget {
       ),
     ];
 
-    return Container(
-      width: double.infinity,
+    // ColoredBox rather than a Container: the band must reach both edges of
+    // the window, and its width comes from the stretched Column above it.
+    return ColoredBox(
       color: AppColors.background,
-      padding: EdgeInsets.symmetric(vertical: 60, horizontal: isWeb ? 40 : 24),
-      // A fixed 340px card overflows a 360px phone once padding is subtracted,
-      // so the phone layout takes whatever width is actually left.
-      child: LayoutBuilder(
-        builder: (context, constraints) => Wrap(
-          spacing: 32,
-          runSpacing: 32,
-          alignment: WrapAlignment.center,
-          children: items
-              .map((item) => SizedBox(
-                    width: isWeb ? 300 : constraints.maxWidth,
-                    child: item,
-                  ))
-              .toList(),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 60, horizontal: isWeb ? 40 : 24),
+        // A fixed 340px card overflows a 360px phone once padding is
+        // subtracted, so the phone layout takes whatever width is left.
+        child: _capped(
+          child: LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 32,
+              runSpacing: 32,
+              alignment: WrapAlignment.center,
+              children: items
+                  .map((item) => SizedBox(
+                        width: isWeb ? 300 : constraints.maxWidth,
+                        child: item,
+                      ))
+                  .toList(),
+            ),
+          ),
         ),
       ),
     );

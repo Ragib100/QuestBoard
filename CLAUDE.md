@@ -63,7 +63,9 @@ client/lib/
   and Dart types say Quest (`Quest`, "Browse Quests"); the table, the ORM model, the JSON
   keys and the route stay `question` / `/api/questions` (decisions.md D1, D14).
 - **Mobile-first.** This is a phone app that also runs on desktop. Build the phone layout
-  first and treat `isWeb` (`width > 900`) as the variant. Concretely: no fixed widths on
+  first and treat the wide layout as the variant — always via
+  `isWideLayout(context)` from `core/breakpoints.dart` (900px), never a width
+  literal of your own. Concretely: no fixed widths on
   anything a phone renders, `Wrap`/`Flexible` over hard `Row`s, full-width buttons, every
   screen scrollable, and anything the desktop sidebar offers must also be reachable on a
   phone. New screens get a case in `test/mobile_layout_test.dart`, which fails on overflow

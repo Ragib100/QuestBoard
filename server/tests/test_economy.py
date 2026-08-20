@@ -378,3 +378,99 @@ def test_admin_stats_count_the_real_rows(db: Session, make_user):
     after = AdminService.stats(db)
     assert after["total_users"] == before["total_users"] + 1
     assert after["total_quests"] == before["total_quests"] + 1
+
+
+# ------------------------------------------------------- the admin gate ---
+
+
+def test_require_admin_refuses_an_ordinary_user(db: Session, make_user):
+    """`AdminService` deliberately skips every ownership check the normal
+    services enforce, so this dependency is the only thing standing between it
+    and any signed-in caller. Worth a test of its own."""
+    from fastapi import HTTPException
+
+    from app.dependencies.admin import require_admin
+
+    user = make_user()
+
+    with pytest.raises(HTTPException) as raised:
+        require_admin(db=db, user_id=user.id)
+    assert raised.value.status_code == 403
+
+    admin = make_user(is_admin=True)
+    assert require_admin(db=db, user_id=admin.id).id == admin.id
+
+
+def test_require_admin_refuses_a_token_with_no_profile(db: Session, auth_identity):
+    """A valid Supabase token whose `users` row does not exist yet. `db.get`
+    returns None and `None.is_admin` would be an AttributeError, not a 403."""
+    from fastapi import HTTPException
+
+    from app.dependencies.admin import require_admin
+
+    with pytest.raises(HTTPException) as raised:
+        require_admin(db=db, user_id=auth_identity())
+    assert raised.value.status_code == 403
+
+
+def test_admin_user_search_matches_name_and_username(db: Session, make_user):
+    user = make_user()
+    user.first_name = "Zilpharetta"
+    user.last_name = "Quibblesworth"
+    db.commit()
+
+    found, total = AdminService.list_users(db, search="Zilpharetta")
+    assert total >= 1
+    assert user.id in {u.id for u in found}
+
+    # Case-insensitive, and matches the surname too.
+    assert AdminService.list_users(db, search="quibblesworth")[1] >= 1
+
+    # Email is never copied out of auth.users, so it cannot be searched.
+    assert AdminService.list_users(db, search="Zzz_no_such_user_zzz")[1] == 0
+
+
+def test_admin_search_paging_totals_ignore_the_page_window(db: Session, make_user):
+    """The count has to come from the filtered query, not from the page — a
+    total of "20" on every page is the classic version of this bug."""
+    for _ in range(3):
+        u = make_user()
+        u.first_name = "Bartholomewesque"
+        db.commit()
+
+    _, total = AdminService.list_users(db, search="Bartholomewesque", limit=1)
+    assert total >= 3, "the total counts every match, not the one row returned"
+
+    page, _ = AdminService.list_users(db, search="Bartholomewesque", limit=1)
+    assert len(page) == 1
+
+
+def test_force_deleting_a_quest_leaves_the_ledger_balanced(db: Session, make_user):
+    """The refund is a ledger movement like any other, so the invariant that
+    `users.points` equals the sum of that user's rows has to survive it."""
+    author = make_user(points=100)
+    before_points, before_ledger = author.points, ledger_total(db, author)
+
+    quest = QuestionService.create(db, author.id, quest_payload(bounty=25))
+    AdminService.delete_quest(db, quest.id)
+
+    db.refresh(author)
+    # Posting also pays the once-a-day activity bonus, so the balance does not
+    # come back to where it started — but every point of the difference has a
+    # row behind it, which is the invariant that matters.
+    assert author.points - before_points == ledger_total(db, author) - before_ledger
+
+    # And the bounty specifically went out and came back.
+    from sqlalchemy import select
+
+    from app.models import PointTransaction
+
+    amounts = sorted(
+        db.scalars(
+            select(PointTransaction.amount).where(
+                PointTransaction.user_id == author.id,
+                PointTransaction.reference_id == quest.id,
+            )
+        )
+    )
+    assert amounts == [-25, 25]

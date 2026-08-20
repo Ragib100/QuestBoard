@@ -331,12 +331,25 @@ class _QuestionDetailState extends State<QuestionDetail> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // The title leads.
+              //
+              // It used to sit inside [_questBody], below the author row and
+              // indented past the vote column — roughly 90px of avatar, name
+              // and chrome before the screen said what the question was. Now
+              // it is the first thing, at full width, and the author line is
+              // the caption underneath it.
+              Text(quest.title,
+                  style: GoogleFonts.outfit(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 12),
               _header(quest),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -431,12 +444,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(quest.title,
-            style: GoogleFonts.outfit(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary)),
-        const SizedBox(height: 20),
+        // The title is drawn by [_content] above this, at full width.
         SelectableText(quest.body,
             style: const TextStyle(
                 color: AppColors.textSecondary, fontSize: 16, height: 1.6)),
