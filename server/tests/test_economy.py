@@ -191,6 +191,55 @@ def test_votes_move_the_author_balance_by_the_delta(db: Session, make_user):
     assert author.points == start
 
 
+def test_a_downvote_still_lands_on_an_author_with_no_points(
+    db: Session, make_user, make_quest
+):
+    """The bug this guards: the debit went through the same affordability check
+    as a purchase, so downvoting a broke author raised "Not enough points" —
+    failing *the voter's* request and quoting them someone else's balance."""
+    author = make_user(points=0)
+    voter = make_user(points=100)
+    quest = make_quest(author, bounty=0)
+
+    count, mine = VoteService.cast(db, voter.id, TARGET_QUESTION, quest.id, -1)
+    db.commit()
+    db.refresh(author)
+
+    assert (count, mine) == (-1, -1)
+    assert author.points == -1, "the debit is recorded, not silently dropped"
+    assert ledger_total(db, author) == -1, "balance and ledger stay in step"
+
+
+def test_flipping_a_vote_on_a_broke_author_cannot_mint_points(
+    db: Session, make_user, make_quest
+):
+    """Clamping the debit at zero instead of letting the balance go negative
+    would hand the author a free point on the flip back up."""
+    author = make_user(points=0)
+    voter = make_user(points=100)
+    quest = make_quest(author, bounty=0)
+
+    VoteService.cast(db, voter.id, TARGET_QUESTION, quest.id, -1)
+    VoteService.cast(db, voter.id, TARGET_QUESTION, quest.id, 1)
+    db.commit()
+    db.refresh(author)
+
+    assert author.points == 1, "down then up is a net +1, not +2"
+    assert ledger_total(db, author) == 1
+
+
+def test_a_zero_movement_writes_nothing(db: Session, make_user):
+    """A challenge worth 0 points used to write a 0-amount ledger row — noise
+    in a point history that is meant to explain a balance."""
+    user = make_user(points=100)
+
+    entry = PointService.apply(db, user, 0, PointReason.CHALLENGE_SOLVED)
+
+    assert entry is None
+    assert user.points == 100
+    assert ledger_total(db, user) == 0
+
+
 def test_self_votes_are_refused(db: Session, make_user):
     author = make_user(points=100)
     quest = QuestionService.create(db, author.id, quest_payload())

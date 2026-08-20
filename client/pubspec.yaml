@@ -39,6 +39,10 @@ dependencies:
   image_picker: ^1.2.3
   http: ^1.6.0
   path: ^1.9.1
+  # Attaching a source file to an answer or a challenge solution. image_picker
+  # (already here, for avatars) only picks images, and the web build has no
+  # filesystem to read a path from — this returns bytes on every platform.
+  file_picker: ^12.0.0
 
 dev_dependencies:
   flutter_test:

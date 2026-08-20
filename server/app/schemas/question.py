@@ -33,6 +33,11 @@ class AnswerResponse(BaseModel):
     question_id: UUID
     body: str
     image_url: str | None
+    # Null on a plain-prose answer; set when the helper submitted code or a file.
+    code_body: str | None = None
+    code_language: str | None = None
+    attachment_url: str | None = None
+    attachment_name: str | None = None
     is_accepted: bool
     created_at: datetime
     author: UserSummary

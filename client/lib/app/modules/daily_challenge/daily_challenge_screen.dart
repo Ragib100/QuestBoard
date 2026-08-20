@@ -5,19 +5,31 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
 import '../../../core/widgets/reward_burst.dart';
+import '../../../core/widgets/code_composer.dart';
+import '../../../core/widgets/code_view.dart';
 import '../../../models/challenge.dart';
+import '../../../models/code_submission.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/challenge_service.dart';
 import '../profile/codeforces_verify.dart';
+import 'past_challenges_screen.dart';
 import '../../../core/widgets/app_snack.dart';
 
-/// One Codeforces problem a day, worth bonus points.
+/// One Codeforces problem a day, worth bonus points — and the same screen for
+/// any past challenge from the archive.
 ///
 /// The solve is not taken on trust: claiming asks the server to check the
 /// user's public Codeforces submissions for an accepted verdict on this exact
-/// problem, which is why the handle has to be verified first.
+/// problem, which is why the handle has to be verified first. Submitting code
+/// in the app does not change that; it records the work, it does not prove it.
+///
+/// Pass [challengeId] to open an archived challenge, which pays less the older
+/// it is (docs/api.md, "Challenge point decay").
 class DailyChallengeScreen extends StatefulWidget {
-  const DailyChallengeScreen({super.key});
+  const DailyChallengeScreen({super.key, this.challengeId});
+
+  /// Null for today's challenge — the common entry point.
+  final String? challengeId;
 
   @override
   State<DailyChallengeScreen> createState() => _DailyChallengeScreenState();
@@ -26,6 +38,7 @@ class DailyChallengeScreen extends StatefulWidget {
 class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   TodayChallenge? _today;
   List<ChallengeSolver> _solvers = const [];
+  CodeSubmission _submission = CodeSubmission.empty;
   bool _loading = true;
   bool _claiming = false;
   String? _error;
@@ -42,7 +55,10 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       _error = null;
     });
     try {
-      final today = await ChallengeService.instance.today();
+      final id = widget.challengeId;
+      final today = id == null
+          ? await ChallengeService.instance.today()
+          : await ChallengeService.instance.detail(id);
       if (!mounted) return;
       setState(() => (_today = today, _loading = false));
       await _loadSolvers(today.challenge.id);
@@ -75,18 +91,31 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     if (verified == true) await _load();
   }
 
+  Future<void> _openArchive() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PastChallengesScreen()),
+    );
+    // A challenge claimed in the archive changes this screen's balance and
+    // possibly its own solved state, so re-read rather than showing stale data.
+    if (mounted) await _load();
+  }
+
   Future<void> _claim() async {
     final today = _today;
     if (today == null) return;
 
     setState(() => _claiming = true);
     try {
-      await ChallengeService.instance.claim(today.challenge.id);
+      final attempt = await ChallengeService.instance
+          .claim(today.challenge.id, submission: _submission);
       if (mounted) {
         showRewardBurst(
           context,
           message: 'Challenge solved',
-          detail: '+${today.challenge.bonusPoints} points',
+          // The server is the authority on what it actually paid — an older
+          // challenge pays less than its headline bounty.
+          detail: '+${attempt.awardedPoints} points',
         );
       }
       await _load();
@@ -104,10 +133,20 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        title: Text('Daily Challenge',
+        title: Text(widget.challengeId == null ? 'Daily Challenge' : 'Challenge',
             style: GoogleFonts.outfit(
                 fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        actions: [
+          // Only from today's screen: the archive is where you came from
+          // otherwise, and a second entry would just loop.
+          if (widget.challengeId == null)
+            IconButton(
+              tooltip: 'Past challenges',
+              onPressed: _openArchive,
+              icon: const Icon(Icons.history_rounded),
+            ),
+        ],
       ),
       body: _loading
           ? const LoadingState()
@@ -121,6 +160,9 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                     claiming: _claiming,
                     onClaim: _claim,
                     onVerify: _verify,
+                    onOpenArchive:
+                        widget.challengeId == null ? _openArchive : null,
+                    onSubmissionChanged: (value) => _submission = value,
                   ),
                 ),
     );
@@ -140,6 +182,8 @@ class DailyChallengeView extends StatelessWidget {
     this.claiming = false,
     this.onClaim,
     this.onVerify,
+    this.onOpenArchive,
+    this.onSubmissionChanged,
   });
 
   final TodayChallenge today;
@@ -147,6 +191,13 @@ class DailyChallengeView extends StatelessWidget {
   final bool claiming;
   final VoidCallback? onClaim;
   final VoidCallback? onVerify;
+
+  /// Null when this screen *is* the archive's detail view.
+  final VoidCallback? onOpenArchive;
+
+  /// Fires as the code editor changes. Null in tests and wherever submitting
+  /// is not offered.
+  final ValueChanged<CodeSubmission>? onSubmissionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -167,10 +218,21 @@ class DailyChallengeView extends StatelessWidget {
                 if (c.cfRating != null)
                   _chip('Rated ${c.cfRating}', AppColors.subtleFill,
                       AppColors.textSecondary),
+                // The decayed value, not the headline one: this is what
+                // solving it actually pays today.
                 PointsBadge(
-                    points: c.bonusPoints, label: '+${c.bonusPoints} pts'),
+                    points: c.awardPoints, label: '+${c.awardPoints} pts'),
+                if (c.ageDays > 0)
+                  _chip(
+                      c.ageDays == 1 ? 'Yesterday' : '${c.ageDays} days ago',
+                      AppColors.subtleFill,
+                      AppColors.textSecondary),
               ],
             ),
+            if (c.ageDays > 0) ...[
+              const SizedBox(height: 10),
+              _decayNote(c),
+            ],
             const SizedBox(height: 16),
             Text(c.title,
                 style: GoogleFonts.outfit(
@@ -193,6 +255,50 @@ class DailyChallengeView extends StatelessWidget {
             _leaderboard(),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Says plainly why an archived challenge is worth less than its headline
+  /// bounty, rather than quietly showing a smaller number.
+  Widget _decayNote(DailyChallenge c) {
+    final atFloor = c.isAtFloor;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.subtleFill,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.trending_down_rounded,
+              size: 18, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              atFloor
+                  ? 'This one was worth ${c.bonusPoints} pts on its day. It has '
+                      'decayed as far as it goes — ${c.awardPoints} pts is what '
+                      'it pays from now on.'
+                  : 'Worth ${c.bonusPoints} pts on its day, ${c.awardPoints} pts '
+                      'now. Older challenges pay less each day.',
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _archiveLink() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: onOpenArchive,
+        icon: const Icon(Icons.history_rounded, size: 18),
+        label: const Text('Past challenges'),
       ),
     );
   }
@@ -224,25 +330,42 @@ class DailyChallengeView extends StatelessWidget {
   }
 
   Widget _action() {
+    final attempt = today.myAttempt;
+
     if (today.isSolved) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.successTint,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.verified_rounded, color: AppColors.successDark),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text('Solved — bonus already paid.',
-                  style: TextStyle(
-                      color: AppColors.successDark,
-                      fontWeight: FontWeight.bold)),
+      final paid = attempt?.awardedPoints ?? 0;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.successTint,
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
-        ),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_rounded,
+                    color: AppColors.successDark),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    // The amount comes from the attempt, not the challenge:
+                    // a late solve paid less and the screen must not imply
+                    // otherwise. 0 means it predates the stored amount.
+                    paid > 0
+                        ? 'Solved — $paid pts paid.'
+                        : 'Solved — bonus already paid.',
+                    style: const TextStyle(
+                        color: AppColors.successDark,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (attempt != null) ..._savedSolution(attempt),
+        ],
       );
     }
 
@@ -267,21 +390,61 @@ class DailyChallengeView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (onSubmissionChanged != null) ...[
+          CodeComposer(
+            label: 'Attach your solution',
+            enabled: !claiming,
+            initial: attempt?.submission ?? CodeSubmission.empty,
+            onChanged: onSubmissionChanged!,
+          ),
+          const SizedBox(height: 12),
+        ],
         ElevatedButton(
           onPressed: claiming ? null : onClaim,
           child: Text(claiming
               ? 'Checking Codeforces...'
-              : 'I solved it — claim ${today.challenge.bonusPoints} pts'),
+              : 'I solved it — claim ${today.challenge.awardPoints} pts'),
         ),
         const SizedBox(height: 8),
         const Text(
           'Solve and submit on Codeforces first. We check for an accepted '
-          'verdict before paying anything.',
+          'verdict before paying anything — the code you attach here is kept '
+          'with your attempt, not sent to Codeforces.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.textMuted, fontSize: 12),
         ),
       ],
     );
+  }
+
+  /// The code and file stored on an attempt, shown back after the claim.
+  List<Widget> _savedSolution(ChallengeAttempt attempt) {
+    final submission = attempt.submission;
+    if (submission.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: 16),
+      const Text('Your submission',
+          style: TextStyle(
+              fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+      if (submission.hasCode) ...[
+        const SizedBox(height: 8),
+        CodeBlock(
+          code: submission.codeBody!,
+          language: submission.codeLanguage,
+        ),
+      ],
+      if (submission.hasAttachment) ...[
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AttachmentChip(
+            url: submission.attachmentUrl!,
+            name: submission.attachmentName,
+          ),
+        ),
+      ],
+    ];
   }
 
   Widget _leaderboard() {
@@ -331,9 +494,21 @@ class DailyChallengeView extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: AppColors.textPrimary)),
                   ),
+                  if (s.awardedPoints > 0) ...[
+                    const SizedBox(width: 8),
+                    Text('+${s.awardedPoints}',
+                        style: const TextStyle(
+                            color: AppColors.points,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13)),
+                  ],
                 ],
               ),
             ),
+        if (onOpenArchive != null) ...[
+          const SizedBox(height: 8),
+          _archiveLink(),
+        ],
       ],
     );
   }

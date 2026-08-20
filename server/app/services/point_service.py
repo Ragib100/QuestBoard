@@ -21,13 +21,27 @@ class PointService:
         amount: int,
         reason: str,
         reference_id: UUID | None = None,
-    ) -> PointTransaction:
+        allow_negative: bool = False,
+    ) -> PointTransaction | None:
         """Move `amount` points (negative to deduct) and log why.
 
         Raises ValueError if the user cannot afford a deduction, so the caller
         can turn it into a 402 before anything else has happened.
+
+        `allow_negative` lifts that check. It exists for exactly one caller —
+        a downvote debiting an author who has already spent everything. That
+        movement is not the author's own action to be refused: refusing it
+        would fail *the voter's* request, and clamping it at zero would let a
+        downvote-then-upvote flip mint the difference. A balance that dips
+        below zero is the honest record of what happened.
+
+        Returns None for a zero movement: `users.points` does not change and a
+        ledger row saying so is noise in someone's point history.
         """
-        if amount < 0 and user.points + amount < 0:
+        if amount == 0:
+            return None
+
+        if amount < 0 and user.points + amount < 0 and not allow_negative:
             raise ValueError(
                 f"Not enough points. This costs {abs(amount)} but you have "
                 f"{user.points}."

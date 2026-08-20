@@ -10,7 +10,9 @@ from app.models import (
     DailyChallenge,
     PointReason,
     User,
+    award_for,
 )
+from app.schemas.code import CodeSubmission, apply_submission
 from app.services import codeforces_service as cf
 from app.services.activity_service import ActivityService
 from app.services.badge_service import BadgeService
@@ -96,16 +98,111 @@ class ChallengeService:
         db.refresh(challenge)
         return challenge
 
-    @staticmethod
-    def attempt_of(
-        db: Session, challenge_id: UUID, user_id: UUID
-    ) -> ChallengeAttempt | None:
-        return db.scalar(
-            select(ChallengeAttempt).where(
-                ChallengeAttempt.challenge_id == challenge_id,
-                ChallengeAttempt.user_id == user_id,
+    @classmethod
+    def get(cls, db: Session, challenge_id: UUID) -> DailyChallenge:
+        challenge = db.get(DailyChallenge, challenge_id)
+        if challenge is None:
+            raise LookupError("That challenge does not exist.")
+        return challenge
+
+    @classmethod
+    def award_now(cls, challenge: DailyChallenge) -> int:
+        """What solving `challenge` is worth today, after the age decay."""
+        return award_for(challenge.bonus_points, challenge.challenge_date)
+
+    @classmethod
+    def archive_page(
+        cls,
+        db: Session,
+        *,
+        page: int = 1,
+        limit: int = 20,
+        include_today: bool = False,
+        viewer_id: UUID | None = None,
+    ) -> tuple[list[dict], int]:
+        """Past challenges, newest first, with the viewer's own attempt.
+
+        The solver counts and the viewer's attempts are fetched in two grouped
+        queries rather than one per row — the archive grows by a row a day and
+        an N+1 here would get slower every morning.
+        """
+        today = cls._today()
+
+        where = () if include_today else (DailyChallenge.challenge_date < today,)
+
+        total = int(db.scalar(select(func.count(DailyChallenge.id)).where(*where)) or 0)
+
+        challenges = list(
+            db.scalars(
+                select(DailyChallenge)
+                .where(*where)
+                .order_by(DailyChallenge.challenge_date.desc())
+                .offset((page - 1) * limit)
+                .limit(limit)
             )
         )
+        if not challenges:
+            return [], total
+
+        ids = [c.id for c in challenges]
+
+        counts = dict(
+            db.execute(
+                select(
+                    ChallengeAttempt.challenge_id,
+                    func.count(ChallengeAttempt.id),
+                )
+                .where(
+                    ChallengeAttempt.challenge_id.in_(ids),
+                    ChallengeAttempt.is_solved.is_(True),
+                )
+                .group_by(ChallengeAttempt.challenge_id)
+            ).all()
+        )
+
+        attempts: dict[UUID, ChallengeAttempt] = {}
+        if viewer_id is not None:
+            attempts = {
+                a.challenge_id: a
+                for a in db.scalars(
+                    select(ChallengeAttempt).where(
+                        ChallengeAttempt.challenge_id.in_(ids),
+                        ChallengeAttempt.user_id == viewer_id,
+                    )
+                )
+            }
+
+        rows = [
+            {
+                "challenge": c,
+                "solver_count": int(counts.get(c.id, 0)),
+                "attempt": attempts.get(c.id),
+            }
+            for c in challenges
+        ]
+        return rows, total
+
+    @staticmethod
+    def attempt_of(
+        db: Session,
+        challenge_id: UUID,
+        user_id: UUID,
+        for_update: bool = False,
+    ) -> ChallengeAttempt | None:
+        """This user's attempt at this challenge, if they have one.
+
+        `for_update` locks the row for the rest of the transaction. Claiming
+        needs it: the unique constraint stops two concurrent *first* claims,
+        but once an unsolved attempt exists both racers would UPDATE it and
+        both would be paid.
+        """
+        query = select(ChallengeAttempt).where(
+            ChallengeAttempt.challenge_id == challenge_id,
+            ChallengeAttempt.user_id == user_id,
+        )
+        if for_update:
+            query = query.with_for_update()
+        return db.scalar(query)
 
     @staticmethod
     def _count_solved(db: Session, *filters) -> int:
@@ -129,16 +226,30 @@ class ChallengeService:
         return cls._count_solved(db, ChallengeAttempt.challenge_id == challenge_id)
 
     @classmethod
-    def claim(cls, db: Session, challenge_id: UUID, user_id: UUID) -> ChallengeAttempt:
-        """Verifies the solve against Codeforces, then pays the bonus.
+    def claim(
+        cls,
+        db: Session,
+        challenge_id: UUID,
+        user_id: UUID,
+        data: CodeSubmission | None = None,
+    ) -> ChallengeAttempt:
+        """Verifies the solve against Codeforces, then pays the decayed award.
+
+        The amount is `award_for(bonus_points, challenge_date)` — the challenge's
+        full value on its own day, less 10% of it per day since, floored at 20%.
+        A challenge from last month is still worth solving; it is not worth what
+        today's is.
+
+        `data` carries the solution the user typed or uploaded in the app. It is
+        stored on the attempt either way: the bonus is paid on the Codeforces
+        verdict, so submitting code proves nothing, but losing what someone
+        typed because their verdict had not landed yet would be its own bug.
 
         Raises LookupError (unknown challenge or profile), PermissionError
         (no verified handle), ValueError (Codeforces says it is not solved) or
         RuntimeError (Codeforces unreachable).
         """
-        challenge = db.get(DailyChallenge, challenge_id)
-        if challenge is None:
-            raise LookupError("That challenge does not exist.")
+        challenge = cls.get(db, challenge_id)
 
         user = db.get(User, user_id)
         if user is None:
@@ -150,7 +261,7 @@ class ChallengeService:
                 "a challenge."
             )
 
-        existing = cls.attempt_of(db, challenge_id, user_id)
+        existing = cls.attempt_of(db, challenge_id, user_id, for_update=True)
         if existing is not None and existing.is_solved:
             raise ValueError("You have already claimed this challenge.")
 
@@ -164,13 +275,16 @@ class ChallengeService:
 
         if not solved:
             # Record the attempt anyway: the user tried, and the row is what
-            # lets the screen say "not accepted yet" instead of nothing.
+            # lets the screen say "not accepted yet" instead of nothing. Their
+            # code is kept too, so a premature claim does not lose their work.
             if existing is None:
                 existing = ChallengeAttempt(
                     challenge_id=challenge_id, user_id=user_id, is_solved=False
                 )
                 db.add(existing)
-                db.commit()
+            if data is not None:
+                apply_submission(existing, data)
+            db.commit()
             raise ValueError(
                 "Codeforces has no accepted submission from "
                 f"{user.codeforces_handle} for this problem yet."
@@ -181,13 +295,21 @@ class ChallengeService:
         )
         attempt.is_solved = True
         attempt.solved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if data is not None:
+            apply_submission(attempt, data)
+
+        # Priced at claim time, then stored: `bonus_points` alone cannot say
+        # what a late solve paid, and the leaderboard has to agree with the
+        # ledger about that forever after.
+        award = cls.award_now(challenge)
+        attempt.awarded_points = award
         db.add(attempt)
 
         ActivityService.record(db, user)
         PointService.apply(
             db,
             user,
-            challenge.bonus_points,
+            award,
             PointReason.CHALLENGE_SOLVED,
             reference_id=challenge.id,
         )
@@ -217,6 +339,11 @@ class ChallengeService:
         ).all()
 
         return [
-            {"rank": i, "solved_at": attempt.solved_at, "user": user}
+            {
+                "rank": i,
+                "solved_at": attempt.solved_at,
+                "awarded_points": attempt.awarded_points or 0,
+                "user": user,
+            }
             for i, (attempt, user) in enumerate(rows, start=1)
         ]

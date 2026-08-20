@@ -13,6 +13,7 @@ from app.models import (
     Vote,
 )
 from app.schemas.answer import AnswerCreate, AnswerUpdate
+from app.schemas.code import apply_submission
 from app.services.activity_service import ActivityService
 from app.services.badge_service import BadgeService
 from app.services.notification_service import NotificationService
@@ -54,6 +55,7 @@ class AnswerService:
             body=data.body.strip(),
             image_url=data.image_url,
         )
+        apply_submission(answer, data)
 
         try:
             db.add(answer)
@@ -94,6 +96,7 @@ class AnswerService:
         answer.body = data.body.strip()
         if data.image_url is not None:
             answer.image_url = data.image_url
+        apply_submission(answer, data)
 
         try:
             db.commit()

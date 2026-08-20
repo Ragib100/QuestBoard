@@ -76,18 +76,29 @@ must be created in one migration.
 
 ```sql
 answers (
-    id          uuid primary key default gen_random_uuid(),
-    question_id uuid    not null references questions(id) on delete cascade,
-    author_id   uuid    not null references users(id) on delete cascade,
-    body        text    not null,
-    image_url   text,
-    is_accepted boolean not null default false,
-    created_at  timestamptz not null default now(),
-    updated_at  timestamptz not null default now()
+    id              uuid primary key default gen_random_uuid(),
+    question_id     uuid    not null references questions(id) on delete cascade,
+    author_id       uuid    not null references users(id) on delete cascade,
+    body            text    not null,
+    image_url       text,
+    code_body       text,                   -- the submitted source, if any
+    code_language   varchar(20),            -- label only; matches schemas/code.py
+    attachment_url  text,                   -- public URL in the `submissions` bucket
+    attachment_name text,                   -- the original filename, for the link
+    is_accepted     boolean not null default false,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
 )
 ```
 
 There is no `vote_count` column — scores are summed from `votes` on read.
+
+`code_body` is stored in Postgres rather than in Storage: it is a few kilobytes,
+it belongs to the answer, and putting it in a bucket would mean a second fetch to
+render one. The *attachment* is the opposite case — arbitrary bytes, so it goes
+to the public `submissions` bucket and only its URL is stored. `body` may be
+short or empty when `code_body` is set: an answer that is a working solution
+does not also owe ten characters of prose.
 
 ## `votes`
 
@@ -134,6 +145,24 @@ are documented in [product.md](product.md#point-economy). A CHECK constraint enf
 the list; `schema.sql` **drops and recreates** it rather than adding it only when
 absent, because it had already drifted out of sync once and silently broke two
 features ([decisions.md](decisions.md) D24).
+
+Two rules follow from "`users.points` is a cache of `sum(amount)`", and both were
+being broken until the D28 audit:
+
+- **Every point a user holds needs a row.** `users.points` defaults to 100 and
+  the API used to let it, so each account started with 100 points that no
+  transaction explained. `UserService.create_user` now creates the row with
+  `points=0` and pays the bonus through `PointService`; `schema.sql` carries an
+  idempotent backfill for accounts that predate the fix.
+- **A movement is never clamped.** A downvote debits the author, and an author
+  who has spent everything can still be downvoted — `PointService.apply` takes
+  `allow_negative` for exactly that caller. Refusing it would fail the *voter's*
+  request over someone else's balance; clamping it at zero would let a
+  downvote-then-upvote flip mint the difference. A negative balance is rare and
+  honest; a wrong one is neither.
+
+Zero-amount movements write nothing at all: `apply` returns `None`, because a
+`0` row is noise in a history whose job is to explain a balance.
 
 ## `tags` / `question_tags`
 
@@ -203,12 +232,17 @@ daily_challenges (
     created_at     timestamptz not null default now()
 )
 challenge_attempts (
-    id           uuid primary key default gen_random_uuid(),
-    challenge_id uuid    not null references daily_challenges(id) on delete cascade,
-    user_id      uuid    not null references users(id) on delete cascade,
-    is_solved    boolean not null default false,
-    solved_at    timestamp,
-    created_at   timestamp not null default now(),
+    id              uuid primary key default gen_random_uuid(),
+    challenge_id    uuid    not null references daily_challenges(id) on delete cascade,
+    user_id         uuid    not null references users(id) on delete cascade,
+    is_solved       boolean not null default false,
+    awarded_points  integer not null default 0,   -- what this solve actually paid
+    code_body       text,                         -- the solution, as submitted in-app
+    code_language   varchar(20),
+    attachment_url  text,
+    attachment_name text,
+    solved_at       timestamp,
+    created_at      timestamp not null default now(),
     unique (challenge_id, user_id)
 )
 ```
@@ -219,9 +253,20 @@ a plain conflict. `body` is **not** the problem statement — Codeforces does no
 statements through its API, so it holds the rating and topics and points at
 `source_url`.
 
-The unique `(challenge_id, user_id)` is what stops a bonus being paid twice. An
-unsolved row is meaningful: it records that someone tried and Codeforces had no
-accepted submission yet.
+The unique `(challenge_id, user_id)` is what stops a bonus being paid twice — for
+the *first* claim. Once an unsolved row exists two concurrent claims would both
+UPDATE it and both be paid, so `ChallengeService.claim` reads the attempt
+`with_for_update()` and holds the lock for the transaction. An unsolved row is
+meaningful in its own right: it records that someone tried, Codeforces had no
+accepted submission yet, and what they had written when they tried.
+
+`awarded_points` exists because a challenge is not worth a fixed amount.
+`bonus_points` is its value on its own day; the award decays by 10% of that per
+day and floors at 20% (`award_for` in `models/challenge.py`, table in
+[api.md](api.md#challenge-point-decay)). The decayed figure is deliberately
+**not** stored on the challenge — it would be wrong by the next morning — but
+what a specific solve paid is stored here, because otherwise nothing could say
+what a late solver received and the leaderboard would contradict the ledger.
 
 Every table in the database now has an ORM model and at least one endpoint. The one
 remaining vestige is `questions.difficulty`, which nothing reads or writes —

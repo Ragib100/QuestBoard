@@ -115,6 +115,10 @@ class VoteService:
                     delta,
                     PointReason.VOTE_RECEIVED if delta > 0 else PointReason.VOTE_LOST,
                     reference_id=target_id,
+                    # The author's balance, not the voter's, and the voter is
+                    # the one whose request would fail. An author who has spent
+                    # everything can still be downvoted — see PointService.apply.
+                    allow_negative=True,
                 )
 
         db.flush()

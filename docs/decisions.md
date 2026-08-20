@@ -207,3 +207,67 @@ Revisited during the polish pass and deliberately left out: `flutter_math_fork` 
 markdown renderer are the heaviest dependencies the client would carry, and the call was
 to keep the app light. Plain text stays readable meanwhile. This is a known gap against
 product.md, not an oversight — reopen it if quest bodies start carrying real code.
+
+
+### D27 — Code submission is in-app; Codeforces submission is not possible
+The ask was "submit code, or upload a file — verify my Codeforces account and use that
+to submit". Half of that cannot be built: **Codeforces has no public submit endpoint.**
+Its API is read-only, so submitting on a user's behalf would mean storing their
+Codeforces password and driving a browser session against a site that treats that as
+abuse. That was declined, not deferred.
+
+What exists instead, and what it honestly claims:
+
+- A **code editor** (`core/widgets/code_composer.dart`) on the answer composer and the
+  challenge claim, with a language label and a file attachment. Monospace comes from the
+  platform font, not `google_fonts`: code is the one thing that has to still look like
+  code with no network.
+- `answers` and `challenge_attempts` each gained `code_body` / `code_language` /
+  `attachment_url` / `attachment_name`. The source lives in Postgres (small, belongs to
+  the row, saves a second fetch); the file goes to the public `submissions` bucket, the
+  way avatars already work, so FastAPI never handles the bytes.
+- **The award is still paid only against a real Codeforces verdict.** Attaching code
+  proves nothing and changes no balance — `ChallengeService.claim` checks the public API
+  exactly as before. The code is stored either way, including on a claim made a minute
+  too early, because losing what someone typed is its own bug.
+- Tab is not an indent key in a Flutter form (it moves focus), so indenting is a button.
+  Autocorrect and autocapitalisation are off; a phone keyboard "helpfully" capitalising
+  `int` turns valid code into invalid code as you type it.
+
+This narrows [D26](#d26--markdown-and-latex-rendering-stays-deferred) rather than
+reversing it: code now has a real home with a real renderer, so the case for a markdown
+dependency is weaker than it was, not stronger. Quest and answer *bodies* are still
+plain text.
+
+### D28 — Past challenges decay; and what the audit found in the ledger
+Archived challenges stay solvable and are worth **10% of their base less per day, with a
+floor at 20%** (`award_for`, table in [api.md](api.md#challenge-point-decay)). Linear,
+not exponential, because a student can predict "five points a day" and cannot predict a
+half-life. The floor is the point: a challenge that decays to nothing is one nobody has
+a reason to open, and the archive exists to be worked through.
+
+The decayed value is computed per request and **never stored on the challenge** — a
+stored copy is wrong by the next morning. What *is* stored is
+`challenge_attempts.awarded_points`, what one solve actually paid, because otherwise
+nothing could say what a late solver received and the leaderboard would quietly
+contradict the ledger.
+
+Auditing every point path for that change turned up four defects, all now fixed and all
+covered by a regression test:
+
+1. **The signup bonus was never ledgered.** `users.points` defaults to 100 and
+   `create_user` let it, so every account since M1 held 100 points with an empty history
+   behind them and `users.points <> sum(amount)` for all of them — the exact invariant
+   the ledger exists to guarantee. Now paid through `PointService`, with an idempotent
+   backfill in `schema.sql` that reconciles the real gap rather than assuming 100.
+2. **A downvote could fail on the author's balance.** The debit went through the same
+   affordability check as a purchase, so downvoting someone with 0 points raised "Not
+   enough points" — failing *the voter's* request and quoting them a stranger's balance.
+   `allow_negative` now applies to that one caller. Clamping at zero was the tempting
+   fix and is wrong: down-then-up would have minted the difference.
+3. **A challenge could be claimed twice concurrently.** The unique
+   `(challenge_id, user_id)` only protects the first claim; once an unsolved attempt
+   existed, two racing claims both UPDATEd it and both were paid. The attempt is now read
+   `with_for_update()`.
+4. **Zero-amount movements wrote a ledger row.** Harmless to the arithmetic, noise in a
+   history whose only job is to explain a balance. `apply` now returns `None`.

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Text, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -25,6 +25,15 @@ class Answer(Base):
     )
     body = Column(Text, nullable=False)
     image_url = Column(Text)
+    # A code submission attached to the answer. Null on a plain-prose answer;
+    # `code_body` is the source itself, small enough to belong in Postgres
+    # rather than behind a second fetch to Storage.
+    code_body = Column(Text)
+    code_language = Column(String(20))
+    # A file uploaded straight to the public `submissions` bucket by the client.
+    # The server only ever stores the URL and the original filename.
+    attachment_url = Column(Text)
+    attachment_name = Column(Text)
     is_accepted = Column(Boolean, nullable=False, server_default="false")
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

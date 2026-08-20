@@ -7,13 +7,17 @@ import 'package:client/app/admin/user_management.dart';
 import 'package:client/app/auth/email_verification.dart';
 import 'package:client/app/common/reset_password.dart';
 import 'package:client/app/modules/daily_challenge/daily_challenge_screen.dart';
+import 'package:client/app/modules/daily_challenge/past_challenges_screen.dart';
 import 'package:client/app/modules/leaderboard/leaderboard_podium.dart';
 import 'package:client/app/modules/profile/codeforces_verify.dart';
 import 'package:client/app/modules/questions/browse_questions.dart';
 import 'package:client/core/widgets/async_states.dart';
+import 'package:client/core/widgets/code_composer.dart';
+import 'package:client/core/widgets/code_view.dart';
 import 'package:client/core/widgets/skeletons.dart';
 import 'package:client/models/admin.dart';
 import 'package:client/models/challenge.dart';
+import 'package:client/models/code_submission.dart';
 import 'package:client/models/gamification.dart';
 import 'package:client/models/quest.dart';
 
@@ -36,6 +40,48 @@ Future<void> _pumpScreen(WidgetTester tester, Widget screen, Size size) async {
   await tester.pumpWidget(MaterialApp(home: screen));
   await tester.pump();
 }
+
+/// One archived challenge, priced as the server would price it at [ageDays]
+/// old. [award] is passed rather than recomputed so the test states the
+/// expected decay instead of duplicating the formula.
+TodayChallenge _archived({
+  required int ageDays,
+  required int award,
+  int bonus = 50,
+  bool solved = false,
+}) =>
+    TodayChallenge(
+      challenge: DailyChallenge.fromJson({
+        'id': 'c-$ageDays',
+        'codeforces_id': '1873/D',
+        'title': 'Antidisestablishmentarianismically'
+            'Concatenated' * 2,
+        'body': 'Codeforces problem 1873/D.',
+        'cf_rating': 1500,
+        'difficulty': 'hard',
+        'source_url': 'https://codeforces.com/problemset/problem/1873/D',
+        'bonus_points': bonus,
+        'challenge_date': '2026-08-01',
+        'award_points': award,
+        'age_days': ageDays,
+      }),
+      isToday: false,
+      solverCount: 99999,
+      myAttempt: solved
+          ? ChallengeAttempt(
+              isSolved: true,
+              solvedAt: DateTime.now(),
+              awardedPoints: award,
+              submission: const CodeSubmission(
+                codeBody: 'int main(){return 0;}',
+                codeLanguage: 'cpp',
+                attachmentUrl: 'https://example.com/sol.cpp',
+                attachmentName: 'sol.cpp',
+              ),
+            )
+          : null,
+      codeforcesVerified: true,
+    );
 
 UserSummary _user({String first = 'Ada', String last = 'Lovelace'}) =>
     UserSummary(
@@ -385,6 +431,100 @@ void main() {
         size,
       );
       expect(tester.takeException(), isNull, reason: 'moderation at $size');
+    }
+  });
+
+  /// The archive is a new screen, so it gets the standard hostile-data pass:
+  /// a title with nothing to break on, six-figure points, and a decayed award
+  /// shown next to the struck-through original.
+  testWidgets('a past challenge tile fits a phone', (WidgetTester tester) async {
+    final entries = <String, TodayChallenge>{
+      'decayed, unsolved': _archived(ageDays: 6, award: 15, bonus: 99999),
+      'at the floor, solved': _archived(
+        ageDays: 40,
+        award: 10,
+        bonus: 99999,
+        solved: true,
+      ),
+      'no decay yet': _archived(ageDays: 1, award: 99999, bonus: 99999),
+    };
+
+    for (final entry in entries.entries) {
+      for (final size in const [_phone, _narrow]) {
+        await _pumpAt(
+          tester,
+          PastChallengeTile(entry: entry.value, onTap: () {}),
+          size,
+        );
+        expect(tester.takeException(), isNull,
+            reason: '${entry.key} at $size');
+      }
+    }
+  });
+
+  /// Code is the one thing in the app that must not wrap, so the block scrolls
+  /// sideways instead. That is exactly the shape that overflows if it is wired
+  /// up wrong, which is what this asserts.
+  testWidgets('a code block fits a phone with an unbreakable line',
+      (WidgetTester tester) async {
+    final code = [
+      '#include <bits/stdc++.h>',
+      'int main(){',
+      '  ${'x' * 400};',
+      '  return 0;',
+      '}',
+    ].join('\n');
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(tester, CodeBlock(code: code, language: 'cpp'), size);
+      expect(tester.takeException(), isNull, reason: 'code block at $size');
+    }
+  });
+
+  testWidgets('the code editor and attachment chip fit a phone',
+      (WidgetTester tester) async {
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(
+        tester,
+        SingleChildScrollView(
+          child: Column(
+            children: [
+              CodeComposer(
+                initial: const CodeSubmission(
+                  codeBody: 'print("hello")',
+                  codeLanguage: 'python',
+                  attachmentUrl: 'https://example.com/a.py',
+                  attachmentName:
+                      'solution_with_an_absurdly_long_filename_v12_final.py',
+                ),
+                onChanged: (_) {},
+              ),
+              const AttachmentChip(
+                url: 'https://example.com/a.py',
+                name: 'solution_with_an_absurdly_long_filename_v12_final.py',
+              ),
+            ],
+          ),
+        ),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'code editor at $size');
+    }
+  });
+
+  /// An archived challenge renders through the same view as today's, with the
+  /// decay note and a stored solution added — both new, both able to overflow.
+  testWidgets('an archived challenge with a saved solution fits a phone',
+      (WidgetTester tester) async {
+    final entry = _archived(ageDays: 9, award: 10, bonus: 99999, solved: true);
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(
+        tester,
+        DailyChallengeView(today: entry, solvers: const []),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'archived at $size');
     }
   });
 
