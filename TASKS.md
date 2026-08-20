@@ -412,6 +412,33 @@ See [decisions.md](docs/decisions.md) D33–D35.
 - [x] Known and left alone: a notification pointing at an admin-deleted quest
       opens a 404 error state. Honest, not a crash
 
+## The three reported bugs, found by running the app ✅
+
+See [decisions.md](docs/decisions.md) D36–D37. Earlier passes fixed real defects
+from reading the code but missed all three of these, so this round was done by
+building the Linux app against the live API as the signed-in user, sizing the
+window to a phone and taking screenshots before and after.
+
+- [x] **The greeting printed an email.** `username` is seeded with the signup
+      address, so the home heading read `Welcome back, saifahmedsakib@gmail.com!`
+      — no spaces to wrap on, so it broke mid-token and ate the top of the
+      screen. `core/display_name.dart` trims from the `@` everywhere, including
+      quest tiles
+- [x] **`Center` centres vertically.** Quest detail floated its whole page down
+      the middle of the viewport when it was shorter than one screen. That was
+      the space above the question; moving the title up did not touch it.
+      Content screens use `Align(topCenter)` now — auth screens keep `Center`,
+      where centring a short form is deliberate
+- [x] **The claim button was below the fold** and behind the tab bar, which is
+      why it read as missing. Pinned as `ChallengeActionBar`, the way the answer
+      composer already is, and covered at 320px in all three of its states
+- [x] **The Codeforces link was not a link.** Added `url_launcher` and an
+      **Open problem** button. Checking the live account against the Codeforces
+      API showed no submission for the challenge problem, ever — the refusal was
+      correct, there was just no usable way to reach the problem
+- [x] `AndroidManifest.xml` gained the `https` `<queries>` intent, without which
+      `canLaunchUrl` returns false on Android 11+ even with a browser installed
+
 **Visual polish pass** — no feature changes; see [decisions.md](docs/decisions.md) D25
 - [x] `core/motion.dart`: shared durations/curves, `appRoute`, `FadeSlideIn`,
       `TabTransition`, `CountUpText`. Zero new dependencies — the app had no animation

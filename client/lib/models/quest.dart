@@ -5,6 +5,7 @@
 /// wire keys stay `question*`, the Dart types read `Quest`.
 library;
 
+import '../core/display_name.dart';
 import 'code_submission.dart';
 
 import '../core/app_time.dart';
@@ -30,8 +31,9 @@ class UserSummary {
 
   /// Full name when we have one, otherwise the username.
   String get displayName {
-    final full = '$firstName $lastName'.trim();
-    return full.isEmpty ? username : full;
+    // Never the raw email — see core/display_name.dart.
+    return personName(
+        firstName: firstName, lastName: lastName, username: username);
   }
 
   String get initial =>

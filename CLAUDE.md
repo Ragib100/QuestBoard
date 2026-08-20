@@ -78,6 +78,14 @@ client/lib/
 - **Server layering:** router → service → model. Routers do no DB work.
 - **Client state:** `StatefulWidget` + `setState`, `Navigator` (no router package),
   `package:http`. No Riverpod / GoRouter / Dio — do not add them.
+- **Links:** open external URLs with `openLink()` from `core/open_link.dart`
+  (url_launcher), never by showing a URL to copy. Android needs the `https`
+  `<queries>` intent in the manifest or it silently fails (decisions.md D37).
+- **Alignment:** `Center` centres vertically too, so a page shorter than the
+  viewport floats down the middle of it. Content screens use
+  `Align(alignment: Alignment.topCenter)`; only auth forms use `Center` (D36).
+- **Names:** never render `username` directly — it holds the signup email. Use
+  `displayName`, or the helpers in `core/display_name.dart` (D36).
 - **Theme:** light, blue `#0066FF`, Inter/Outfit via `google_fonts`. Colors come
   from `AppColors` in `client/lib/core/app_colors.dart` — never write a raw
   `Color(0xFF...)` literal. Forms use `LabeledField` from `core/widgets/`. See

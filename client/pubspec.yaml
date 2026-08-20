@@ -43,6 +43,11 @@ dependencies:
   # (already here, for avatars) only picks images, and the web build has no
   # filesystem to read a path from — this returns bytes on every platform.
   file_picker: ^12.0.0
+  # Opens the Codeforces problem in the browser. The daily challenge is a
+  # link out by design — points come from a verdict on Codeforces — and until
+  # this was added the app showed a URL you had to copy and paste by hand,
+  # which is most of why "I solved it" never worked for anyone.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
