@@ -49,6 +49,7 @@ TodayChallenge _archived({
   required int award,
   int bonus = 50,
   bool solved = false,
+  bool verified = true,
 }) =>
     TodayChallenge(
       challenge: DailyChallenge.fromJson({
@@ -80,7 +81,7 @@ TodayChallenge _archived({
               ),
             )
           : null,
-      codeforcesVerified: true,
+      codeforcesVerified: verified,
     );
 
 UserSummary _user({String first = 'Ada', String last = 'Lovelace'}) =>
@@ -430,6 +431,56 @@ void main() {
     expect(find.text('Past challenges'), findsOneWidget);
     // The recency rule is stated before the button, not only in its error.
     expect(find.textContaining('older solve does not count'), findsOneWidget);
+  });
+
+  /// The claim action is pinned, and every one of its three states has to fit
+  /// a 320px bar. It was reported as missing when it lived at the bottom of a
+  /// scrolling column, so "is it on screen" is now the thing under test.
+  testWidgets('the pinned claim bar fits a phone in every state',
+      (WidgetTester tester) async {
+    final states = <String, TodayChallenge>{
+      'unverified': _archived(ageDays: 0, award: 50, verified: false),
+      'claimable': _archived(ageDays: 0, award: 50),
+      'solved': _archived(ageDays: 9, award: 99999, bonus: 99999, solved: true),
+    };
+
+    for (final entry in states.entries) {
+      for (final size in const [_phone, _narrow]) {
+        await _pumpAt(
+          tester,
+          Column(children: [
+            const Spacer(),
+            ChallengeActionBar(
+              today: entry.value,
+              onClaim: () {},
+              onVerify: () {},
+              onOpenProblem: () {},
+            ),
+          ]),
+          size,
+        );
+        expect(tester.takeException(), isNull,
+            reason: '${entry.key} at $size');
+      }
+    }
+  });
+
+  testWidgets('a claimable challenge offers both the problem and the claim',
+      (WidgetTester tester) async {
+    await _pumpAt(
+      tester,
+      ChallengeActionBar(
+        today: _archived(ageDays: 0, award: 50),
+        onClaim: () {},
+        onVerify: () {},
+        onOpenProblem: () {},
+      ),
+      _narrow,
+    );
+
+    // Getting to Codeforces is half the job: nothing else can earn the points.
+    expect(find.text('Open problem'), findsOneWidget);
+    expect(find.text('Claim'), findsOneWidget);
   });
 
   testWidgets('the Codeforces verification sheet fits a phone',

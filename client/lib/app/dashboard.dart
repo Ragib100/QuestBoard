@@ -11,6 +11,7 @@ import 'modules/daily_challenge/daily_challenge_screen.dart';
 import 'modules/notifications/notifications_screen.dart';
 import 'modules/profile/profile_screen.dart';
 import '../core/app_colors.dart';
+import '../core/display_name.dart';
 import '../core/motion.dart';
 import '../core/widgets/app_card.dart';
 import '../core/widgets/async_states.dart';
@@ -601,7 +602,15 @@ class _UserHomeState extends State<UserHome> {
           children: [
             if (_error != null) _errorBanner(),
             Text(
-              _me == null ? 'Welcome back!' : 'Welcome back, ${_me!.firstName.isEmpty ? _me!.username : _me!.firstName}!',
+              _me == null
+                  ? 'Welcome back!'
+                  : 'Welcome back, '
+                      '${greetingName(firstName: _me!.firstName, username: _me!.username)}!',
+              // Two lines at most. The greeting is the largest text on the
+              // screen and the name in it is user-supplied, so without a cap a
+              // long one pushes everything else below the fold.
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,

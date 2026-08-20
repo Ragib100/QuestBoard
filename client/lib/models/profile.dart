@@ -1,3 +1,4 @@
+import '../core/display_name.dart';
 import '../core/app_time.dart';
 
 class Profile {
@@ -34,8 +35,9 @@ class Profile {
   final DateTime createdAt;
 
   String get displayName {
-    final full = '$firstName $lastName'.trim();
-    return full.isEmpty ? username : full;
+    // Never the raw email — see core/display_name.dart.
+    return personName(
+        firstName: firstName, lastName: lastName, username: username);
   }
 
   factory Profile.fromJson(Map<String, dynamic> json) => Profile(

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/app_time.dart';
+import '../../../core/open_link.dart';
 import '../../../core/widgets/async_states.dart';
 import '../../../core/widgets/reward_burst.dart';
 import '../../../core/widgets/code_composer.dart';
@@ -136,6 +137,25 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     }
   }
 
+  Widget _claimBar() => ChallengeActionBar(
+        today: _today!,
+        claiming: _claiming,
+        onClaim: _claim,
+        onVerify: _verify,
+        onOpenProblem: _openProblem,
+      );
+
+  /// Opens the Codeforces problem in a browser.
+  Future<void> _openProblem() async {
+    final url = _today?.challenge.sourceUrl;
+    if (url == null) {
+      _tell('This challenge has no problem link.');
+      return;
+    }
+    final failure = await openLink(url);
+    if (failure != null) _tell(failure);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,6 +182,14 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                   ),
               ],
             ),
+      // The claim button used to be the last thing in a long scrolling column,
+      // below the problem statement, the link, the rules and the code editor —
+      // off the bottom of a phone and behind the tab bar. It was reported as
+      // "there is no submit button", which is exactly what it looked like.
+      // It is pinned now, the way the answer composer is on a quest.
+      bottomSheet: _loading || _error != null || _today == null
+          ? null
+          : _claimBar(),
       body: _loading
           ? const LoadingState()
           : _error != null
@@ -229,7 +257,9 @@ class DailyChallengeView extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          // The bottom inset clears the pinned claim bar, which would
+          // otherwise sit on top of the last solver row.
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
           children: [
             if (!today.isToday) _staleBanner(),
             Wrap(
@@ -356,61 +386,27 @@ class DailyChallengeView extends StatelessWidget {
     );
   }
 
+  /// What the body says about claiming. The *action* itself is pinned to the
+  /// bottom of the screen by [_DailyChallengeScreenState._claimBar] — this is
+  /// the explanation that goes with it, and it must never duplicate the button
+  /// or there are two of them and neither looks primary.
   Widget _action() {
     final attempt = today.myAttempt;
 
     if (today.isSolved) {
-      final paid = attempt?.awardedPoints ?? 0;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.successTint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.verified_rounded,
-                    color: AppColors.successDark),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    // The amount comes from the attempt, not the challenge:
-                    // a late solve paid less and the screen must not imply
-                    // otherwise. 0 means it predates the stored amount.
-                    paid > 0
-                        ? 'Solved — $paid pts paid.'
-                        : 'Solved — bonus already paid.',
-                    style: const TextStyle(
-                        color: AppColors.successDark,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
           if (attempt != null) ..._savedSolution(attempt),
         ],
       );
     }
 
     if (!today.codeforcesVerified) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'Claiming checks your public Codeforces submissions, so we need to '
-            'know which account is yours first.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: onVerify,
-            child: const Text('Verify Codeforces handle'),
-          ),
-        ],
+      return const Text(
+        'Claiming checks your public Codeforces submissions, so we need to '
+        'know which account is yours first.',
+        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
       );
     }
 
@@ -437,19 +433,11 @@ class DailyChallengeView extends StatelessWidget {
             onChanged: onSubmissionChanged!,
           ),
         ],
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: claiming ? null : onClaim,
-          child: Text(claiming
-              ? 'Checking Codeforces...'
-              : 'I solved it — claim ${today.challenge.awardPoints} pts'),
-        ),
         if (attempt != null && !attempt.isSolved) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           const Text(
             'Your last claim did not find an accepted verdict. Anything you '
             'wrote above was kept.',
-            textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],
@@ -671,6 +659,104 @@ class CopyableUrl extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+/// The pinned action at the foot of the challenge screen.
+///
+/// Split out and public for the same reason [DailyChallengeView] is: it has
+/// three states and has to survive a 320px screen in all of them, and the
+/// screen that owns it cannot be pumped without a server.
+///
+/// It exists at all because the claim button used to be the last thing in a
+/// long scrolling column — below the statement, the link, the rules and the
+/// code editor — which put it off the bottom of a phone and behind the tab
+/// bar. It was reported as "there is no submit button", which is what it
+/// looked like.
+class ChallengeActionBar extends StatelessWidget {
+  const ChallengeActionBar({
+    super.key,
+    required this.today,
+    this.claiming = false,
+    this.onClaim,
+    this.onVerify,
+    this.onOpenProblem,
+  });
+
+  final TodayChallenge today;
+  final bool claiming;
+  final VoidCallback? onClaim;
+  final VoidCallback? onVerify;
+  final VoidCallback? onOpenProblem;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: _content(),
+        ),
+      ),
+    );
+  }
+
+  Widget _content() {
+    final attempt = today.myAttempt;
+
+    if (today.isSolved) {
+      final paid = attempt?.awardedPoints ?? 0;
+      return Row(
+        children: [
+          const Icon(Icons.verified_rounded, color: AppColors.successDark),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              paid > 0 ? 'Solved — $paid pts paid.' : 'Solved — bonus paid.',
+              style: const TextStyle(
+                  color: AppColors.successDark, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (!today.codeforcesVerified) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: onVerify,
+          child: const Text('Verify Codeforces handle'),
+        ),
+      );
+    }
+
+    // Both halves of the actual job: the problem lives on Codeforces and only
+    // a verdict there pays, so getting there is half of the action bar.
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: claiming ? null : onOpenProblem,
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            label: const Text('Open problem'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: claiming ? null : onClaim,
+            child: Text(claiming ? 'Checking…' : 'Claim'),
+          ),
+        ),
+      ],
     );
   }
 }

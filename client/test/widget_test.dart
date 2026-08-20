@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:client/app/intro.dart';
+import 'package:client/core/display_name.dart';
 import 'package:client/core/widgets/labeled_field.dart';
+import 'package:client/models/quest.dart';
 import 'package:client/core/widgets/search_field.dart';
 import 'package:client/main.dart';
 
@@ -153,6 +155,53 @@ void main() {
   /// Quests and answers have no minimum length any more — a short question is
   /// still a question. What is left is a ceiling that bounds the row, and it
   /// is deliberately silent: a "0/50000" counter reads as a target.
+  /// Signing up seeds `username` with the email the account was made with, so
+  /// an account that never finished onboarding was called
+  /// `saifahmedsakib@gmail.com` in a 28px page heading — and an address has no
+  /// spaces, so it broke mid-token across two lines at the top of the home
+  /// screen. It is also not something to put on a public quest tile.
+  group('display names never show an email address', () {
+    test('an email username is trimmed to its handle', () {
+      expect(handleOf('saifahmedsakib@gmail.com'), 'saifahmedsakib');
+      expect(
+        personName(firstName: '', lastName: '', username: 'a@b.com'),
+        'a',
+      );
+      expect(
+        greetingName(firstName: '', username: 'saifahmedsakib@gmail.com'),
+        'saifahmedsakib',
+      );
+    });
+
+    test('a real name always wins', () {
+      expect(
+        personName(
+            firstName: 'Saif', lastName: 'Ahmed', username: 'a@b.com'),
+        'Saif Ahmed',
+      );
+      expect(greetingName(firstName: 'Saif', username: 'a@b.com'), 'Saif');
+    });
+
+    test('a plain handle is left alone', () {
+      expect(handleOf('tourist'), 'tourist');
+      // A leading '@' is a handle written the Twitter way, not a domain.
+      expect(handleOf('@tourist'), '@tourist');
+    });
+
+    test('the model getters go through it', () {
+      const summary = UserSummary(
+        id: 'u1',
+        username: 'saifahmedsakib@gmail.com',
+        firstName: '',
+        lastName: '',
+        imageUrl: '',
+        points: 0,
+      );
+      expect(summary.displayName, 'saifahmedsakib');
+      expect(summary.displayName, isNot(contains('@')));
+    });
+  });
+
   testWidgets('LabeledField caps input without showing a counter',
       (WidgetTester tester) async {
     final controller = TextEditingController();

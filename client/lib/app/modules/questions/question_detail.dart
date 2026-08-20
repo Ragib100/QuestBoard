@@ -327,7 +327,12 @@ class _QuestionDetailState extends State<QuestionDetail> {
 
   Widget _content() {
     final quest = _quest!;
-    return Center(
+    return Align(
+      // Align, not Center: Center also centres *vertically*, so a page whose
+      // content is shorter than the viewport floats down the middle of it. On
+      // a quest with no answers that left a band of dead space above the title
+      // about as tall as the app bar again. Reading starts at the top.
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900),
         child: SingleChildScrollView(

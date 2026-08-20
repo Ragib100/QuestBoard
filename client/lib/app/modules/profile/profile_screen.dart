@@ -120,7 +120,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ],
     );
 
-    return Center(
+    // Top-aligned: a short profile should start under the app bar, not float
+    // down the middle of the viewport (see question_detail.dart).
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1000),
         child: RefreshIndicator(

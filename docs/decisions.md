@@ -399,3 +399,57 @@ stopped short of both edges and read as a misaligned block floating mid-page.
 Each section now caps its own contents and the band is full-bleed. The outer
 Column stretches so the band has a width to fill, and `ColoredBox` replaced the
 `Container` since the sizing no longer comes from it.
+
+### D36 — Three layout bugs, found by looking at the running app
+
+D33–D35 were written from reading the code and they fixed real defects, but
+none of them was what had been reported three times. The three below were found
+by building the Linux app, pointing it at the live API as the actual signed-in
+user, sizing the window to 400×860 and taking screenshots. Reading the widget
+tree could not have found any of them, because all three are about what the
+viewport does to content that is otherwise correct.
+
+**The greeting printed an email address.** Signing up seeds `username` with the
+address the account was created with, and `displayName` falls back to
+`username` when there is no first name. So the home screen's 28px heading read
+`Welcome back, saifahmedsakib@gmail.com!` — and an address has no spaces, so it
+broke mid-token across two lines and took the top sixth of the phone screen.
+The same string appeared, truncated, on every quest tile. `core/display_name.dart`
+now trims anything from the `@` on, everywhere. The address is still what the
+account is keyed by; it is simply never rendered.
+
+**`Center` centres vertically too.** Quest detail wrapped its scroll view in
+`Center`, so a quest whose content is shorter than the viewport — one with no
+answers yet — floated down the middle, leaving a band of dead space above the
+title about as tall as the app bar again. This is the "so much space on top of
+the question", and moving the title up (D34) did not touch it because the cause
+was the alignment, not the content order. Content screens now use
+`Align(alignment: Alignment.topCenter)`; the auth screens keep `Center`, where
+centring a short form is deliberate.
+
+**The claim button was below the fold.** On the challenge screen the action sat
+at the end of a scrolling column, after the statement, the problem link, the
+archive link, the claim rules and the code editor — off the bottom of a phone
+and behind the tab bar. Reported as "there is no submit button", which is what
+it looked like. Worse, the explanatory block added in D31 had pushed it further
+down. It is pinned now, as `ChallengeActionBar` in a `bottomSheet`, the way the
+answer composer already is on a quest.
+
+### D37 — url_launcher, so the Codeforces link is a link
+
+The daily challenge is a link out by design: the points come from a verdict on
+Codeforces, and only Codeforces has the statement. The app had no way to open a
+URL — `CopyableUrl` and `AttachmentChip` could only copy to the clipboard — so
+the flow was "solve this problem on Codeforces" followed by a URL to select and
+paste by hand.
+
+That is most of why claiming appeared broken. Checking the live account against
+the Codeforces API showed no submission for the challenge problem at all, ever:
+the refusal was correct, and the user had simply never been given a usable way
+to reach the problem. **Open problem** is now half of the pinned action bar.
+
+`url_launcher` is the exception to "no new packages" — it is first-party, it has
+no alternative on Android, and CLAUDE.md's rule names Riverpod/GoRouter/Dio,
+which are architectural choices rather than a missing platform capability. The
+`<queries>` intent for `https` is required in `AndroidManifest.xml` or
+`canLaunchUrl` returns false on Android 11+ even when a browser is installed.

@@ -107,7 +107,8 @@ class CodeforcesInstructions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
