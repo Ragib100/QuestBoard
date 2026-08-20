@@ -31,12 +31,27 @@ Open **SQL Editor → New query**, paste the whole of
 [`server/schema.sql`](../server/schema.sql), and run it. It creates `users` and
 `quests`, an `updated_at` trigger, and the row-level-security policies.
 
-Then create the storage bucket for avatars — **Storage → New bucket**:
+Then create **two** storage buckets — **Storage → New bucket**, once each:
 
 | Setting | Value |
 |---|---|
 | Name | `profile_image` |
 | Public bucket | **on** (the app builds public URLs for avatars) |
+
+| Setting | Value |
+|---|---|
+| Name | `submissions` |
+| Public bucket | **on** (answers and challenge attempts link to the file) |
+
+`submissions` holds the files people attach to an answer or a challenge
+solution. The client uploads to it directly and sends the API only the resulting
+URL, exactly as avatars work — FastAPI never sees the bytes. Without the bucket
+the code editor still works; only the **Attach file** button fails, and it says
+so with Storage's own message rather than blaming the network.
+
+Re-running `schema.sql` on an existing project is safe and is how you pick up
+later columns: every addition is `add column if not exists`, and the one data
+statement in it (the signup-bonus backfill) is guarded by `not exists`.
 
 ## 3. Database connection string
 
@@ -354,6 +369,17 @@ Claiming the bonus requires a **verified** Codeforces handle: the user submits a
 deliberate compilation error to a problem the server names, and the server looks
 for it in their public submission list. That is the ownership proof — a handle
 existing says nothing about who typed it into our form.
+
+**Past challenges** live at `GET /api/challenges` and stay solvable, but they
+pay less the older they are: the award drops by 10% of the base per day and
+floors at 20% of it. Nothing to configure — the amount is computed from
+`challenge_date` on every request, and the amount actually paid is stored on the
+attempt so the leaderboard and the ledger never disagree about an old solve.
+
+**Submitting code is not submitting to Codeforces.** Codeforces has no public
+submit endpoint, so the editor in the app records the solution alongside the
+attempt; the bonus is still paid only against an accepted verdict found through
+the public API. Anything else would need the user's Codeforces password.
 
 ## 12. Releasing the apps
 

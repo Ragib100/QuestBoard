@@ -51,15 +51,28 @@ create table if not exists public.questions (
 );
 
 create table if not exists public.answers (
-    id          uuid primary key     default gen_random_uuid(),
-    question_id uuid        not null references public.questions (id) on delete cascade,
-    author_id   uuid        not null references public.users (id) on delete cascade,
-    body        text        not null,
-    image_url   text,
-    is_accepted boolean     not null default false,
-    created_at  timestamptz not null default now(),
-    updated_at  timestamptz not null default now()
+    id              uuid primary key     default gen_random_uuid(),
+    question_id     uuid        not null references public.questions (id) on delete cascade,
+    author_id       uuid        not null references public.users (id) on delete cascade,
+    body            text        not null,
+    image_url       text,
+    -- An answer may carry a code submission: the source itself, the language it
+    -- was written in, and optionally a file uploaded to the `submissions`
+    -- bucket. All three are null for a plain-prose answer.
+    code_body       text,
+    code_language   varchar(20),
+    attachment_url  text,
+    attachment_name text,
+    is_accepted     boolean     not null default false,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
 );
+
+-- Added after the first release; `create table if not exists` would skip them.
+alter table public.answers add column if not exists code_body       text;
+alter table public.answers add column if not exists code_language   varchar(20);
+alter table public.answers add column if not exists attachment_url  text;
+alter table public.answers add column if not exists attachment_name text;
 
 alter table public.questions
     drop constraint if exists questions_accepted_answer_id_fkey;
@@ -103,6 +116,34 @@ alter table public.point_transactions
         'challenge_solved', 'daily_bonus', 'signup_bonus',
         'vote_lost', 'vote_received'
     ));
+
+-- Backfill: accounts created before the signup bonus was ledgered.
+--
+-- `users.points` defaults to 100, and for a long time the API let it, so every
+-- account started with 100 points that no transaction explained and the profile
+-- showed a balance with an empty history behind it. `create_user` now pays that
+-- bonus through PointService; this reconciles the accounts that predate it.
+--
+-- The amount is the *actual* gap between the cached balance and the ledger, not
+-- a hardcoded 100, so it lands exactly whatever the drift turned out to be.
+-- Idempotent: an account that already has a signup_bonus row is skipped.
+insert into public.point_transactions (user_id, amount, reason, reference_id)
+select u.id,
+       u.points - coalesce((
+           select sum(t.amount) from public.point_transactions t
+           where t.user_id = u.id
+       ), 0),
+       'signup_bonus',
+       u.id
+from public.users u
+where not exists (
+          select 1 from public.point_transactions t
+          where t.user_id = u.id and t.reason = 'signup_bonus'
+      )
+  and u.points - coalesce((
+          select sum(t.amount) from public.point_transactions t
+          where t.user_id = u.id
+      ), 0) <> 0;
 
 create table if not exists public.tags (
     id   uuid primary key default gen_random_uuid(),
@@ -176,14 +217,30 @@ create table if not exists public.daily_challenges (
 );
 
 create table if not exists public.challenge_attempts (
-    id           uuid primary key  default gen_random_uuid(),
-    challenge_id uuid    not null  references public.daily_challenges (id) on delete cascade,
-    user_id      uuid    not null  references public.users (id) on delete cascade,
-    is_solved    boolean not null  default false,
-    solved_at    timestamp,
-    created_at   timestamp not null default now(),
+    id              uuid primary key  default gen_random_uuid(),
+    challenge_id    uuid    not null  references public.daily_challenges (id) on delete cascade,
+    user_id         uuid    not null  references public.users (id) on delete cascade,
+    is_solved       boolean not null  default false,
+    -- What this solve actually paid. The award decays with the challenge's age,
+    -- so bonus_points alone cannot tell you what a late solver received; this
+    -- column is what keeps the leaderboard and the ledger telling one story.
+    awarded_points  integer not null  default 0,
+    -- The solution the user submitted through the app, if any. Solving is still
+    -- verified against Codeforces — this is the record of the work, not proof.
+    code_body       text,
+    code_language   varchar(20),
+    attachment_url  text,
+    attachment_name text,
+    solved_at       timestamp,
+    created_at      timestamp not null default now(),
     unique (challenge_id, user_id)
 );
+
+alter table public.challenge_attempts add column if not exists awarded_points  integer not null default 0;
+alter table public.challenge_attempts add column if not exists code_body       text;
+alter table public.challenge_attempts add column if not exists code_language   varchar(20);
+alter table public.challenge_attempts add column if not exists attachment_url  text;
+alter table public.challenge_attempts add column if not exists attachment_name text;
 
 insert into public.badges (name, description) values
     ('first_answer',  'Submitted your first answer'),
@@ -210,6 +267,7 @@ create index if not exists votes_target_idx on public.votes (target_type, target
 create index if not exists point_tx_user_idx on public.point_transactions (user_id, created_at desc);
 create index if not exists idx_hints_user_question on public.ai_hints (user_id, question_id, created_at desc);
 create index if not exists idx_challenges_date on public.daily_challenges (challenge_date desc);
+create index if not exists idx_attempts_user on public.challenge_attempts (user_id, is_solved);
 
 -- GET /api/questions?search= matches with ILIKE '%term%', which no B-tree can
 -- serve. A GIN trigram index can, so search stays a index scan as the board

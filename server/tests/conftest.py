@@ -12,13 +12,14 @@ This is what makes it safe to point these at the live project.
 """
 
 import uuid
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.database import engine
-from app.models import Question, User
+from app.models import DailyChallenge, Question, User
 
 AUTH_INSTANCE = "00000000-0000-0000-0000-000000000000"
 
@@ -95,6 +96,68 @@ def make_quest(db: Session):
         db.add(quest)
         db.commit()
         return quest
+
+    return _make
+
+
+@pytest.fixture
+def auth_identity(db: Session):
+    """A row in `auth.users` and nothing else.
+
+    `UserService.create_user` writes the `public.users` row itself, so a test
+    of it needs the Supabase side to exist first and the profile side not to.
+    """
+
+    def _make():
+        user_id = uuid.uuid4()
+        db.execute(
+            text(
+                """insert into auth.users
+                   (id, instance_id, aud, role, email, encrypted_password,
+                    email_confirmed_at, created_at, updated_at)
+                   values (:id, :inst, 'authenticated', 'authenticated', :email,
+                           '', now(), now(), now())"""
+            ),
+            {"id": user_id, "inst": AUTH_INSTANCE, "email": f"{user_id}@pytest.test"},
+        )
+        db.commit()
+        return user_id
+
+    return _make
+
+
+@pytest.fixture
+def make_challenge(db: Session):
+    """A daily challenge dated `age_days` ago.
+
+    Written straight to the table: `ChallengeService.today` would call the real
+    Codeforces API, and the age is the whole point of these tests.
+    """
+
+    def _make(age_days: int = 0, bonus: int = 50):
+        challenge_date = date.today() - timedelta(days=age_days)
+
+        # `challenge_date` is unique and the live table already holds real
+        # challenges for recent dates. Clearing the day first is safe here for
+        # the same reason the whole suite is: this runs inside the outer
+        # transaction, which is rolled back, so the real row is never gone.
+        db.execute(
+            text("delete from daily_challenges where challenge_date = :d"),
+            {"d": challenge_date},
+        )
+
+        challenge = DailyChallenge(
+            codeforces_id="1873/D",
+            title="A pytest challenge",
+            body="Solve it on Codeforces.",
+            cf_rating=1200,
+            difficulty="medium",
+            bonus_points=bonus,
+            challenge_date=challenge_date,
+        )
+        db.add(challenge)
+        db.commit()
+        return challenge
 
     return _make
 

@@ -1,0 +1,339 @@
+"""The challenge archive, the age decay, and code submissions.
+
+Same invariant as `test_economy.py`: **`users.points` always equals the sum of
+that user's ledger rows.** The decay makes that easier to get wrong, not
+harder — the amount paid is now computed at claim time and stored separately,
+so these check that the three numbers (award, balance, ledger) agree.
+
+Codeforces is stubbed. Every test that claims a challenge would otherwise hit
+the public API, which is rate limited, occasionally down, and not the thing
+under test.
+"""
+
+from datetime import date, timedelta
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.models import DECAY_FLOOR, PointReason, award_for
+from app.schemas.answer import AnswerCreate
+from app.schemas.challenge import SolveRequest
+from app.services import codeforces_service as cf
+from app.services.challenge_service import ChallengeService
+from app.services.user_service import UserService
+
+from tests.conftest import ledger_total
+
+
+@pytest.fixture
+def verified(make_user, db: Session):
+    """A user who has proved they own a Codeforces handle."""
+
+    def _make(points: int = 100):
+        user = make_user(points=points)
+        user.codeforces_handle = "tourist"
+        user.codeforces_verified = True
+        db.commit()
+        return user
+
+    return _make
+
+
+@pytest.fixture
+def solved_on_codeforces(monkeypatch):
+    """Stubs the Codeforces verdict check."""
+
+    def _set(value: bool):
+        monkeypatch.setattr(cf, "has_solved", lambda handle, problem: value)
+
+    return _set
+
+
+# ------------------------------------------------------------------- decay ---
+
+
+def test_the_decay_matches_the_published_table():
+    """docs/api.md promises these exact numbers for a 50-point challenge."""
+    today = date(2026, 8, 20)
+    awards = [award_for(50, today - timedelta(days=age), on=today) for age in range(9)]
+
+    assert awards == [50, 45, 40, 35, 30, 25, 20, 15, 10]
+
+
+def test_the_decay_stops_at_the_floor():
+    today = date(2026, 8, 20)
+    floor = round(50 * DECAY_FLOOR)
+
+    for age in (8, 30, 365, 10_000):
+        assert award_for(50, today - timedelta(days=age), on=today) == floor
+
+
+def test_a_future_dated_challenge_is_worth_full_price():
+    """Clock skew between the server and the row must not pay a bonus."""
+    today = date(2026, 8, 20)
+    assert award_for(50, today + timedelta(days=3), on=today) == 50
+
+
+def test_the_decay_never_reaches_zero_for_a_real_bounty():
+    today = date(2026, 8, 20)
+    for bonus in range(1, 200):
+        award = award_for(bonus, today - timedelta(days=9999), on=today)
+        assert award >= 1, f"{bonus} decayed to nothing"
+
+
+# ------------------------------------------------------------- claiming it ---
+
+
+def test_claiming_today_pays_the_full_bonus(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(True)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    attempt = ChallengeService.claim(db, challenge.id, user.id)
+    db.refresh(user)
+
+    assert attempt.awarded_points == 50
+    # 50 for the challenge plus the 10 daily bonus the claim also triggers.
+    assert user.points == 160
+    assert ledger_total(db, user) == 60, "ledger must explain the whole change"
+
+
+def test_claiming_an_old_challenge_pays_the_decayed_award(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    """The bug this guards: paying `bonus_points` for a month-old problem."""
+    solved_on_codeforces(True)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=4, bonus=50)
+
+    attempt = ChallengeService.claim(db, challenge.id, user.id)
+    db.refresh(user)
+
+    assert attempt.awarded_points == 30, "4 days old: 50 - 4x5"
+    assert user.points == 140, "30 for the challenge, 10 for the daily bonus"
+    assert ledger_total(db, user) == 40
+
+
+def test_the_stored_award_matches_the_ledger_row(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    """`awarded_points` is what the leaderboard shows; the ledger is what was
+    paid. They are written in one transaction and must never disagree."""
+    solved_on_codeforces(True)
+    user = verified(points=0)
+    challenge = make_challenge(age_days=6, bonus=50)
+
+    attempt = ChallengeService.claim(db, challenge.id, user.id)
+
+    rows = list(
+        db.execute(
+            text(
+                "select amount from point_transactions "
+                "where user_id = :u and reason = :r"
+            ),
+            {"u": user.id, "r": PointReason.CHALLENGE_SOLVED},
+        ).scalars()
+    )
+
+    assert rows == [attempt.awarded_points]
+
+
+def test_claiming_twice_is_refused(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(True)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=1, bonus=50)
+
+    ChallengeService.claim(db, challenge.id, user.id)
+    db.refresh(user)
+    after_first = user.points
+
+    with pytest.raises(ValueError, match="already claimed"):
+        ChallengeService.claim(db, challenge.id, user.id)
+
+    db.refresh(user)
+    assert user.points == after_first, "a refused second claim pays nothing"
+    assert ledger_total(db, user) == after_first - 100
+
+
+def test_an_unverified_handle_cannot_claim(
+    db: Session, make_user, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(True)
+    user = make_user(points=100)
+    challenge = make_challenge(age_days=0)
+
+    with pytest.raises(PermissionError, match="Verify your Codeforces handle"):
+        ChallengeService.claim(db, challenge.id, user.id)
+
+    db.refresh(user)
+    assert user.points == 100
+    assert ledger_total(db, user) == 0
+
+
+def test_an_unaccepted_solve_pays_nothing(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(False)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=0)
+
+    with pytest.raises(ValueError, match="no accepted submission"):
+        ChallengeService.claim(db, challenge.id, user.id)
+
+    db.refresh(user)
+    assert user.points == 100
+    assert ledger_total(db, user) == 0
+
+    attempt = ChallengeService.attempt_of(db, challenge.id, user.id)
+    assert (
+        attempt is not None and not attempt.is_solved
+    ), "the failed attempt is still recorded"
+
+
+# -------------------------------------------------------------- submissions ---
+
+
+def test_a_claim_stores_the_submitted_code(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(True)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=2)
+
+    attempt = ChallengeService.claim(
+        db,
+        challenge.id,
+        user.id,
+        SolveRequest(
+            code_body="int main(){return 0;}",
+            code_language="cpp",
+            attachment_url="https://example.test/sol.cpp",
+            attachment_name="sol.cpp",
+        ),
+    )
+
+    assert attempt.code_body == "int main(){return 0;}"
+    assert attempt.code_language == "cpp"
+    assert attempt.attachment_name == "sol.cpp"
+
+
+def test_a_premature_claim_keeps_the_code(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    """Claiming a minute before the verdict lands must not discard the work."""
+    solved_on_codeforces(False)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=0)
+
+    with pytest.raises(ValueError):
+        ChallengeService.claim(
+            db,
+            challenge.id,
+            user.id,
+            SolveRequest(code_body="print('wip')", code_language="python"),
+        )
+
+    attempt = ChallengeService.attempt_of(db, challenge.id, user.id)
+    assert attempt is not None
+    assert attempt.code_body == "print('wip')"
+    assert not attempt.is_solved
+
+
+def test_code_with_no_language_is_labelled_rather_than_left_blank(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(True)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=0)
+
+    attempt = ChallengeService.claim(
+        db, challenge.id, user.id, SolveRequest(code_body="x = 1")
+    )
+
+    assert attempt.code_language == "text"
+
+
+def test_leading_indentation_survives_the_round_trip():
+    """Stripping a Python solution's indentation would break the code."""
+    data = SolveRequest(code_body="    if x:\n        return 1\n\n")
+
+    assert data.code_body == "    if x:\n        return 1"
+
+
+def test_an_unknown_language_is_refused():
+    with pytest.raises(ValueError, match="not a language"):
+        SolveRequest(code_body="x", code_language="brainfuck")
+
+
+def test_an_answer_may_be_code_with_almost_no_prose():
+    """The ten-character minimum does not apply to a working solution."""
+    answer = AnswerCreate(body="here", code_body="int main(){}", code_language="cpp")
+
+    assert answer.code_body == "int main(){}"
+
+
+def test_an_answer_with_neither_prose_nor_code_is_refused():
+    with pytest.raises(ValueError, match="at least 10 characters"):
+        AnswerCreate(body="too short")
+
+
+# ----------------------------------------------------------------- archive ---
+
+
+def test_the_archive_excludes_today_by_default(db: Session, make_challenge):
+    make_challenge(age_days=0)
+    old = make_challenge(age_days=3)
+
+    rows, _ = ChallengeService.archive_page(db, limit=50)
+    ids = [row["challenge"].id for row in rows]
+
+    assert old.id in ids
+    assert all(
+        row["challenge"].challenge_date < date.today() for row in rows
+    ), "today's challenge belongs on the daily screen, not in the archive"
+
+
+def test_the_archive_reports_the_viewers_own_attempt(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    solved_on_codeforces(True)
+    user = verified(points=100)
+    challenge = make_challenge(age_days=2)
+    ChallengeService.claim(db, challenge.id, user.id)
+
+    rows, _ = ChallengeService.archive_page(db, limit=50, viewer_id=user.id)
+    mine = next(r for r in rows if r["challenge"].id == challenge.id)
+
+    assert mine["attempt"] is not None and mine["attempt"].is_solved
+    assert mine["solver_count"] == 1
+
+
+# --------------------------------------------------- the signup bonus gap ---
+
+
+def test_a_new_profile_ledgers_its_signup_bonus(db: Session, auth_identity):
+    """The bug this guards: `users.points` defaulted to 100 with no transaction
+    behind it, so every account's balance was 100 points the ledger could not
+    explain."""
+    from app.schemas.user import UserCreate
+
+    user_id = auth_identity()
+    user = UserService.create_user(
+        db,
+        user_id,
+        UserCreate(
+            username=f"pytest_{user_id.hex[:12]}",
+            first_name="Ada",
+            last_name="Lovelace",
+            image_url="",
+            codeforces_handle="",
+        ),
+    )
+
+    assert user.points == 100
+    assert ledger_total(db, user) == 100, "the balance must be explained"

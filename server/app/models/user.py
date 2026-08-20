@@ -12,6 +12,12 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
 
+# What a new account starts with. Mirrored by the column's server default so a
+# row inserted directly in SQL still gets it — but the API hands it out through
+# PointService, so the ledger has a `signup_bonus` row to explain the balance.
+SIGNUP_BONUS = 100
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -60,7 +66,7 @@ class User(Base):
     points = Column(
         Integer,
         nullable=False,
-        server_default="100",
+        server_default=str(SIGNUP_BONUS),
     )
 
     streak_days = Column(

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,6 +22,28 @@ class SupabaseServices {
           filePath,
           imageFile,
           fileOptions: const FileOptions(upsert: true),
+        );
+
+    return filePath;
+  }
+
+  /// Uploads raw bytes and returns the storage path.
+  ///
+  /// The image path goes through [uploadImage] and a `File`; code attachments
+  /// cannot, because `file_picker` on the web has no filesystem to hand back —
+  /// only bytes. This works on every platform the app builds for.
+  Future<String> uploadBytes({
+    required String bucketName,
+    required Uint8List bytes,
+    required String filePath,
+    String? contentType,
+  }) async {
+    await _client.storage
+        .from(bucketName)
+        .uploadBinary(
+          filePath,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
         );
 
     return filePath;

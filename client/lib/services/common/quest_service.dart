@@ -1,3 +1,4 @@
+import '../../models/code_submission.dart';
 import '../../models/quest.dart';
 import '../api/api_client.dart';
 
@@ -54,9 +55,19 @@ class QuestService {
 
   Future<void> delete(String id) => _api.delete('/questions/$id');
 
-  Future<Answer> answer(String questId, String body) async {
+  /// Posts an answer, optionally carrying a code submission.
+  ///
+  /// With code attached the server relaxes its ten-character minimum on
+  /// [body] — the code is the answer, and demanding prose on top of a working
+  /// solution only ever produces "here you go".
+  Future<Answer> answer(
+    String questId,
+    String body, {
+    CodeSubmission submission = CodeSubmission.empty,
+  }) async {
     final json = await _api.post('/questions/$questId/answers', body: {
       'body': body,
+      ...submission.toJson(),
     });
     return Answer.fromJson(json as Map<String, dynamic>);
   }

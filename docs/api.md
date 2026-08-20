@@ -62,9 +62,17 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ✅ | `POST /questions/{id}/answers` | Body `{ body }`. Notifies the quest author. `409` if the quest is solved. |
-| ✅ | `PATCH /answers/{id}` · `DELETE /answers/{id}` | Author only. Cannot touch an accepted answer. |
+| ✅ | `POST /questions/{id}/answers` | Body `{ body, image_url?, code_body?, code_language?, attachment_url?, attachment_name? }`. Notifies the quest author. `409` if the quest is solved. `body` normally needs 10 characters; an answer carrying `code_body` may have a shorter one, because the code *is* the answer. |
+| ✅ | `PATCH /answers/{id}` · `DELETE /answers/{id}` | Author only. Cannot touch an accepted answer. `PATCH` takes the same optional code fields; passing `""` clears one. |
 | ✅ | `POST /answers/{id}/accept` | Quest author only, once (`409` on repeat). One transaction: mark accepted, close the quest, credit the helper, write `bounty_awarded`. |
+
+**Attachments are not an API endpoint.** The client uploads the file straight to
+the public `submissions` Supabase Storage bucket — the same pattern avatars
+already use — and sends the resulting public URL as `attachment_url`, with the
+original filename as `attachment_name` so the UI has something to label the link
+with. FastAPI never sees the bytes. `code_body` is plain text and *is* stored in
+Postgres: it is small, it belongs to the answer, and putting it in a bucket would
+mean a second fetch to render an answer.
 
 ## Votes
 
@@ -87,8 +95,25 @@ reset all happen client-side through `supabase_flutter`. See
 | | Endpoint | Notes |
 |---|---|---|
 | ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
-| ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem, then awards `bonus_points`. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt. |
-| ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. |
+| ✅ | `GET /challenges` | Public. The archive, newest first — `page`, `limit` ≤ 50, same page shape as `/questions`. Today's challenge is included only when `include_today=true`. Every row carries `award_points`: what solving it is worth **now**, after the age decay below. |
+| ✅ | `GET /challenges/{id}` | Public. One challenge in the same shape as `/challenges/today`, so a past challenge reuses the whole screen. `404` if it does not exist. |
+| ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem, then awards `award_points` — `bonus_points` decayed by the challenge's age, never `bonus_points` itself for an old one. Optional body `{ code_body?, code_language?, attachment_url?, attachment_name? }` stores the solution on the attempt. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt — with the code, so nothing typed is lost. |
+| ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. Each row carries the `awarded_points` that solver actually received, which differs between a same-day solve and a late one. |
+
+### Challenge point decay
+
+A challenge is worth its full `bonus_points` on its own day and loses **10% of
+that base per day** afterwards, with a floor at **20%** of the base. For the
+standard 50-point challenge:
+
+| Age | 0d | 1d | 3d | 5d | 7d | 8d+ |
+|---|---|---|---|---|---|---|
+| Award | 50 | 45 | 35 | 25 | 15 | 10 |
+
+The decay is computed from `challenge_date` at claim time — it is never stored
+on the challenge, so it cannot go stale. What *is* stored is
+`challenge_attempts.awarded_points`, the amount actually paid, so the ledger and
+the leaderboard agree about a solve forever after.
 | ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. `400` without a handle on the profile. |
 | ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
 

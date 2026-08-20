@@ -1,4 +1,5 @@
 import '../../models/challenge.dart';
+import '../../models/code_submission.dart';
 import '../api/api_client.dart';
 
 class ChallengeService {
@@ -19,10 +20,47 @@ class ChallengeService {
     return TodayChallenge.fromJson(json as Map<String, dynamic>);
   }
 
+  /// One challenge by id, in the same shape as [today] — how an archived
+  /// challenge reuses the whole screen.
+  Future<TodayChallenge> detail(String challengeId,
+      {bool authenticated = true}) async {
+    final json = await _api.get('/challenges/$challengeId', auth: authenticated);
+    return TodayChallenge.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Past challenges, newest first. Each row already carries the decayed
+  /// `awardPoints`, so the list never advertises a number the server will not
+  /// pay.
+  Future<ChallengePage> archive({
+    int page = 1,
+    int limit = 20,
+    bool authenticated = true,
+  }) async {
+    final json = await _api.get(
+      '/challenges',
+      query: {'page': page, 'limit': limit},
+      auth: authenticated,
+    );
+    return ChallengePage.fromJson(json as Map<String, dynamic>);
+  }
+
   /// Asks the server to check Codeforces for an accepted submission and pay
-  /// the bonus. Throws [ApiException] with the reason when it has not.
-  Future<ChallengeAttempt> claim(String challengeId) async {
-    final json = await _api.post('/challenges/$challengeId/solve');
+  /// the award. Throws [ApiException] with the reason when it has not.
+  ///
+  /// [submission] is the code written or attached in the app. It is stored on
+  /// the attempt either way — the verdict is what pays, but a claim made a
+  /// minute too early must not discard the work.
+  Future<ChallengeAttempt> claim(
+    String challengeId, {
+    CodeSubmission submission = CodeSubmission.empty,
+  }) async {
+    final json = await _api.post(
+      '/challenges/$challengeId/solve',
+      body: submission.toJson(),
+      // Claiming waits on the public Codeforces API, which is rate limited and
+      // often slow — the default 10s times out on a perfectly good claim.
+      timeout: const Duration(seconds: 25),
+    );
     return ChallengeAttempt.fromJson(json as Map<String, dynamic>);
   }
 

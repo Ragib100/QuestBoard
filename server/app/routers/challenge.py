@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -9,14 +9,28 @@ from app.dependencies.auth import get_current_user_id, get_optional_user_id
 from app.models import User
 from app.schemas.challenge import (
     AttemptResponse,
-    ChallengeResponse,
+    ChallengePage,
     ChallengeSolver,
+    ChallengeView,
+    SolveRequest,
     TodayResponse,
 )
 from app.schemas.user import UserSummary
 from app.services.challenge_service import ChallengeService
+from app.utils.serialize import challenge_view
 
 router = APIRouter(prefix="/challenges", tags=["Daily challenge"])
+
+
+def _utc_today():
+    return datetime.now(timezone.utc).date()
+
+
+def _viewer_is_verified(db: Session, viewer_id: UUID | None) -> bool:
+    if viewer_id is None:
+        return False
+    user = db.get(User, viewer_id)
+    return bool(user and user.codeforces_verified)
 
 
 @router.get("/today", response_model=TodayResponse)
@@ -32,32 +46,104 @@ def today(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
         )
 
-    attempt = None
-    verified = False
-    if viewer_id is not None:
-        row = ChallengeService.attempt_of(db, challenge.id, viewer_id)
-        attempt = AttemptResponse.model_validate(row) if row is not None else None
-        user = db.get(User, viewer_id)
-        verified = bool(user and user.codeforces_verified)
+    attempt = (
+        ChallengeService.attempt_of(db, challenge.id, viewer_id)
+        if viewer_id is not None
+        else None
+    )
 
-    return TodayResponse(
-        challenge=ChallengeResponse.model_validate(challenge),
-        is_today=challenge.challenge_date == datetime.now(timezone.utc).date(),
+    return challenge_view(
+        challenge,
+        today=_utc_today(),
+        attempt=attempt,
         solver_count=ChallengeService.solver_count(db, challenge.id),
-        my_attempt=attempt,
-        codeforces_verified=verified,
+        codeforces_verified=_viewer_is_verified(db, viewer_id),
+    )
+
+
+@router.get("", response_model=ChallengePage)
+def archive(
+    db: Session = Depends(get_db),
+    viewer_id: UUID | None = Depends(get_optional_user_id),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    include_today: bool = False,
+):
+    """Public. Past challenges, newest first.
+
+    Every row carries `award_points` — what solving it is worth *now*, after the
+    age decay — so the archive never advertises a number it will not pay.
+    """
+    rows, total = ChallengeService.archive_page(
+        db,
+        page=page,
+        limit=limit,
+        include_today=include_today,
+        viewer_id=viewer_id,
+    )
+
+    verified = _viewer_is_verified(db, viewer_id)
+    utc_today = _utc_today()
+
+    return ChallengePage(
+        items=[
+            challenge_view(
+                row["challenge"],
+                today=utc_today,
+                attempt=row["attempt"],
+                solver_count=row["solver_count"],
+                codeforces_verified=verified,
+            )
+            for row in rows
+        ],
+        page=page,
+        limit=limit,
+        total=total,
+        has_more=page * limit < total,
+    )
+
+
+@router.get("/{challenge_id}", response_model=ChallengeView)
+def one(
+    challenge_id: UUID,
+    db: Session = Depends(get_db),
+    viewer_id: UUID | None = Depends(get_optional_user_id),
+):
+    """Public. The same shape as `/today`, so one screen renders both."""
+    try:
+        challenge = ChallengeService.get(db, challenge_id)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    attempt = (
+        ChallengeService.attempt_of(db, challenge.id, viewer_id)
+        if viewer_id is not None
+        else None
+    )
+
+    return challenge_view(
+        challenge,
+        today=_utc_today(),
+        attempt=attempt,
+        solver_count=ChallengeService.solver_count(db, challenge.id),
+        codeforces_verified=_viewer_is_verified(db, viewer_id),
     )
 
 
 @router.post("/{challenge_id}/solve", response_model=AttemptResponse)
 def solve(
     challenge_id: UUID,
+    data: SolveRequest = Body(default_factory=SolveRequest),
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    """Claims the bonus, after checking Codeforces for an accepted submission."""
+    """Claims the award, after checking Codeforces for an accepted submission.
+
+    The body is optional: it carries the solution written or uploaded in the
+    app, which is stored on the attempt whether or not the verdict has landed.
+    """
     try:
-        return ChallengeService.claim(db, challenge_id, user_id)
+        return ChallengeService.claim(db, challenge_id, user_id, data)
     except LookupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except PermissionError as e:
@@ -78,6 +164,7 @@ def leaderboard(
         ChallengeSolver(
             rank=row["rank"],
             solved_at=row["solved_at"],
+            awarded_points=row["awarded_points"],
             user=UserSummary.model_validate(row["user"]),
         )
         for row in ChallengeService.leaderboard(db, challenge_id, limit=limit)

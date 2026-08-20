@@ -2,8 +2,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models import PointTransaction, User
+from app.models import SIGNUP_BONUS, PointReason, PointTransaction, User
 from app.schemas.user import UserCreate, UserUpdate
+from app.services.point_service import PointService
 
 
 SUSPENDED_MESSAGE = (
@@ -55,10 +56,26 @@ class UserService:
             phone_number=user_data.phone_number,
             image_url=user_data.image_url,
             codeforces_handle=user_data.codeforces_handle,
+            # Deliberately not the column's default of SIGNUP_BONUS: the bonus
+            # is paid a line below, through the ledger. Taking the default here
+            # instead would leave every account holding 100 points that no
+            # transaction accounts for, and `users.points` is meant to be a
+            # cache of the ledger's sum.
+            points=0,
         )
 
         try:
             db.add(user)
+            db.flush()
+
+            PointService.apply(
+                db,
+                user,
+                SIGNUP_BONUS,
+                PointReason.SIGNUP_BONUS,
+                reference_id=user.id,
+            )
+
             db.commit()
             db.refresh(user)
         except Exception:

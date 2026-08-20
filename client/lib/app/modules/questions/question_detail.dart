@@ -13,6 +13,9 @@ import '../../../services/api/api_client.dart';
 import '../../../services/common/hint_service.dart';
 import '../../../services/common/quest_service.dart';
 import '../../../core/widgets/app_snack.dart';
+import '../../../core/widgets/code_composer.dart';
+import '../../../core/widgets/code_view.dart';
+import '../../../models/code_submission.dart';
 
 class QuestionDetail extends StatefulWidget {
   const QuestionDetail({super.key, required this.questId});
@@ -27,6 +30,9 @@ class _QuestionDetailState extends State<QuestionDetail> {
   final _answerController = TextEditingController();
 
   Quest? _quest;
+  /// What the code editor currently holds. Empty until someone opens it, which
+  /// is the normal case — most answers are prose.
+  CodeSubmission _submission = CodeSubmission.empty;
   bool _loading = true;
   bool _submitting = false;
   String? _error;
@@ -41,6 +47,10 @@ class _QuestionDetailState extends State<QuestionDetail> {
   bool get _isAuthor => _quest != null && _quest!.author.id == _myId;
 
   static const _minAnswer = 10;
+
+  /// Bumped after a successful post to reset the code editor — see
+  /// [_submitAnswer].
+  int _composerGeneration = 0;
 
   @override
   void initState() {
@@ -61,7 +71,11 @@ class _QuestionDetailState extends State<QuestionDetail> {
   }
 
   int get _answerLength => _answerController.text.trim().length;
-  bool get _canAnswer => _answerLength >= _minAnswer;
+
+  /// Prose long enough, or code. The server applies the same rule — an answer
+  /// that is a working solution does not also owe ten characters of English.
+  bool get _canAnswer =>
+      _answerLength >= _minAnswer || _submission.hasCode || _submission.hasAttachment;
 
   Future<void> _load() async {
     setState(() {
@@ -209,15 +223,26 @@ class _QuestionDetailState extends State<QuestionDetail> {
 
   Future<void> _submitAnswer() async {
     final body = _answerController.text.trim();
-    if (body.length < 10) {
-      _notify('Write at least 10 characters so your answer is useful.');
+    if (!_canAnswer) {
+      _notify('Write at least 10 characters, or attach some code.');
+      return;
+    }
+    if ((_submission.codeBody ?? '').length > maxCodeChars) {
+      _notify('That code is too long — $maxCodeChars characters is the limit.');
       return;
     }
 
     setState(() => _submitting = true);
     try {
-      await QuestService.instance.answer(widget.questId, body);
+      await QuestService.instance
+          .answer(widget.questId, body, submission: _submission);
       _answerController.clear();
+      // The editor is keyed on this counter, so bumping it rebuilds an empty
+      // one rather than leaving the posted code sitting in the composer.
+      setState(() {
+        _submission = CodeSubmission.empty;
+        _composerGeneration++;
+      });
       if (mounted) FocusScope.of(context).unfocus();
       await _load();
       _notify('Answer posted.', tone: SnackTone.success);
@@ -558,10 +583,31 @@ class _QuestionDetailState extends State<QuestionDetail> {
                           color: AppColors.success, size: 20),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SelectableText(answer.body,
-                    style: const TextStyle(
-                        color: AppColors.textSecondary, height: 1.5)),
+                // A code-only answer has an empty body — do not reserve
+                // vertical space for nothing above the block.
+                if (answer.body.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SelectableText(answer.body,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, height: 1.5)),
+                ],
+                if (answer.submission.hasCode) ...[
+                  const SizedBox(height: 12),
+                  CodeBlock(
+                    code: answer.submission.codeBody!,
+                    language: answer.submission.codeLanguage,
+                  ),
+                ],
+                if (answer.submission.hasAttachment) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: AttachmentChip(
+                      url: answer.submission.attachmentUrl!,
+                      name: answer.submission.attachmentName,
+                    ),
+                  ),
+                ],
                 if (_isAuthor && !quest.isSolved) ...[
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
@@ -611,9 +657,15 @@ class _QuestionDetailState extends State<QuestionDetail> {
                         const InputDecoration(hintText: 'Write your answer...'),
                   ),
                   // Only once they have started — an untouched composer does
-                  // not need to nag.
-                  if (_answerLength > 0)
+                  // not need to nag. Code answers are exempt: the minimum does
+                  // not apply to them.
+                  if (_answerLength > 0 && !_submission.hasCode)
                     MinLengthHint(length: _answerLength, minimum: _minAnswer),
+                  CodeComposer(
+                    key: ValueKey('answer-code-$_composerGeneration'),
+                    enabled: !_submitting,
+                    onChanged: (value) => setState(() => _submission = value),
+                  ),
                 ],
               ),
             ),

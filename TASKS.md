@@ -7,7 +7,10 @@ milestones are ordered by dependency, not preference.
 **Now:** M6 — ship. M1–M5 are done and verified against the live database.
 
 > **Deployed and verified.** <https://questboard-mccq.onrender.com> serves all 35
-> endpoints; AI hints are configured in production and answering.
+> endpoints; AI hints are configured in production and answering. **Not yet
+> redeployed** with the challenge archive and code submission — Render still
+> runs the pre-D27 build, and the live database has the new columns already
+> (they are additive, so the deployed build is unaffected).
 
 | Milestone | Status |
 |---|---|
@@ -19,15 +22,25 @@ milestones are ordered by dependency, not preference.
 | M5 · Search, admin & polish | ✅ done |
 | M6 · Ship | 🟡 API deployed, apps not released |
 
-**Verified green** (2026-08-15): `flutter analyze` → no issues · `flutter test` →
-**37/37** · `pytest` → **20/20** against the live database · **98/98** endpoint
-assertions against the *deployed* API with real tokens · `flutter build web` and
-`flutter build apk --release --split-per-abi` → succeed · `ruff check` + `black` →
-clean · **35 API endpoints**, exercised against the real database along with every
-guard (self-vote, self-answer, accept-by-non-author, double accept, overspend,
-unknown tag, delete-with-answers, reading someone else's notification, admin-only,
-self-suspend, suspending an admin, writing while suspended). The economy ledger nets
-to zero — points are conserved, never minted.
+**Verified green** (2026-08-20): `flutter analyze` → no issues · `flutter test` →
+**41/41** · `pytest` → **43/43** against the live database · `flutter build web`
+and `flutter build apk --release --split-per-abi` → succeed (arm64 20.0 MB,
+armv7 17.6 MB, x86_64 21.6 MB) · `ruff check` + `black` → clean · **38 API
+endpoints**, counted from the OpenAPI schema excluding the liveness root.
+
+Carried over from **2026-08-15**, not re-run since: **98/98** endpoint assertions
+against the *deployed* API with real tokens, covering every guard (self-vote,
+self-answer, accept-by-non-author, double accept, overspend, unknown tag,
+delete-with-answers, reading someone else's notification, admin-only,
+self-suspend, suspending an admin, writing while suspended). Those predate the
+two new challenge endpoints, which have server tests but have not been exercised
+through the deployed API.
+
+Points are moved, never minted, on every path that moves them — bounties, votes,
+refunds and AI hints all net to zero across the ledger. The four deliberate
+sources of new points are the signup bonus, the daily bonus, the challenge award
+and nothing else; as of the D28 audit the live database reports **0** accounts
+whose balance the ledger cannot explain.
 
 Destructive paths — admin force-delete and the AI hint charge — were verified against
 the live database inside a transaction that was then rolled back, so the refund, the
@@ -259,6 +272,48 @@ real free-tier provider.
 - [x] [docs/demo-script.md](docs/demo-script.md) — shot-by-shot demo plan with
       narration, the seed data each shot needs, and the capture commands
 - [ ] Record the demo itself against the script (needs a real device and a warm server)
+
+## Code submission, the challenge archive, and a ledger audit ✅
+
+See [decisions.md](docs/decisions.md) D27 (code submission) and D28 (decay + the
+audit). Requires re-running `server/schema.sql` and creating the public
+`submissions` storage bucket ([setup.md](docs/setup.md) step 2).
+
+**Code submission**
+- [x] `CodeComposer` — in-app editor with a language picker, an Indent button
+      (Tab moves focus in a Flutter form), autocorrect off, and a file attachment.
+      Monospace is the platform font, not `google_fonts`: code has to look like
+      code with no network
+- [x] `CodeBlock` / `AttachmentChip` — read-only rendering with line numbers, a
+      copy button, and sideways scrolling rather than wrapped code
+- [x] `answers` and `challenge_attempts` gained `code_body`, `code_language`,
+      `attachment_url`, `attachment_name`. Files go to the public `submissions`
+      bucket the way avatars do; FastAPI never sees the bytes
+- [x] An answer that carries code is exempt from the 10-character prose minimum,
+      on the server as well as in the composer
+- [x] **Not** built: submitting to Codeforces. Its API is read-only — doing it
+      would mean storing the user's Codeforces password. Declined, not deferred (D27)
+
+**Past challenges**
+- [x] `GET /challenges` (paginated archive) and `GET /challenges/{id}`, which
+      returns the same shape as `/today` so one screen renders both
+- [x] `award_for` — 10% of the base off per day, floored at 20%; computed per
+      request, never stored on the challenge
+- [x] `challenge_attempts.awarded_points` records what a solve actually paid, so
+      the leaderboard and the ledger agree about an old solve forever after
+- [x] `past_challenges_screen.dart` — infinite scroll, the decay explained once
+      at the top, each card showing what it pays *now* beside what it was worth
+
+**Point-accounting audit** — four defects found, each with a regression test
+- [x] The signup bonus was never written to the ledger: every account since M1
+      held 100 points with nothing explaining them. Fixed, plus an idempotent
+      backfill in `schema.sql` — the live database now reports **0** accounts
+      whose balance the ledger cannot explain
+- [x] Downvoting an author with no points failed *the voter's* request with
+      "Not enough points" about someone else's balance
+- [x] Two concurrent claims on an existing unsolved attempt could both be paid;
+      the attempt is now read `with_for_update()`
+- [x] Zero-amount movements no longer write a ledger row
 
 **Visual polish pass** — no feature changes; see [decisions.md](docs/decisions.md) D25
 - [x] `core/motion.dart`: shared durations/curves, `appRoute`, `FadeSlideIn`,

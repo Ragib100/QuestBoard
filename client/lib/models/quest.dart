@@ -5,6 +5,8 @@
 /// wire keys stay `question*`, the Dart types read `Quest`.
 library;
 
+import 'code_submission.dart';
+
 class UserSummary {
   const UserSummary({
     required this.id,
@@ -51,6 +53,7 @@ class Answer {
     required this.author,
     required this.voteCount,
     required this.myVote,
+    this.submission = CodeSubmission.empty,
   });
 
   final String id;
@@ -62,6 +65,10 @@ class Answer {
   final int voteCount;
   final int myVote;
 
+  /// The code and file this answer carries, if any. Empty for prose answers,
+  /// which are still the common case.
+  final CodeSubmission submission;
+
   Answer copyWith({int? voteCount, int? myVote, bool? isAccepted}) => Answer(
         id: id,
         questId: questId,
@@ -71,6 +78,7 @@ class Answer {
         author: author,
         voteCount: voteCount ?? this.voteCount,
         myVote: myVote ?? this.myVote,
+        submission: submission,
       );
 
   factory Answer.fromJson(Map<String, dynamic> json) => Answer(
@@ -85,6 +93,7 @@ class Answer {
             UserSummary.fromJson(json['author'] as Map<String, dynamic>? ?? {}),
         voteCount: json['vote_count'] as int? ?? 0,
         myVote: json['my_vote'] as int? ?? 0,
+        submission: CodeSubmission.fromJson(json),
       );
 }
 
