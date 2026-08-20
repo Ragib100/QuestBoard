@@ -1,3 +1,4 @@
+import '../../core/breakpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -96,7 +97,7 @@ class AdminDashboardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isWeb = MediaQuery.of(context).size.width > 900;
+    final isWeb = isWideLayout(context);
 
     return ListView(
       padding: EdgeInsets.all(isWeb ? 32 : 20),

@@ -374,6 +374,44 @@ and no new dependency.
 - [x] The scan stops paging once it is past the cut-off instead of reading a
       fixed 200 submissions and hoping the solve was in them
 
+## Layout fixes and an admin audit ✅
+
+See [decisions.md](docs/decisions.md) D33–D35.
+
+**The opening screen (D33, D35)**
+- [x] `dashboard.dart` used a **960px** breakpoint while the other eight screens
+      and `CLAUDE.md` used **900px**. Between the two the shell drew the phone
+      layout while every tab inside it drew its desktop layout — the misaligned
+      opening screen. One `isWideLayout(context)` now, in `core/breakpoints.dart`
+- [x] `test/breakpoints_test.dart` fails if any file under `lib/` compares
+      `size.width` to a literal again — a duplicated constant is the only way
+      two screens can disagree
+- [x] The landing page's highlights band was inside the page's 1200px cap, so
+      on a wide screen the coloured stripe stopped short of both edges. Sections
+      cap their own contents now; the band is full-bleed and covered by a test
+
+**Quest detail (D34)**
+- [x] The title leads the screen at full width instead of sitting below the
+      author row and indented past the vote column — about 90px of chrome
+      removed from above the question
+
+**Admin audit** — everything checked end to end; no defects found
+- [x] `require_admin` → `AdminService` → the four endpoints all trace correctly;
+      routers stay thin and the guard is a per-request DB read, so revoking
+      admin takes effect on the next request rather than the next login
+- [x] Client `AdminService` matches the contract, including `204` on delete
+      (`ApiClient` returns null rather than trying to parse an empty body)
+- [x] Every button on all three admin screens is wired; no dead controls
+- [x] Foreign keys cascade correctly for a force-delete; the polymorphic `votes`
+      rows have no FK and are deleted explicitly, which was already right
+- [x] **New tests:** the `require_admin` 403 gate (including a valid token with
+      no profile row, where `None.is_admin` would have been an AttributeError
+      rather than a 403), user search across username and both names, that the
+      search total counts every match rather than the page window, and that a
+      force-delete leaves the ledger balanced
+- [x] Known and left alone: a notification pointing at an admin-deleted quest
+      opens a 404 error state. Honest, not a crash
+
 **Visual polish pass** — no feature changes; see [decisions.md](docs/decisions.md) D25
 - [x] `core/motion.dart`: shared durations/curves, `appRoute`, `FadeSlideIn`,
       `TabTransition`, `CountUpText`. Zero new dependencies — the app had no animation

@@ -362,3 +362,40 @@ take — the shell draws the app bar, so the screen must not. The archive link
 moves from an app-bar action to the top of the body when embedded, since there
 is no app bar to hang it on and the copy at the foot of the solver list is a
 long scroll away.
+
+### D33 — One layout breakpoint, in one place
+
+`dashboard.dart` decided phone-vs-desktop at `width > 960`; the other eight
+screens, and CLAUDE.md, used `> 900`. In a window between the two the shell
+drew the **phone** layout — bottom nav, no sidebar, `embedded: true` passed to
+every tab — while each tab independently concluded it was on a desktop and drew
+its wide internal layout inside it. A desktop grid in a phone shell is not a
+subtle difference, and that band is a perfectly ordinary window size on a Linux
+desktop, which is where it was found.
+
+The threshold is now `wideLayoutWidth` in `client/lib/core/breakpoints.dart`,
+read through `isWideLayout(context)`. A duplicated constant is the only way two
+screens can disagree about the same question, so `test/breakpoints_test.dart`
+fails if any file under `lib/` compares `size.width` against a literal again.
+
+### D34 — The quest title leads its own screen
+
+Quest detail opened with an author row — avatar, name, timestamp, status chip —
+and put the title below it, indented past the vote column. That is roughly 90px
+of chrome before the screen says what the question actually is, on a phone
+where 90px is a seventh of the viewport.
+
+The title is now the first thing, at full width, and the author line is the
+caption underneath it. The vote control keeps its position beside the body,
+which is what it votes on.
+
+### D35 — The landing page caps sections, not the page
+
+The whole landing Column sat inside a 1200px `ConstrainedBox`, which also
+capped the highlights band — a `Container` whose entire job is to be a
+full-width stripe of a different colour. On anything wider than 1200px it
+stopped short of both edges and read as a misaligned block floating mid-page.
+
+Each section now caps its own contents and the band is full-bleed. The outer
+Column stretches so the band has a width to fill, and `ColoredBox` replaced the
+`Container` since the sizing no longer comes from it.

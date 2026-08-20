@@ -1,3 +1,4 @@
+import '../../core/breakpoints.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -77,7 +78,7 @@ class _SignupState extends State<Signup> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isWeb = MediaQuery.of(context).size.width > 900;
+    final bool isWeb = isWideLayout(context);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
