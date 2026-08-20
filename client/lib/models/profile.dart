@@ -1,3 +1,5 @@
+import '../core/app_time.dart';
+
 class Profile {
   const Profile({
     required this.id,
@@ -50,7 +52,7 @@ class Profile {
         isAdmin: json['is_admin'] as bool? ?? false,
         isSuspended: json['is_suspended'] as bool? ?? false,
         createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+            parseServerTime(json['created_at'] as String? ?? '') ??
                 DateTime.now(),
       );
 }
@@ -76,7 +78,7 @@ class PointEntry {
         amount: json['amount'] as int? ?? 0,
         reason: json['reason'] as String? ?? '',
         createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+            parseServerTime(json['created_at'] as String? ?? '') ??
                 DateTime.now(),
       );
 }

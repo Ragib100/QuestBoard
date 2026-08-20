@@ -7,6 +7,10 @@ library;
 
 import 'code_submission.dart';
 
+import '../core/app_time.dart';
+
+export '../core/app_time.dart' show timeAgo;
+
 class UserSummary {
   const UserSummary({
     required this.id,
@@ -87,7 +91,7 @@ class Answer {
         body: json['body'] as String? ?? '',
         isAccepted: json['is_accepted'] as bool? ?? false,
         createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+            parseServerTime(json['created_at'] as String? ?? '') ??
                 DateTime.now(),
         author:
             UserSummary.fromJson(json['author'] as Map<String, dynamic>? ?? {}),
@@ -162,7 +166,7 @@ class Quest {
         isSolved: json['is_solved'] as bool? ?? false,
         viewCount: json['view_count'] as int? ?? 0,
         createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+            parseServerTime(json['created_at'] as String? ?? '') ??
                 DateTime.now(),
         author:
             UserSummary.fromJson(json['author'] as Map<String, dynamic>? ?? {}),
@@ -198,14 +202,4 @@ class QuestPage {
         total: json['total'] as int? ?? 0,
         hasMore: json['has_more'] as bool? ?? false,
       );
-}
-
-/// Relative time for feed rows: "3h ago".
-String timeAgo(DateTime when) {
-  final d = DateTime.now().difference(when);
-  if (d.inSeconds < 60) return 'just now';
-  if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-  if (d.inHours < 24) return '${d.inHours}h ago';
-  if (d.inDays < 30) return '${d.inDays}d ago';
-  return '${(d.inDays / 30).floor()}mo ago';
 }

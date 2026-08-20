@@ -353,6 +353,85 @@ void main() {
     }
   });
 
+  /// The bottom bar went from four tabs to five when the Daily Challenge was
+  /// promoted out of the overflow menu. Five is Material's maximum for a fixed
+  /// bar and 320px is our narrowest screen, so this is the case that would
+  /// overflow if a label ever got longer.
+  testWidgets('the five-tab bottom bar fits the narrowest phone',
+      (WidgetTester tester) async {
+    const items = [
+      BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'Home'),
+      BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'Quests'),
+      BottomNavigationBarItem(
+          icon: Icon(Icons.emoji_events_rounded), label: 'Ranks'),
+      BottomNavigationBarItem(
+          icon: Icon(Icons.track_changes_rounded), label: 'Daily'),
+      BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+    ];
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpScreen(
+        tester,
+        Scaffold(
+          body: const SizedBox.expand(),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: 3,
+            type: BottomNavigationBarType.fixed,
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            onTap: (_) {},
+            items: items,
+          ),
+        ),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'bottom bar at $size');
+      // Every label stays legible: a shifting bar would hide four of them.
+      expect(find.text('Daily'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+    }
+  });
+
+  /// As a tab there is no app bar, so the archive link and the claim rules
+  /// both have to fit inside the body.
+  testWidgets('the embedded daily challenge fits a phone',
+      (WidgetTester tester) async {
+    final entry = _archived(ageDays: 2, award: 40, bonus: 50);
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(
+        tester,
+        DailyChallengeView(
+          today: entry,
+          solvers: const [],
+          showArchiveLink: true,
+          onOpenArchive: () {},
+          onSubmissionChanged: (_) {},
+        ),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: 'embedded at $size');
+    }
+
+    // Content checks get a tall viewport: the screen is a lazy ListView, so on
+    // a 568px phone the archive link is simply not built yet and a `findsNothing`
+    // here would be about scrolling, not about the layout.
+    await _pumpAt(
+      tester,
+      DailyChallengeView(
+        today: entry,
+        solvers: const [],
+        showArchiveLink: true,
+        onOpenArchive: () {},
+        onSubmissionChanged: (_) {},
+      ),
+      const Size(360, 2400),
+    );
+    expect(find.text('Past challenges'), findsOneWidget);
+    // The recency rule is stated before the button, not only in its error.
+    expect(find.textContaining('older solve does not count'), findsOneWidget);
+  });
+
   testWidgets('the Codeforces verification sheet fits a phone',
       (WidgetTester tester) async {
     const task = CodeforcesVerification(

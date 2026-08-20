@@ -1,3 +1,4 @@
+import '../core/app_time.dart';
 import 'code_submission.dart';
 import 'quest.dart' show UserSummary;
 
@@ -49,8 +50,8 @@ class DailyChallenge {
         sourceUrl: json['source_url'] as String?,
         bonusPoints: json['bonus_points'] as int? ?? 0,
         challengeDate:
-            DateTime.tryParse(json['challenge_date'] as String? ?? '') ??
-                DateTime.now(),
+            parseServerDate(json['challenge_date'] as String? ?? '') ??
+                dhakaToday(),
         // Falls back to the base so an older server, or a cached response,
         // never renders a challenge as worth nothing.
         awardPoints:
@@ -82,7 +83,7 @@ class ChallengeAttempt {
   factory ChallengeAttempt.fromJson(Map<String, dynamic> json) =>
       ChallengeAttempt(
         isSolved: json['is_solved'] as bool? ?? false,
-        solvedAt: DateTime.tryParse(json['solved_at'] as String? ?? ''),
+        solvedAt: parseServerTime(json['solved_at'] as String? ?? ''),
         awardedPoints: json['awarded_points'] as int? ?? 0,
         submission: CodeSubmission.fromJson(json),
       );
@@ -143,7 +144,7 @@ class ChallengeSolver {
 
   factory ChallengeSolver.fromJson(Map<String, dynamic> json) => ChallengeSolver(
         rank: json['rank'] as int? ?? 0,
-        solvedAt: DateTime.tryParse(json['solved_at'] as String? ?? ''),
+        solvedAt: parseServerTime(json['solved_at'] as String? ?? ''),
         user: UserSummary.fromJson(json['user'] as Map<String, dynamic>),
         awardedPoints: json['awarded_points'] as int? ?? 0,
       );

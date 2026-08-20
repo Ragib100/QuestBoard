@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.models import PointReason, User
 from app.services.point_service import PointService
 
@@ -23,11 +24,12 @@ class ActivityService:
     def _as_date(value: datetime | None) -> date | None:
         if value is None:
             return None
-        # last_active is stored without a timezone on some rows; normalise so
-        # the comparison below never raises on a naive/aware mismatch.
+        # last_active is stored without a timezone on some rows; it is always
+        # UTC, so say so before converting — and convert to Dhaka, because the
+        # day a streak counts is the user's day, not Greenwich's.
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).date()
+        return value.astimezone(clock.DHAKA).date()
 
     @classmethod
     def record(cls, db: Session, user: User) -> bool:
@@ -35,7 +37,7 @@ class ActivityService:
 
         Returns True when this was the user's first activity today.
         """
-        now = datetime.now(timezone.utc)
+        now = clock.now()
         today = now.date()
         last = cls._as_date(user.last_active)
 

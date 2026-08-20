@@ -10,12 +10,13 @@ the public API, which is rate limited, occasionally down, and not the thing
 under test.
 """
 
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.models import DECAY_FLOOR, PointReason, award_for
 from app.schemas.answer import AnswerCreate
 from app.schemas.challenge import SolveRequest
@@ -42,10 +43,16 @@ def verified(make_user, db: Session):
 
 @pytest.fixture
 def solved_on_codeforces(monkeypatch):
-    """Stubs the Codeforces verdict check."""
+    """Stubs the Codeforces verdict check.
 
-    def _set(value: bool):
-        monkeypatch.setattr(cf, "has_solved", lambda handle, problem: value)
+    Also stubs `last_attempt_at`, which the service calls only to phrase the
+    refusal; leaving it live would put a real HTTP request in every test that
+    checks an unsolved claim.
+    """
+
+    def _set(value: bool, stale_at=None):
+        monkeypatch.setattr(cf, "has_solved", lambda handle, problem, since: value)
+        monkeypatch.setattr(cf, "last_attempt_at", lambda handle, problem: stale_at)
 
     return _set
 
@@ -278,8 +285,8 @@ def test_an_answer_may_be_code_with_almost_no_prose():
 
 
 def test_an_answer_with_neither_prose_nor_code_is_refused():
-    with pytest.raises(ValueError, match="at least 10 characters"):
-        AnswerCreate(body="too short")
+    with pytest.raises(ValueError, match="Write an answer"):
+        AnswerCreate(body="   ")
 
 
 # ----------------------------------------------------------------- archive ---
@@ -337,3 +344,175 @@ def test_a_new_profile_ledgers_its_signup_bonus(db: Session, auth_identity):
 
     assert user.points == 100
     assert ledger_total(db, user) == 100, "the balance must be explained"
+
+
+# --------------------------------------------- the solve has to be recent ---
+
+
+def test_an_old_accepted_submission_does_not_pay(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    """The bug this guards: the verdict check looked at a handle's whole
+    history, so anyone who had solved the problem years ago could claim a
+    challenge without opening it."""
+    user = verified()
+    challenge = make_challenge(age_days=0)
+
+    two_years_ago = clock.now() - timedelta(days=730)
+    solved_on_codeforces(False, stale_at=two_years_ago)
+
+    before, ledger_before = user.points, ledger_total(db, user)
+    with pytest.raises(ValueError, match="before this challenge opened"):
+        ChallengeService.claim(db, challenge.id, user.id)
+
+    db.refresh(user)
+    assert user.points == before
+    assert ledger_total(db, user) == ledger_before, "a refused claim pays nothing"
+
+
+def test_the_refusal_says_which_problem_it_is_when_nothing_was_submitted(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    user = verified()
+    challenge = make_challenge(age_days=0)
+    solved_on_codeforces(False, stale_at=None)
+
+    with pytest.raises(ValueError, match="no accepted submission"):
+        ChallengeService.claim(db, challenge.id, user.id)
+
+
+def test_the_recency_bound_is_the_challenges_own_dhaka_midnight(
+    db: Session, verified, make_challenge, monkeypatch
+):
+    """A challenge from three days ago accepts a solve from any of those days —
+    the bound is when the challenge opened, not the last 24 hours."""
+    user = verified()
+    challenge = make_challenge(age_days=3)
+
+    seen: list = []
+
+    def _record(handle, problem, since):
+        seen.append(since)
+        return True
+
+    monkeypatch.setattr(cf, "has_solved", _record)
+    ChallengeService.claim(db, challenge.id, user.id)
+
+    assert len(seen) == 1
+    since = seen[0]
+    assert since.date() == challenge.challenge_date
+    assert since.hour == 0 and since.minute == 0
+    assert since.utcoffset() == timedelta(hours=6), "midnight in Dhaka, not UTC"
+
+
+def test_solved_at_stops_paging_once_it_is_past_the_bound(monkeypatch):
+    """Codeforces returns submissions newest first, so the scan must stop
+    rather than walking a decade of history for every claim."""
+    now = clock.utc_now()
+    since = now - timedelta(hours=6)
+
+    pages: list[int] = []
+
+    def _fake(handle, count, start=1):
+        pages.append(start)
+        # One page, all of it older than `since`.
+        return [
+            {
+                "creationTimeSeconds": int((now - timedelta(days=400)).timestamp()),
+                "problem": {"contestId": 1, "index": "A"},
+                "verdict": "OK",
+            }
+        ] * cf.PAGE_SIZE
+
+    monkeypatch.setattr(cf, "_submissions", _fake)
+
+    assert cf.solved_at("tourist", "1/A", since) is None
+    assert pages == [1], "it should not have asked for a second page"
+
+
+def test_solved_at_credits_the_earliest_qualifying_submission(monkeypatch):
+    now = clock.utc_now()
+    since = now - timedelta(hours=12)
+    first = now - timedelta(hours=5)
+    second = now - timedelta(hours=1)
+
+    def _fake(handle, count, start=1):
+        if start > 1:
+            return []
+        return [
+            {
+                "creationTimeSeconds": int(second.timestamp()),
+                "problem": {"contestId": 1, "index": "A"},
+                "verdict": "OK",
+            },
+            {
+                "creationTimeSeconds": int(first.timestamp()),
+                "problem": {"contestId": 1, "index": "A"},
+                "verdict": "OK",
+            },
+        ]
+
+    monkeypatch.setattr(cf, "_submissions", _fake)
+
+    found = cf.solved_at("tourist", "1/A", since)
+    assert found is not None
+    assert int(found.timestamp()) == int(first.timestamp())
+
+
+# ------------------------------------------------------- the Dhaka clock ---
+
+
+def test_the_day_rolls_over_at_midnight_dhaka_not_utc():
+    """18:30 UTC is 00:30 the next day in Dhaka. The challenge, the streak and
+    the decay all have to agree it is already tomorrow."""
+    from datetime import datetime, timezone
+
+    instant = datetime(2026, 8, 20, 18, 30, tzinfo=timezone.utc)
+
+    assert instant.astimezone(clock.DHAKA).date() == date(2026, 8, 21)
+    assert instant.date() == date(2026, 8, 20)
+
+
+def test_start_of_day_is_dhaka_midnight():
+    start = clock.start_of_day(date(2026, 8, 20))
+    assert start.utcoffset() == timedelta(hours=6)
+    # 00:00 Dhaka is 18:00 the previous day in UTC.
+    assert start.astimezone(timezone.utc).hour == 18
+
+
+# ------------------------------------------------- no minimum, real limit ---
+
+
+def test_a_one_word_quest_is_allowed(db: Session, make_user):
+    """The old floors were 10 characters of title and 20 of body. "Why?" is a
+    real question and padding it to twenty characters helped nobody."""
+    from app.schemas.question import QuestionCreate
+
+    data = QuestionCreate(title="Why?", body="No idea")
+    assert data.title == "Why?"
+    assert data.body == "No idea"
+
+
+def test_a_blank_quest_is_still_refused():
+    from app.schemas.question import QuestionCreate
+
+    with pytest.raises(ValueError, match="title cannot be empty"):
+        QuestionCreate(title="   ", body="Something")
+
+    with pytest.raises(ValueError, match="description cannot be empty"):
+        QuestionCreate(title="Something", body="\n\n")
+
+
+def test_a_quest_body_has_a_ceiling():
+    """Not a style rule — a bound on what one request can write into the row."""
+    from app.schemas.question import MAX_BODY_CHARS, QuestionCreate
+
+    QuestionCreate(title="Fine", body="x" * MAX_BODY_CHARS)
+
+    with pytest.raises(ValueError):
+        QuestionCreate(title="Fine", body="x" * (MAX_BODY_CHARS + 1))
+
+
+def test_a_two_character_answer_is_allowed():
+    answer = AnswerCreate(body="No")
+    assert answer.body == "No"

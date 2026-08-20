@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/app_time.dart';
 import '../../../core/widgets/async_states.dart';
 import '../../../core/widgets/reward_burst.dart';
 import '../../../core/widgets/code_composer.dart';
@@ -26,10 +27,19 @@ import '../../../core/widgets/app_snack.dart';
 /// Pass [challengeId] to open an archived challenge, which pays less the older
 /// it is (docs/api.md, "Challenge point decay").
 class DailyChallengeScreen extends StatefulWidget {
-  const DailyChallengeScreen({super.key, this.challengeId});
+  const DailyChallengeScreen({
+    super.key,
+    this.challengeId,
+    this.embedded = false,
+  });
 
   /// Null for today's challenge — the common entry point.
   final String? challengeId;
+
+  /// True when the dashboard is rendering this as a tab. The shell already
+  /// draws an app bar; a second one would eat 56px of a phone screen, so the
+  /// archive moves to a link in the body instead of an app-bar action.
+  final bool embedded;
 
   @override
   State<DailyChallengeScreen> createState() => _DailyChallengeScreenState();
@@ -130,24 +140,28 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Text(widget.challengeId == null ? 'Daily Challenge' : 'Challenge',
-            style: GoogleFonts.outfit(
-                fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-        iconTheme: const IconThemeData(color: AppColors.textPrimary),
-        actions: [
-          // Only from today's screen: the archive is where you came from
-          // otherwise, and a second entry would just loop.
-          if (widget.challengeId == null)
-            IconButton(
-              tooltip: 'Past challenges',
-              onPressed: _openArchive,
-              icon: const Icon(Icons.history_rounded),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              title: Text(
+                  widget.challengeId == null ? 'Daily Challenge' : 'Challenge',
+                  style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary)),
+              iconTheme: const IconThemeData(color: AppColors.textPrimary),
+              actions: [
+                // Only from today's screen: the archive is where you came from
+                // otherwise, and a second entry would just loop.
+                if (widget.challengeId == null)
+                  IconButton(
+                    tooltip: 'Past challenges',
+                    onPressed: _openArchive,
+                    icon: const Icon(Icons.history_rounded),
+                  ),
+              ],
             ),
-        ],
-      ),
       body: _loading
           ? const LoadingState()
           : _error != null
@@ -160,8 +174,12 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                     claiming: _claiming,
                     onClaim: _claim,
                     onVerify: _verify,
-                    onOpenArchive:
-                        widget.challengeId == null ? _openArchive : null,
+                    // In a tab there is no app bar to hang the history icon
+                    // on, so the link in the body is the only way through.
+                    onOpenArchive: widget.challengeId == null
+                        ? _openArchive
+                        : null,
+                    showArchiveLink: widget.embedded,
                     onSubmissionChanged: (value) => _submission = value,
                   ),
                 ),
@@ -183,6 +201,7 @@ class DailyChallengeView extends StatelessWidget {
     this.onClaim,
     this.onVerify,
     this.onOpenArchive,
+    this.showArchiveLink = false,
     this.onSubmissionChanged,
   });
 
@@ -194,6 +213,10 @@ class DailyChallengeView extends StatelessWidget {
 
   /// Null when this screen *is* the archive's detail view.
   final VoidCallback? onOpenArchive;
+
+  /// Draws [onOpenArchive] as a link in the body. Set when there is no app bar
+  /// to put the history icon in.
+  final bool showArchiveLink;
 
   /// Fires as the code editor changes. Null in tests and wherever submitting
   /// is not offered.
@@ -247,6 +270,10 @@ class DailyChallengeView extends StatelessWidget {
               const SizedBox(height: 16),
               CopyableUrl(url: c.sourceUrl!),
             ],
+            // Above the fold when this is a tab: without an app bar the
+            // history icon is gone, and the link at the foot of the solver
+            // list is a long scroll away.
+            if (showArchiveLink && onOpenArchive != null) _archiveLink(),
             const SizedBox(height: 24),
             _action(),
             const SizedBox(height: 24),
@@ -390,30 +417,101 @@ class DailyChallengeView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _howItWorks(),
         if (onSubmissionChanged != null) ...[
+          const SizedBox(height: 16),
+          const Text('Your solution (optional)',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          const Text(
+            'Keep a copy of your code here. It is saved with your attempt — it '
+            'is not sent to Codeforces and it is not what earns the points.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
           CodeComposer(
-            label: 'Attach your solution',
+            label: 'Write or upload your code',
             enabled: !claiming,
             initial: attempt?.submission ?? CodeSubmission.empty,
             onChanged: onSubmissionChanged!,
           ),
-          const SizedBox(height: 12),
         ],
+        const SizedBox(height: 16),
         ElevatedButton(
           onPressed: claiming ? null : onClaim,
           child: Text(claiming
               ? 'Checking Codeforces...'
               : 'I solved it — claim ${today.challenge.awardPoints} pts'),
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Solve and submit on Codeforces first. We check for an accepted '
-          'verdict before paying anything — the code you attach here is kept '
-          'with your attempt, not sent to Codeforces.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-        ),
+        if (attempt != null && !attempt.isSolved) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Your last claim did not find an accepted verdict. Anything you '
+            'wrote above was kept.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ],
       ],
+    );
+  }
+
+  /// The claim rules, stated before the button rather than in the error the
+  /// button produces.
+  ///
+  /// Two of these surprise people. The points come from Codeforces' verdict,
+  /// not from anything typed into this app; and the accepted submission has to
+  /// be dated on or after the challenge's own day, so a solve from last year
+  /// does not count. Both were only discoverable by failing.
+  Widget _howItWorks() {
+    final since = formatDay(today.challenge.challengeDate);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.subtleFill,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('How claiming works',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          _step('1', 'Solve and submit the problem on Codeforces.'),
+          _step('2',
+              'Your submission has to be accepted, and dated $since or later '
+              '— an older solve does not count.'),
+          _step('3', 'Come back and tap claim. We check your public '
+              'submissions for the verdict.'),
+        ],
+      ),
+    );
+  }
+
+  Widget _step(String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$number.',
+              style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    height: 1.4)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -505,7 +603,9 @@ class DailyChallengeView extends StatelessWidget {
                 ],
               ),
             ),
-        if (onOpenArchive != null) ...[
+        // Only when it is not already at the top. There is one archive link
+        // on this screen; which end it sits at is the only question.
+        if (onOpenArchive != null && !showArchiveLink) ...[
           const SizedBox(height: 8),
           _archiveLink(),
         ],

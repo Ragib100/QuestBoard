@@ -1,6 +1,7 @@
 /// Client models for badges, leaderboard entries and notifications.
 library;
 
+import '../core/app_time.dart';
 import 'quest.dart' show UserSummary;
 
 /// Named to avoid colliding with Flutter's Material `Badge` widget.
@@ -34,7 +35,7 @@ class AchievementBadge {
         description: json['description'] as String? ?? '',
         awardedAt: json['awarded_at'] == null
             ? null
-            : DateTime.tryParse(json['awarded_at'] as String)?.toLocal(),
+            : parseServerTime(json['awarded_at'] as String),
       );
 }
 
@@ -131,7 +132,7 @@ class AppNotification {
         message: json['message'] as String? ?? '',
         isRead: json['is_read'] as bool? ?? false,
         createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+            parseServerTime(json['created_at'] as String? ?? '') ??
                 DateTime.now(),
         referenceId: json['reference_id'] as String?,
       );

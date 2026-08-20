@@ -381,6 +381,18 @@ submit endpoint, so the editor in the app records the solution alongside the
 attempt; the bonus is still paid only against an accepted verdict found through
 the public API. Anything else would need the user's Codeforces password.
 
+**The accepted submission has to postdate the challenge.** It must be dated on
+or after 00:00 Dhaka on the challenge's own `challenge_date`, so a problem you
+happened to solve last year does not pay (D31). If a claim is refused while you
+are sure you solved it, check the date on your Codeforces submission — the
+error says which of the two cases it is. Solving an *archived* challenge works
+normally: any time since it ran counts.
+
+**Everything is Bangladesh time.** Today's challenge rolls over at midnight
+Dhaka, not midnight UTC, and so does the streak and the decay. There is nothing
+to configure — `server/app/core/clock.py` uses a fixed UTC+6 offset, so no tz
+database is needed on the deploy host (D29).
+
 ## 12. Releasing the apps
 
 ### 12.1 Point the client at the deployed API

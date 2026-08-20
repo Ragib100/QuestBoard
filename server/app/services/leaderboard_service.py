@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.models import PointTransaction, User
 
 WEEKLY = "weekly"
@@ -23,7 +24,10 @@ class LeaderboardService:
 
     @staticmethod
     def _weekly_scores():
-        since = datetime.now(timezone.utc) - timedelta(days=7)
+        # Naive UTC, matching the column: `point_transactions.created_at` is
+        # `timestamp without time zone`, and handing Postgres an aware value
+        # made the comparison depend on the session timezone.
+        since = clock.naive_utc_now() - timedelta(days=7)
         return (
             select(
                 PointTransaction.user_id.label("user_id"),

@@ -1,51 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_colors.dart';
-
-/// Live feedback on a minimum-length rule, shown under the field it governs.
-///
-/// The quest composer and the answer composer both enforce a minimum, and both
-/// used to keep it secret until the submit button bounced the user with a
-/// snackbar. Counts down while short, then confirms and stops counting — a
-/// running "1,204 characters" is noise once the rule is satisfied.
-class MinLengthHint extends StatelessWidget {
-  const MinLengthHint({
-    super.key,
-    required this.length,
-    required this.minimum,
-  });
-
-  /// Length of the *trimmed* text, matching what the validator checks.
-  final int length;
-  final int minimum;
-
-  @override
-  Widget build(BuildContext context) {
-    if (length >= minimum) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 6),
-        child: Row(
-          children: [
-            Icon(Icons.check_circle_outline,
-                size: 14, color: AppColors.successDark),
-            SizedBox(width: 4),
-            Text('Looks good',
-                style: TextStyle(color: AppColors.successDark, fontSize: 12)),
-          ],
-        ),
-      );
-    }
-
-    final remaining = minimum - length;
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Text(
-        '$remaining more character${remaining == 1 ? '' : 's'} needed',
-        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-      ),
-    );
-  }
-}
 
 /// A bold label above a text field — the form row used across auth, profile
 /// and quest screens. Replaces the per-screen `_buildLabel` / `_buildField`
@@ -66,6 +22,8 @@ class LabeledField extends StatefulWidget {
     this.textInputAction,
     this.onSubmitted,
     this.autofillHints,
+    this.maxCharacters,
+    this.errorText,
   });
 
   final String label;
@@ -84,6 +42,16 @@ class LabeledField extends StatefulWidget {
   /// field. Wrap the surrounding form in an [AutofillGroup] or Android will
   /// never offer to save the credentials.
   final Iterable<String>? autofillHints;
+
+  /// A hard ceiling on what can be typed, enforced silently.
+  ///
+  /// Deliberately not `TextField.maxLength`, which draws a "0/50000" counter.
+  /// The limit exists to bound the row, not to set a target — telling someone
+  /// they have 49,987 characters left is noise at best and a dare at worst.
+  final int? maxCharacters;
+
+  /// Shown in red under the field. Null when there is nothing wrong.
+  final String? errorText;
 
   @override
   State<LabeledField> createState() => _LabeledFieldState();
@@ -124,8 +92,12 @@ class _LabeledFieldState extends State<LabeledField> {
           // does not notice until the sign-in fails.
           autocorrect: widget.autofillHints == null,
           enableSuggestions: widget.autofillHints == null,
+          inputFormatters: widget.maxCharacters == null
+              ? null
+              : [LengthLimitingTextInputFormatter(widget.maxCharacters)],
           decoration: InputDecoration(
             hintText: widget.hint,
+            errorText: widget.errorText,
             suffixIcon: widget.obscureText
                 ? IconButton(
                     icon: Icon(

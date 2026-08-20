@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date
 
 from sqlalchemy import (
     Boolean,
@@ -13,6 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 
+from app.core import clock
 from app.db.base import Base
 
 CHALLENGE_BONUS = 50
@@ -29,7 +30,7 @@ DECAY_FLOOR = 0.20
 
 
 def award_for(bonus_points: int, challenge_date: date, on: date | None = None) -> int:
-    """What solving a challenge of that date is worth on day `on` (UTC today).
+    """What solving a challenge of that date is worth on day `on` (Dhaka today).
 
     Pure and deterministic: the decayed value is never stored on the challenge,
     because a stored copy would be wrong by the next morning. The amount that
@@ -38,7 +39,7 @@ def award_for(bonus_points: int, challenge_date: date, on: date | None = None) -
     if bonus_points <= 0:
         return 0
 
-    today = on or datetime.now(timezone.utc).date()
+    today = on or clock.today()
     age_days = max(0, (today - challenge_date).days)
 
     floor = max(1, round(bonus_points * DECAY_FLOOR))

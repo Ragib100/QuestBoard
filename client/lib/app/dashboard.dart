@@ -95,6 +95,7 @@ class _DashboardState extends State<Dashboard> {
       UserHome(onBrowseAll: () => setState(() => _currentIndex = 1)),
       BrowseQuestions(embedded: !isWeb, search: _query),
       LeaderboardScreen(embedded: !isWeb),
+      DailyChallengeScreen(embedded: !isWeb),
       ProfileScreen(embedded: !isWeb),
     ];
 
@@ -156,7 +157,13 @@ class _DashboardState extends State<Dashboard> {
           ],
           Flexible(
             child: Text(
-              const ['QuestBoard', 'Browse Quests', 'Leaderboard', 'My Profile']
+              const [
+                'QuestBoard',
+                'Browse Quests',
+                'Leaderboard',
+                'Daily Challenge',
+                'My Profile'
+              ]
                   .elementAtOrNull(_currentIndex) ??
                   'QuestBoard',
               overflow: TextOverflow.ellipsis,
@@ -176,25 +183,10 @@ class _DashboardState extends State<Dashboard> {
           icon: const Icon(Icons.more_vert, color: AppColors.textSecondary),
           tooltip: 'More',
           onSelected: (value) {
-            if (value == 'challenge') {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const DailyChallengeScreen()));
-            }
             if (value == 'admin') _openAdmin();
             if (value == 'logout') _logout();
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'challenge',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.track_changes_outlined),
-                title: Text('Daily Challenge'),
-              ),
-            ),
             // Admins only — the endpoints behind it 403 for everyone else, so
             // showing the entry to a normal user would only ever disappoint.
             if (_me?.isAdmin ?? false)
@@ -311,9 +303,9 @@ class _DashboardState extends State<Dashboard> {
           _sidebarItem(0, Icons.grid_view_outlined, Icons.grid_view_rounded, 'Dashboard'),
           _sidebarItem(1, Icons.explore_outlined, Icons.explore_rounded, 'Browse Quests'),
           _sidebarItem(2, Icons.emoji_events_outlined, Icons.emoji_events_rounded, 'Leaderboard'),
-          _sidebarItem(3, Icons.person_outline, Icons.person_rounded, 'My Profile'),
+          _sidebarItem(3, Icons.track_changes_outlined, Icons.track_changes, 'Daily Challenge'),
+          _sidebarItem(4, Icons.person_outline, Icons.person_rounded, 'My Profile'),
           _sidebarItem(-2, Icons.notifications_none_outlined, Icons.notifications, 'Notifications'),
-          _sidebarItem(-3, Icons.track_changes_outlined, Icons.track_changes, 'Daily Challenge'),
           if (_me?.isAdmin ?? false)
             _sidebarItem(-4, Icons.shield_outlined, Icons.shield, 'Admin'),
           const Spacer(),
@@ -358,7 +350,6 @@ class _DashboardState extends State<Dashboard> {
           } else {
             setState(() => _currentIndex = index >= 0 ? index : _currentIndex);
             if (index == -2) _openNotifications();
-            if (index == -3) Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen()));
             if (index == -4) _openAdmin();
           }
         },
@@ -382,6 +373,14 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  /// Five tabs, and the fifth is the Daily Challenge.
+  ///
+  /// It used to be an item in the phone's overflow menu, which made the one
+  /// screen with a deadline on it the hardest one to reach. Nothing was
+  /// dropped to make room: Material's fixed bar takes five, and at 320px that
+  /// is 64px per tab — enough for an icon and a short label, which is why
+  /// these read "Ranks" and "Daily" rather than their full titles.
+  ///
   /// The bar carried `elevation: 10`, the only drop shadow left in the app and
   /// against docs/design-system.md. Separation now comes from a top border, the
   /// same treatment the top app bar already uses; the rest of the styling lives
@@ -393,6 +392,11 @@ class _DashboardState extends State<Dashboard> {
       ),
       child: BottomNavigationBar(
         currentIndex: _currentIndex,
+        // Five items would otherwise switch the bar to `shifting`, which hides
+        // every inactive label and animates the icons around.
+        type: BottomNavigationBarType.fixed,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
         onTap: (index) {
           setState(() => _currentIndex = index);
           _refresh();
@@ -404,6 +408,8 @@ class _DashboardState extends State<Dashboard> {
               icon: Icon(Icons.explore_rounded), label: 'Quests'),
           BottomNavigationBarItem(
               icon: Icon(Icons.emoji_events_rounded), label: 'Ranks'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.track_changes_rounded), label: 'Daily'),
           BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded), label: 'Profile'),
         ],
@@ -508,78 +514,150 @@ class _UserHomeState extends State<UserHome> {
   /// answer" — the two need different copy, and neither may show fake rows.
   bool _loadFailed = false;
 
+  /// What actually went wrong, when we know. The screen used to say "could not
+  /// load" and leave the user with nowhere to go.
+  String? _error;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  /// Loads each tile independently.
+  ///
+  /// This was one `Future.wait` over four calls, which meant any single
+  /// failure — a profile that had not finished onboarding, a leaderboard
+  /// hiccup — threw the whole page away and left every tile at zero with no
+  /// explanation. `Future.wait` is all-or-nothing by design and that is the
+  /// wrong shape for a dashboard: the parts are independent, so a failure in
+  /// one has no business blanking the others.
+  ///
+  /// They still go out together; only the failure handling is per-call.
   Future<void> _load() async {
-    try {
-      // The badge list needs the user id, so it waits; everything else goes
-      // out at once rather than in a chain of round trips.
-      final results = await Future.wait([
-        UserService.instance.me(),
-        GamificationService.instance.leaderboard(period: 'all_time'),
-        QuestService.instance.list(limit: 3),
-      ]);
+    final failures = <String>[];
 
-      final me = results[0] as Profile;
-      final board = results[1] as Leaderboard;
-      final feed = results[2] as QuestPage;
-
-      if (!mounted) return;
-      setState(() {
-        _me = me;
-        _top = board.entries.take(3).toList();
-        _recent = feed.items;
-        _openQuests = feed.total;
-        _loadFailed = false;
-      });
-
-      final badges = await GamificationService.instance.badgesFor(me.id);
-      if (!mounted) return;
-      setState(() => _badgeCount = badges.where((b) => b.isEarned).length);
-    } on ApiException {
-      // Leave the tiles at zero rather than showing invented numbers.
-      if (mounted) setState(() => _loadFailed = true);
+    Future<void> attempt(String what, Future<void> Function() run) async {
+      try {
+        await run();
+      } on ApiException catch (e) {
+        // Never fall back to a plausible-looking number: an empty tile is
+        // honest, a made-up one is not.
+        failures.add('$what (${e.message})');
+      }
     }
+
+    await Future.wait([
+      attempt('your profile', () async {
+        final me = await UserService.instance.me();
+        if (!mounted) return;
+        setState(() => _me = me);
+
+        // Chained deliberately: the badge list is keyed by user id, so it
+        // cannot start until the profile lands.
+        final badges = await GamificationService.instance.badgesFor(me.id);
+        if (!mounted) return;
+        setState(() => _badgeCount = badges.where((b) => b.isEarned).length);
+      }),
+      attempt('the leaderboard', () async {
+        final board =
+            await GamificationService.instance.leaderboard(period: 'all_time');
+        if (!mounted) return;
+        setState(() => _top = board.entries.take(3).toList());
+      }),
+      attempt('recent quests', () async {
+        final feed = await QuestService.instance.list(limit: 3);
+        if (!mounted) return;
+        setState(() {
+          _recent = feed.items;
+          _openQuests = feed.total;
+        });
+      }),
+    ]);
+
+    if (!mounted) return;
+    setState(() {
+      _loadFailed = failures.isNotEmpty;
+      _error = failures.isEmpty ? null : 'Could not load ${failures.first}.';
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isWeb = MediaQuery.of(context).size.width > 960;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: isWeb ? 40 : 20, vertical: 32),
-      child: Column(
+    // The empty state has told people to "pull to refresh" since it was
+    // written, and there was nothing here to pull. There is now.
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: SingleChildScrollView(
+        // Always scrollable, or a short page on a big screen has no overscroll
+        // for the gesture to start from and the refresh never fires.
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(horizontal: isWeb ? 40 : 20, vertical: 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_error != null) _errorBanner(),
+            Text(
+              _me == null ? 'Welcome back!' : 'Welcome back, ${_me!.firstName.isEmpty ? _me!.username : _me!.firstName}!',
+              style: GoogleFonts.outfit(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Keep learning and earning points!',
+              style:
+                  GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 16),
+            ),
+            const SizedBox(height: 32),
+            _buildStatsRow(isWeb),
+            const SizedBox(height: 40),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildMainContent(context, isWeb)),
+                if (isWeb) ...[
+                  const SizedBox(width: 32),
+                  Expanded(child: _buildSidebarContent(context)),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Says what failed and offers the retry, instead of leaving four zeroes on
+  /// screen for the user to interpret.
+  Widget _errorBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warningTint,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _me == null ? 'Welcome back!' : 'Welcome back, ${_me!.firstName.isEmpty ? _me!.username : _me!.firstName}!',
-            style: GoogleFonts.outfit(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+          const Icon(Icons.cloud_off_rounded,
+              color: AppColors.warningDark, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _error!,
+              style: const TextStyle(
+                  color: AppColors.warningDark, fontSize: 13, height: 1.4),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Keep learning and earning points!',
-            style: GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 16),
-          ),
-          const SizedBox(height: 32),
-          _buildStatsRow(isWeb),
-          const SizedBox(height: 40),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 2, child: _buildMainContent(context, isWeb)),
-              if (isWeb) ...[
-                const SizedBox(width: 32),
-                Expanded(child: _buildSidebarContent(context)),
-              ],
-            ],
+          TextButton(
+            onPressed: _load,
+            child: const Text('Retry'),
           ),
         ],
       ),

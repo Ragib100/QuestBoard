@@ -1,10 +1,11 @@
-from datetime import date, datetime, timezone
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.models import (
     ChallengeAttempt,
     DailyChallenge,
@@ -30,7 +31,8 @@ class ChallengeService:
 
     @staticmethod
     def _today() -> date:
-        return datetime.now(timezone.utc).date()
+        """Bangladesh's today — the challenge rolls over at midnight Dhaka."""
+        return clock.today()
 
     @classmethod
     def today(cls, db: Session) -> DailyChallenge:
@@ -225,6 +227,31 @@ class ChallengeService:
         """How many people solved this challenge — shown on the screen."""
         return cls._count_solved(db, ChallengeAttempt.challenge_id == challenge_id)
 
+    @staticmethod
+    def _not_solved_message(handle, since, stale_at) -> str:
+        """Why the claim was refused, in the terms the user is thinking in.
+
+        "No accepted submission" and "your accepted submission is from before
+        this challenge existed" are different problems with different fixes,
+        and telling someone who just solved it that we cannot see any
+        submission at all sends them looking in the wrong place.
+        """
+        day = since.strftime("%-d %b")
+
+        if stale_at is not None and stale_at < since:
+            return (
+                f"Your last submission for this problem is from "
+                f"{stale_at.astimezone(clock.DHAKA).strftime('%-d %b %Y')}, before "
+                f"this challenge opened on {day}. Submit it again on Codeforces "
+                "to claim — old solves do not count."
+            )
+
+        return (
+            f"Codeforces has no accepted submission from {handle} for this "
+            f"problem since {day}. Submit your solution there first, then "
+            "claim — a verdict can take a minute to land."
+        )
+
     @classmethod
     def claim(
         cls,
@@ -239,6 +266,9 @@ class ChallengeService:
         full value on its own day, less 10% of it per day since, floored at 20%.
         A challenge from last month is still worth solving; it is not worth what
         today's is.
+
+        The accepted submission has to be dated on or after the challenge's own
+        day (midnight Dhaka). Solving it last year does not pay.
 
         `data` carries the solution the user typed or uploaded in the app. It is
         stored on the attempt either way: the bonus is paid on the Codeforces
@@ -268,8 +298,20 @@ class ChallengeService:
         if challenge.codeforces_id is None:
             raise ValueError("This challenge has no Codeforces problem to check.")
 
+        # The solve has to have been made *for* this challenge. Codeforces
+        # keeps a submission history forever, so without a lower bound anyone
+        # who solved the problem years ago could claim without opening it.
+        since = clock.start_of_day(challenge.challenge_date)
+
         try:
-            solved = cf.has_solved(user.codeforces_handle, challenge.codeforces_id)
+            solved = cf.has_solved(
+                user.codeforces_handle, challenge.codeforces_id, since
+            )
+            stale_at = (
+                None
+                if solved
+                else cf.last_attempt_at(user.codeforces_handle, challenge.codeforces_id)
+            )
         except cf.CodeforcesError as e:
             raise RuntimeError(str(e))
 
@@ -286,15 +328,14 @@ class ChallengeService:
                 apply_submission(existing, data)
             db.commit()
             raise ValueError(
-                "Codeforces has no accepted submission from "
-                f"{user.codeforces_handle} for this problem yet."
+                cls._not_solved_message(user.codeforces_handle, since, stale_at)
             )
 
         attempt = existing or ChallengeAttempt(
             challenge_id=challenge_id, user_id=user_id
         )
         attempt.is_solved = True
-        attempt.solved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        attempt.solved_at = clock.naive_utc_now()
         if data is not None:
             apply_submission(attempt, data)
 

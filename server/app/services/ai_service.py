@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import UUID
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.config import settings
 from app.models import HINT_COST, AiHint, PointReason, Question, User
 from app.services.point_service import PointService
@@ -55,7 +56,7 @@ class AiService:
 
     @staticmethod
     def _used_this_hour(db: Session, user_id: UUID) -> int:
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        cutoff = clock.naive_utc_now() - timedelta(hours=1)
         return int(
             db.scalar(
                 select(func.count(AiHint.id)).where(

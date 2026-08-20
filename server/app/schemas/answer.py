@@ -1,31 +1,29 @@
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from app.schemas.code import CodeSubmission
 
-# A prose-only answer still has to say something. `min_length` on the field
-# cannot express "unless there is code", so the check lives in the validator
-# below and this is the number it uses.
-MIN_BODY_CHARS = 10
+# An answer has to say something, but "something" is not a character count —
+# "yes, use a set" is a complete answer. The only floor is non-empty, and code
+# satisfies it on its own. The ceiling is there to bound the row, not the
+# writer, so the client never shows it.
+MAX_BODY_CHARS = 50_000
 
 
 class _AnswerWrite(CodeSubmission):
-    body: str = ""
+    body: str = Field(default="", max_length=MAX_BODY_CHARS)
     image_url: str | None = None
 
     @model_validator(mode="after")
     def _body_or_code(self):
-        body = self.body.strip()
-        if len(body) >= MIN_BODY_CHARS:
+        if self.body.strip():
             return self
 
         if self.has_code:
-            # The code is the answer. Requiring ten characters of prose on top
-            # of a working solution is a rule that only produces "here you go".
+            # The code is the answer. Demanding prose on top of a working
+            # solution is a rule that only ever produced "here you go".
             return self
 
-        raise ValueError(
-            f"Write at least {MIN_BODY_CHARS} characters, or attach some code."
-        )
+        raise ValueError("Write an answer, or attach some code.")
 
 
 class AnswerCreate(_AnswerWrite):

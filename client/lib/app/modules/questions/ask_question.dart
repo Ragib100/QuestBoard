@@ -46,21 +46,34 @@ class _AskQuestionState extends State<AskQuestion> {
   int? _balance;
   bool _submitting = false;
 
-  static const _minTitle = 10;
-  static const _minBody = 20;
+  /// Set when a submit was attempted with the field blank, cleared as soon as
+  /// they type. Nothing is said about length before that — the old countdown
+  /// ("14 more characters needed") turned asking a question into a word count.
+  String? _titleError;
+  String? _bodyError;
+
+  /// Ceilings, not targets. They match `MAX_TITLE_CHARS` / `MAX_BODY_CHARS` on
+  /// the server so a paste that the server would reject cannot be typed in the
+  /// first place, and they are never shown — see [LabeledField.maxCharacters].
+  static const _maxTitleChars = 300;
+  static const _maxBodyChars = 50000;
 
   @override
   void initState() {
     super.initState();
     _loadBalance();
-    // Rebuild as the user types so the length hints and the Post button reflect
-    // what they have written. The rules used to be invisible until submit
-    // bounced them with a snackbar.
+    // Rebuild as the user types so a "required" warning clears the moment it
+    // stops being true.
     _titleController.addListener(_onTyped);
     _bodyController.addListener(_onTyped);
   }
 
-  void _onTyped() => setState(() {});
+  void _onTyped() {
+    setState(() {
+      if (_titleController.text.trim().isNotEmpty) _titleError = null;
+      if (_bodyController.text.trim().isNotEmpty) _bodyError = null;
+    });
+  }
 
   @override
   void dispose() {
@@ -71,10 +84,9 @@ class _AskQuestionState extends State<AskQuestion> {
     super.dispose();
   }
 
-  int get _titleLength => _titleController.text.trim().length;
-  int get _bodyLength => _bodyController.text.trim().length;
-  bool get _canPost => _titleLength >= _minTitle && _bodyLength >= _minBody;
-  bool get _hasDraft => _titleLength > 0 || _bodyLength > 0;
+  String get _title => _titleController.text.trim();
+  String get _body => _bodyController.text.trim();
+  bool get _hasDraft => _title.isNotEmpty || _body.isNotEmpty;
 
   /// Backing out of a half-written quest used to bin it without asking.
   Future<bool> _confirmDiscard() async {
@@ -127,15 +139,19 @@ class _AskQuestionState extends State<AskQuestion> {
   }
 
   Future<void> _submit() async {
-    final title = _titleController.text.trim();
-    final body = _bodyController.text.trim();
+    final title = _title;
+    final body = _body;
 
-    if (title.length < 10) {
-      _notify('Give your quest a title of at least 10 characters.');
-      return;
-    }
-    if (body.length < 20) {
-      _notify('Describe the problem in at least 20 characters.');
+    // Both fields are required; neither has a length to reach. The warning
+    // lands under the field that is actually empty rather than as a snackbar
+    // the user has to map back onto the form.
+    setState(() {
+      _titleError = title.isEmpty ? 'Give your quest a title.' : null;
+      _bodyError = body.isEmpty ? 'Describe what you need help with.' : null;
+    });
+
+    if (title.isEmpty || body.isEmpty) {
+      _notify('Fill in the title and the description before posting.');
       return;
     }
 
@@ -208,8 +224,9 @@ class _AskQuestionState extends State<AskQuestion> {
                     controller: _titleController,
                     helper: 'Be specific — imagine asking another student.',
                     hint: 'e.g. Why does my DP solution time out on n = 10^5?',
+                    maxCharacters: _maxTitleChars,
+                    errorText: _titleError,
                   ),
-                  MinLengthHint(length: _titleLength, minimum: _minTitle),
                   const SizedBox(height: 24),
                   LabeledField(
                     label: 'Description',
@@ -219,8 +236,9 @@ class _AskQuestionState extends State<AskQuestion> {
                         'tried, and where you are stuck.',
                     hint: 'Describe the problem...',
                     maxLines: 8,
+                    maxCharacters: _maxBodyChars,
+                    errorText: _bodyError,
                   ),
-                  MinLengthHint(length: _bodyLength, minimum: _minBody),
                   const SizedBox(height: 24),
                   _tagPicker(),
                   const SizedBox(height: 28),
@@ -274,8 +292,11 @@ class _AskQuestionState extends State<AskQuestion> {
   /// Stacked and full-width on a phone, side by side once there is room. The
   /// primary action sits on top so it stays above the keyboard-shrunk fold.
   Widget _actions(BuildContext context) {
+    // Enabled even with the form empty. A greyed-out button is a rule with no
+    // explanation attached; tapping it and being told which field is missing
+    // is the behaviour the user asked for.
     final post = ElevatedButton(
-      onPressed: (_submitting || !_canPost) ? null : _submit,
+      onPressed: _submitting ? null : _submit,
       style: ElevatedButton.styleFrom(minimumSize: const Size(180, 52)),
       child: _submitting
           ? const SizedBox(

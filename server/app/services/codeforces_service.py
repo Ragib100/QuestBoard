@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
+from app.core import clock
+
 BASE_URL = "https://codeforces.com/api"
 
 # Codeforces is rate limited to one call per two seconds per IP and is
@@ -25,6 +27,13 @@ MAX_RATING = 1600
 
 # How long a handle-verification submission stays acceptable.
 VERIFICATION_WINDOW = timedelta(minutes=30)
+
+# How far back we will page through a handle's submissions looking for the
+# solve. Codeforces returns them newest first, so we stop as soon as we are
+# older than the window we care about and this is only the hard stop for a
+# handle that submits hundreds of times a day.
+MAX_SUBMISSIONS_SCANNED = 1000
+PAGE_SIZE = 100
 
 
 class CodeforcesError(RuntimeError):
@@ -90,26 +99,79 @@ def pick_problem(seed: str) -> dict:
     return problems[index]
 
 
-def _submissions(handle: str, count: int) -> list[dict]:
-    result = _get("user.status", {"handle": handle, "from": 1, "count": count})
+def _submissions(handle: str, count: int, start: int = 1) -> list[dict]:
+    result = _get("user.status", {"handle": handle, "from": start, "count": count})
     return list(result)
 
 
-def has_solved(handle: str, codeforces_id: str) -> bool:
-    """True when the handle has an accepted submission for the problem.
+def _submitted_at(submission: dict) -> datetime:
+    return datetime.fromtimestamp(
+        submission.get("creationTimeSeconds", 0), tz=timezone.utc
+    )
 
-    Looks at the most recent 200 submissions only: the challenge is a
-    same-day thing, so an older solve is not what earned today's bonus.
+
+def solved_at(handle: str, codeforces_id: str, since: datetime) -> datetime | None:
+    """When the handle first got an accepted verdict on the problem, at or
+    after `since` — or None if there is no such submission.
+
+    The `since` bound is the whole point. Codeforces keeps a submission history
+    forever, so without it anyone who happened to solve the problem two years
+    ago could claim a challenge without opening it. The bound is the challenge's
+    own day, so the solve has to have been made *for* the challenge.
+
+    Returns the *earliest* qualifying accepted submission rather than the first
+    one it finds, so a solver who submitted twice is credited with the attempt
+    that actually earned it.
+
+    Submissions come back newest first, which is what lets this stop paging as
+    soon as it is past `since` instead of walking a decade of history.
+    """
+    found: datetime | None = None
+    start = 1
+
+    while start <= MAX_SUBMISSIONS_SCANNED:
+        page = _submissions(handle, PAGE_SIZE, start=start)
+        if not page:
+            break
+
+        for submission in page:
+            created = _submitted_at(submission)
+            if created < since:
+                # Newest-first, so everything from here on is older still.
+                return found
+
+            problem = submission.get("problem") or {}
+            if not problem.get("contestId"):
+                continue
+            if _problem_id(problem) != codeforces_id:
+                continue
+            if submission.get("verdict") == "OK":
+                found = created
+
+        if len(page) < PAGE_SIZE:
+            break
+        start += PAGE_SIZE
+
+    return found
+
+
+def has_solved(handle: str, codeforces_id: str, since: datetime) -> bool:
+    """True when the handle solved the problem at or after `since`."""
+    return solved_at(handle, codeforces_id, since) is not None
+
+
+def last_attempt_at(handle: str, codeforces_id: str) -> datetime | None:
+    """When the handle last submitted anything at all for this problem.
+
+    Only used to write a better error message: "you solved this in 2023, submit
+    it again" is a different problem from "we cannot see any submission", and a
+    user who has just spent an hour on a problem deserves to be told which.
     """
     for submission in _submissions(handle, 200):
         problem = submission.get("problem") or {}
-        if not problem.get("contestId"):
-            continue
-        if _problem_id(problem) != codeforces_id:
-            continue
-        if submission.get("verdict") == "OK":
-            return True
-    return False
+        if problem.get("contestId") and _problem_id(problem) == codeforces_id:
+            return _submitted_at(submission)
+    return None
 
 
 def verification_problem(user_id: str) -> dict:
@@ -130,7 +192,7 @@ def has_compile_error(handle: str, codeforces_id: str) -> bool:
     about who typed it into our form, but only the account's owner can put a
     submission on it.
     """
-    cutoff = datetime.now(timezone.utc) - VERIFICATION_WINDOW
+    cutoff = clock.utc_now() - VERIFICATION_WINDOW
 
     for submission in _submissions(handle, 20):
         problem = submission.get("problem") or {}
@@ -138,9 +200,6 @@ def has_compile_error(handle: str, codeforces_id: str) -> bool:
             continue
         if submission.get("verdict") != "COMPILATION_ERROR":
             continue
-        created = datetime.fromtimestamp(
-            submission.get("creationTimeSeconds", 0), tz=timezone.utc
-        )
-        if created >= cutoff:
+        if _submitted_at(submission) >= cutoff:
             return True
     return False

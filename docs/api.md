@@ -50,7 +50,7 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ✅ | `POST /questions` | Body: `title` (≥10), `body` (≥20), `tags[]` (≤5, must exist), `bounty_points` (0–100). Deducts the bounty in the same transaction; `402` if the balance is too low, `400` on an unknown tag. |
+| ✅ | `POST /questions` | Body: `title` (non-empty, ≤300), `body` (non-empty, ≤50,000), `tags[]` (≤5, must exist), `bounty_points` (0–100). Blank or whitespace-only title/body → `422`. Deducts the bounty in the same transaction; `402` if the balance is too low, `400` on an unknown tag. |
 | ✅ | `GET /questions` | Public. Query: `tag`, `search`, `sort=latest\|bounty\|votes`, `page`, `limit` (≤50). Returns `{items, page, limit, total, has_more}`. A token is optional but adds `my_vote`. `search` matches title or body with `ILIKE`, served by GIN trigram indexes, and ranks title hits first unless an explicit `sort` overrides it. |
 | ✅ | `GET /questions/{id}` | Public. Quest with answers (accepted first, then by score), vote counts and the caller's own votes. Increments `view_count`. |
 | ✅ | `PATCH /questions/{id}` | Author only. Bounty cannot be changed after posting. |
@@ -62,7 +62,7 @@ reset all happen client-side through `supabase_flutter`. See
 
 | | Endpoint | Notes |
 |---|---|---|
-| ✅ | `POST /questions/{id}/answers` | Body `{ body, image_url?, code_body?, code_language?, attachment_url?, attachment_name? }`. Notifies the quest author. `409` if the quest is solved. `body` normally needs 10 characters; an answer carrying `code_body` may have a shorter one, because the code *is* the answer. |
+| ✅ | `POST /questions/{id}/answers` | Body `{ body, image_url?, code_body?, code_language?, attachment_url?, attachment_name? }`. Notifies the quest author. `409` if the quest is solved. `body` may be any non-empty text (max 50,000); an answer carrying `code_body` may omit it entirely, because the code *is* the answer. |
 | ✅ | `PATCH /answers/{id}` · `DELETE /answers/{id}` | Author only. Cannot touch an accepted answer. `PATCH` takes the same optional code fields; passing `""` clears one. |
 | ✅ | `POST /answers/{id}/accept` | Quest author only, once (`409` on repeat). One transaction: mark accepted, close the quest, credit the helper, write `bounty_awarded`. |
 
@@ -97,8 +97,27 @@ mean a second fetch to render an answer.
 | ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
 | ✅ | `GET /challenges` | Public. The archive, newest first — `page`, `limit` ≤ 50, same page shape as `/questions`. Today's challenge is included only when `include_today=true`. Every row carries `award_points`: what solving it is worth **now**, after the age decay below. |
 | ✅ | `GET /challenges/{id}` | Public. One challenge in the same shape as `/challenges/today`, so a past challenge reuses the whole screen. `404` if it does not exist. |
-| ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem, then awards `award_points` — `bonus_points` decayed by the challenge's age, never `bonus_points` itself for an old one. Optional body `{ code_body?, code_language?, attachment_url?, attachment_name? }` stores the solution on the attempt. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt — with the code, so nothing typed is lost. |
+| ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem **dated on or after the challenge's own day (00:00 Asia/Dhaka)**, then awards `award_points` — `bonus_points` decayed by the challenge's age, never `bonus_points` itself for an old one. Optional body `{ code_body?, code_language?, attachment_url?, attachment_name? }` stores the solution on the attempt. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt — with the code, so nothing typed is lost. |
 | ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. Each row carries the `awarded_points` that solver actually received, which differs between a same-day solve and a late one. |
+| ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. `400` without a handle on the profile. |
+| ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
+
+### The clock is Asia/Dhaka
+
+Every calendar question the server answers — which challenge is today's, how
+many days old a challenge is, whether a streak survived, whether a Codeforces
+submission is recent enough to claim — is answered in **Bangladesh time**
+(UTC+6, no DST). `server/app/core/clock.py` is the only place that reads the
+wall clock; nothing else calls `datetime.now()`.
+
+Instants are still *stored* in UTC. The `timestamp` columns are naive and hold
+UTC, so `created_at` comes back as `2026-08-20T14:18:09.297403` with **no zone
+marker** — clients must read that as UTC. The Flutter client does so in
+`client/lib/core/app_time.dart`; `DateTime.parse` would otherwise read it as
+local time and render everything six hours out.
+
+`challenge_date` is a plain `YYYY-MM-DD` calendar day and has no zone to
+convert — shifting one moves it a day.
 
 ### Challenge point decay
 
@@ -114,8 +133,25 @@ The decay is computed from `challenge_date` at claim time — it is never stored
 on the challenge, so it cannot go stale. What *is* stored is
 `challenge_attempts.awarded_points`, the amount actually paid, so the ledger and
 the leaderboard agree about a solve forever after.
-| ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. `400` without a handle on the profile. |
-| ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
+
+### An old solve does not pay
+
+The verdict check is bounded below by the challenge's own day: the accepted
+submission must be dated **on or after 00:00 Dhaka on `challenge_date`**.
+Without that bound, a Codeforces account that had solved the problem at any
+point in its history could claim a challenge it never opened — and archived
+challenges made that trivially exploitable, since the archive is full of
+well-known problems.
+
+The refusal distinguishes the two cases, because they have different fixes:
+
+| The handle has | `409 detail` |
+|---|---|
+| an accepted submission, but from before `challenge_date` | "Your last submission for this problem is from *date*, before this challenge opened on *date*. Submit it again on Codeforces to claim — old solves do not count." |
+| nothing since `challenge_date` | "Codeforces has no accepted submission from *handle* for this problem since *date*. Submit your solution there first, then claim — a verdict can take a minute to land." |
+
+The client states the rule *before* the button, on the challenge screen, rather
+than leaving it to be discovered by a failed claim.
 
 ## AI
 

@@ -150,32 +150,51 @@ void main() {
     expect(find.byTooltip('Clear'), findsNothing, reason: 'button hides when empty');
   });
 
-  /// The quest and answer composers both enforce a minimum length that used to
-  /// stay secret until submit bounced the user with a snackbar. Both now show
-  /// this hint while typing and keep their button disabled until it passes.
-  testWidgets('MinLengthHint counts down, then confirms',
+  /// Quests and answers have no minimum length any more — a short question is
+  /// still a question. What is left is a ceiling that bounds the row, and it
+  /// is deliberately silent: a "0/50000" counter reads as a target.
+  testWidgets('LabeledField caps input without showing a counter',
       (WidgetTester tester) async {
-    Future<void> pumpAt(int length, int minimum) => tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: MinLengthHint(length: length, minimum: minimum),
-            ),
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LabeledField(
+            label: 'Title',
+            controller: controller,
+            maxCharacters: 10,
           ),
-        );
+        ),
+      ),
+    );
 
-    await pumpAt(0, 20);
-    expect(find.text('20 more characters needed'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'x' * 40);
+    await tester.pump();
 
-    // Singular, not "1 more characters needed".
-    await pumpAt(19, 20);
-    expect(find.text('1 more character needed'), findsOneWidget);
+    expect(controller.text.length, 10, reason: 'the cap is enforced');
+    expect(find.textContaining('/10'), findsNothing,
+        reason: 'no counter — the limit is a guard, not a goal');
+  });
 
-    await pumpAt(20, 20);
-    expect(find.text('Looks good'), findsOneWidget);
+  testWidgets('LabeledField shows a required warning under the field',
+      (WidgetTester tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
 
-    // Stops counting once satisfied rather than reading out a running total.
-    await pumpAt(1204, 20);
-    expect(find.text('Looks good'), findsOneWidget);
-    expect(find.textContaining('character'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LabeledField(
+            label: 'Title',
+            controller: controller,
+            errorText: 'Give your quest a title.',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Give your quest a title.'), findsOneWidget);
   });
 }
