@@ -1,3 +1,5 @@
+import '../core/app_time.dart';
+
 /// Live counts behind the admin dashboard. Every field is a real query on the
 /// server — nothing here is estimated, so a zero means zero.
 class AdminStats {
@@ -78,7 +80,7 @@ class AdminUser {
         isAdmin: json['is_admin'] as bool? ?? false,
         isSuspended: json['is_suspended'] as bool? ?? false,
         createdAt:
-            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+            parseServerTime(json['created_at'] as String? ?? '') ??
                 DateTime.now(),
       );
 }

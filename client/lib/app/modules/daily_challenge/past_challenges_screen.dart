@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/app_time.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_states.dart';
 import '../../../core/widgets/skeletons.dart';
@@ -277,6 +278,14 @@ class PastChallengeTile extends StatelessWidget {
                     ),
                   ),
                 _meta(Icons.calendar_today_rounded, _ageLabel(c.ageDays)),
+                // Its own chip rather than appended to the age: combined they
+                // are one unbreakable 13px-too-wide row at 320px, and the Wrap
+                // can only break *between* children.
+                //
+                // The date matters because it is what a user matches against
+                // their own Codeforces submission list — a solve dated before
+                // this day will not pay.
+                _meta(Icons.event_rounded, formatDay(c.challengeDate)),
                 _meta(Icons.people_alt_rounded,
                     '${entry.solverCount} solved'),
                 if (c.cfRating != null)

@@ -48,6 +48,40 @@ the client turns it into a URL with `getPublicUrl`. `points` is a **cache** of t
 admin and checked by `UserService.require_active` on every write path, not in the JWT
 dependency ([decisions.md](decisions.md) D22).
 
+## Timestamps: UTC in the rows, Dhaka on the screen
+
+Every stored instant is **UTC**. Every calendar question — which challenge is
+today's, whether a streak survived, whether a Codeforces submission is recent
+enough — is answered in **Asia/Dhaka** (UTC+6, no DST), by
+`server/app/core/clock.py`. Nothing else in the server reads a wall clock. See
+[decisions.md](decisions.md) D29.
+
+**The live schema is mixed, and the `timestamptz` written below is not
+universally true.** `schema.sql` uses `add column if not exists`, so columns
+that predate it kept whatever type they were created with. As of 2026-08-20 the
+live project has:
+
+| `timestamptz` (aware) | `timestamp` (naive, holding UTC) |
+|---|---|
+| `users.created_at`, `users.updated_at`, `users.last_active`, `answers.created_at`, `answers.updated_at`, `daily_challenges.created_at` | `questions.created_at`, `questions.updated_at`, `votes.created_at`, `notifications.created_at`, `point_transactions.created_at`, `challenge_attempts.created_at`, `challenge_attempts.solved_at`, `ai_hints.created_at`, `user_badges.awarded_at` |
+
+Two consequences that have already caused bugs:
+
+- **A naive column serialises without a zone marker** —
+  `2026-08-20T14:18:09.297403`, no `Z`. `DateTime.parse` in Dart reads an
+  unzoned string as *local*, so the client showed every one of those six hours
+  early. `client/lib/core/app_time.dart` treats an unzoned string as UTC and
+  honours an explicit offset when there is one, so it is correct against either
+  column type.
+- **Never hand Postgres an aware value for a naive column.** The comparison
+  then depends on the session timezone rather than on the data. The weekly
+  leaderboard window did exactly this against `point_transactions.created_at`;
+  it now uses `clock.naive_utc_now()`.
+
+The database session runs in UTC, so `now()` writes UTC into both kinds of
+column. `daily_challenges.challenge_date` is a `date` — a calendar day with no
+zone to convert, and shifting one moves it a day.
+
 ## `questions`
 
 Mirrors `server/app/models/question.py`.

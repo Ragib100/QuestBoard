@@ -289,8 +289,8 @@ audit). Requires re-running `server/schema.sql` and creating the public
 - [x] `answers` and `challenge_attempts` gained `code_body`, `code_language`,
       `attachment_url`, `attachment_name`. Files go to the public `submissions`
       bucket the way avatars do; FastAPI never sees the bytes
-- [x] An answer that carries code is exempt from the 10-character prose minimum,
-      on the server as well as in the composer
+- [x] An answer that carries code needs no prose at all, on the server as well
+      as in the composer (the old 10-character minimum is gone entirely — D30)
 - [x] **Not** built: submitting to Codeforces. Its API is read-only — doing it
       would mean storing the user's Codeforces password. Declined, not deferred (D27)
 
@@ -314,6 +314,65 @@ audit). Requires re-running `server/schema.sql` and creating the public
 - [x] Two concurrent claims on an existing unsolved attempt could both be paid;
       the attempt is now read `with_for_update()`
 - [x] Zero-amount movements no longer write a ledger row
+
+## Timezone, the post form, the phone tray, and the claim rule ✅
+
+See [decisions.md](docs/decisions.md) D29–D32. Server-only changes; no migration
+and no new dependency.
+
+**Bangladesh time everywhere (D29)**
+- [x] `server/app/core/clock.py` is now the only module that reads a wall clock.
+      Six `datetime.now(timezone.utc)` call sites moved to it: today's challenge,
+      the decay, the streak boundary, the AI hourly cap, the weekly leaderboard
+      window and the Codeforces verification cutoff
+- [x] Instants stay stored in UTC — the calendar is answered at the edges, not
+      migrated into the rows
+- [x] **Client bug fixed:** naive `created_at` strings have no `Z`, and
+      `DateTime.parse` reads an unzoned string as *local* — every timestamp in
+      the app was six hours early, so a quest posted seconds ago read "6h ago".
+      `client/lib/core/app_time.dart` parses as UTC and renders at UTC+6
+      regardless of the device's zone
+- [x] The weekly leaderboard window was handing Postgres an aware value for a
+      `timestamp without time zone` column, making it depend on the session
+      timezone. Now naive UTC, matching the column
+
+**Posting a quest (D30)**
+- [x] No minimum length on a quest title, body, or an answer. Blank is still
+      refused, with the warning under the field that is actually empty
+- [x] The Post button is enabled on an empty form and explains what is missing
+      when tapped, instead of being greyed out with no reason given
+- [x] Silent 300 / 50,000-character ceilings via an input formatter, matched on
+      the server. Deliberately not `maxLength`, which draws a counter
+- [x] `MinLengthHint` deleted — nothing used it any more
+
+**The phone nav tray (D32)**
+- [x] Daily Challenge promoted from the `⋮` overflow menu to the fourth of five
+      bottom tabs; nothing was displaced. `type: fixed` so the labels survive
+- [x] `DailyChallengeScreen` gained the `embedded` flag the other tabs already
+      take; its archive link moves to the top of the body when there is no app bar
+- [x] Both covered in `test/mobile_layout_test.dart` at 320px and 360px
+
+**The welcome page loaded nothing**
+- [x] It was one `Future.wait` over four calls, so any single failure — a profile
+      still onboarding, one leaderboard hiccup — blanked all four tiles and the
+      quest feed at once. Each call now fails on its own and the rest still render
+- [x] The empty state had said "pull to refresh" since it was written and there
+      was no `RefreshIndicator` to pull. There is now
+- [x] A banner names what failed and offers a retry, instead of leaving four
+      zeroes on screen to be interpreted
+
+**Claiming a challenge (D31)**
+- [x] An accepted submission now only counts if it is dated on or after 00:00
+      Dhaka on the challenge's own day — an old solve, from before the challenge
+      existed, no longer pays. The archive made this exploitable in bulk
+- [x] The refusal distinguishes "you solved this in 2023, submit it again" from
+      "we cannot see any submission", because the fixes differ
+- [x] The rule is stated on the screen *above* the claim button, not left to be
+      discovered by failing
+- [x] The submission editor is no longer a bare text link: it has a heading, says
+      plainly that it is optional and is not sent to Codeforces
+- [x] The scan stops paging once it is past the cut-off instead of reading a
+      fixed 200 submissions and hoping the solve was in them
 
 **Visual polish pass** — no feature changes; see [decisions.md](docs/decisions.md) D25
 - [x] `core/motion.dart`: shared durations/curves, `appRoute`, `FadeSlideIn`,

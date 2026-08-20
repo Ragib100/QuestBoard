@@ -1,29 +1,68 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.user import UserSummary
 
 MAX_BOUNTY = 100
 
+# There is no *minimum* length on a quest any more: a short question is still a
+# question, and the old 10/20-character floors mostly taught people to pad.
+# Empty is still rejected — that is a mistake, not a style.
+#
+# The ceilings exist to stop a single request writing a megabyte into the
+# table, not to shape what anyone writes, so they are far larger than any
+# honest quest and the client never mentions them.
+MAX_TITLE_CHARS = 300
+MAX_BODY_CHARS = 50_000
+
+
+def _required(value: str, field: str) -> str:
+    text = value.strip()
+    if not text:
+        raise ValueError(f"{field} cannot be empty.")
+    return text
+
 
 class QuestionCreate(BaseModel):
-    title: str = Field(min_length=10, max_length=200)
-    body: str = Field(min_length=20)
+    title: str = Field(max_length=MAX_TITLE_CHARS)
+    body: str = Field(max_length=MAX_BODY_CHARS)
     tags: list[str] = Field(default_factory=list, max_length=5)
     bounty_points: int = Field(default=0, ge=0, le=MAX_BOUNTY)
     image_url: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _title_present(cls, value: str) -> str:
+        return _required(value, "A title")
+
+    @field_validator("body")
+    @classmethod
+    def _body_present(cls, value: str) -> str:
+        return _required(value, "A description")
 
 
 class QuestionUpdate(BaseModel):
     """Bounty is deliberately absent — it is spent at post time and cannot be
     edited afterwards without unwinding the ledger."""
 
-    title: str | None = Field(default=None, min_length=10, max_length=200)
-    body: str | None = Field(default=None, min_length=20)
+    title: str | None = Field(default=None, max_length=MAX_TITLE_CHARS)
+    body: str | None = Field(default=None, max_length=MAX_BODY_CHARS)
     tags: list[str] | None = Field(default=None, max_length=5)
     image_url: str | None = None
+
+    # Omitting a field leaves it alone; sending it blank is an attempt to erase
+    # it, and a quest with no title is not something we can render.
+    @field_validator("title")
+    @classmethod
+    def _title_present(cls, value: str | None) -> str | None:
+        return None if value is None else _required(value, "A title")
+
+    @field_validator("body")
+    @classmethod
+    def _body_present(cls, value: str | None) -> str | None:
+        return None if value is None else _required(value, "A description")
 
 
 class AnswerResponse(BaseModel):

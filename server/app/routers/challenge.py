@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user_id, get_optional_user_id
 from app.models import User
@@ -22,8 +22,9 @@ from app.utils.serialize import challenge_view
 router = APIRouter(prefix="/challenges", tags=["Daily challenge"])
 
 
-def _utc_today():
-    return datetime.now(timezone.utc).date()
+def _today_here():
+    """The day the *viewer* is in. Ages and decay are counted in Dhaka days."""
+    return clock.today()
 
 
 def _viewer_is_verified(db: Session, viewer_id: UUID | None) -> bool:
@@ -54,7 +55,7 @@ def today(
 
     return challenge_view(
         challenge,
-        today=_utc_today(),
+        today=_today_here(),
         attempt=attempt,
         solver_count=ChallengeService.solver_count(db, challenge.id),
         codeforces_verified=_viewer_is_verified(db, viewer_id),
@@ -83,13 +84,13 @@ def archive(
     )
 
     verified = _viewer_is_verified(db, viewer_id)
-    utc_today = _utc_today()
+    today_here = _today_here()
 
     return ChallengePage(
         items=[
             challenge_view(
                 row["challenge"],
-                today=utc_today,
+                today=today_here,
                 attempt=row["attempt"],
                 solver_count=row["solver_count"],
                 codeforces_verified=verified,
@@ -123,7 +124,7 @@ def one(
 
     return challenge_view(
         challenge,
-        today=_utc_today(),
+        today=_today_here(),
         attempt=attempt,
         solver_count=ChallengeService.solver_count(db, challenge.id),
         codeforces_verified=_viewer_is_verified(db, viewer_id),

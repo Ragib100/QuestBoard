@@ -271,3 +271,94 @@ covered by a regression test:
    `with_for_update()`.
 4. **Zero-amount movements wrote a ledger row.** Harmless to the arithmetic, noise in a
    history whose only job is to explain a balance. `apply` now returns `None`.
+
+### D29 — One clock, and it is Asia/Dhaka
+
+**Every calendar question is answered in Bangladesh time; every instant is
+stored in UTC.**
+
+The server was reading `datetime.now(timezone.utc)` in six places. That is a
+defensible default for a global product and the wrong one here: everybody who
+uses QuestBoard is in Dhaka, so "today's challenge" changed at 6am local, a
+streak could break because a 1am session counted as yesterday, and the decay
+counted a day at the wrong moment. `server/app/core/clock.py` is now the only
+module that reads a wall clock, and it answers in UTC+6.
+
+Storage did not change, and deliberately. The `timestamp` columns are naive and
+hold UTC; rewriting them to local time would have been a migration over live
+data to gain nothing, and would have made every existing row ambiguous. The
+calendar is a presentation question, so it is answered at the edges.
+
+That left a client bug worth naming, because it had been visible the whole
+time. Those naive columns serialise as `2026-08-20T14:18:09.297403` — no `Z`,
+no offset — and `DateTime.parse` reads an unzoned string as **local**. On a
+phone in Dhaka every timestamp in the app was six hours early: a quest posted a
+moment ago read "6h ago". `client/lib/core/app_time.dart` appends the `Z` the
+column forgot, then renders at UTC+6 rather than at the device's zone, so a
+traveller and a phone with the wrong zone set still see the day the server is
+paying challenges for.
+
+`challenge_date` is exempt: it is a calendar day, not an instant, and
+converting one moves it a day.
+
+### D30 — No minimum length on a quest or an answer
+
+Posting required a 10-character title and a 20-character body; answering
+required 10 characters. All three are gone. A live countdown ("14 more
+characters needed") is a word count on a question, and what it actually
+produced was padding — the rule cannot tell "Why is this O(n²)?" from twenty
+characters of throat-clearing, so it taxed the former and passed the latter.
+
+What is enforced instead is *non-empty*, reported under the field it belongs to
+when the user tries to post, rather than as a snackbar they have to map back
+onto the form. The Post button is no longer disabled on an empty form either: a
+greyed-out button is a rule with no explanation attached, and the user asked to
+be told what is missing.
+
+The ceilings — 300 characters of title, 50,000 of body — are new, and are a
+guard on what one request can write into a row, not a target. They are enforced
+silently by an input formatter and are never shown. `TextField.maxLength` would
+have drawn a "0/50000" counter, which reads as a goal.
+
+### D31 — An accepted submission only counts if it postdates the challenge
+
+The verdict check searched a handle's whole Codeforces history for an `OK` on
+the problem. Anyone who had solved it at some point — years ago, in a contest,
+before QuestBoard existed — could claim without opening the challenge. The
+archive made that worse rather than better: it is full of well-known problems,
+so a competitive programmer could have walked the whole archive for points in a
+few minutes.
+
+The check is now bounded below by 00:00 Dhaka on the challenge's own
+`challenge_date`. A same-day solve is the normal case; solving an archived
+challenge any time since it ran also counts, which is the point of keeping the
+archive solvable. Solving it *before* it ran does not.
+
+A blunter rule — "within the last 30 minutes" — was considered and rejected. It
+would refuse the honest case of solving at breakfast and claiming at night, and
+the thing being prevented is not staleness, it is a solve that was never made
+for the challenge.
+
+Because Codeforces returns submissions newest first, the bound also made the
+scan cheaper: it stops paging as soon as it is past `since`, rather than
+reading a fixed 200 rows and hoping.
+
+### D32 — The daily challenge is a tab, not an overflow-menu item
+
+On a phone the challenge lived behind the `⋮` menu in the app bar — the one
+screen in the app with a deadline attached was the hardest to reach, and the
+decay in D28 made "I forgot it existed" cost real points. It is now the fourth
+of five bottom tabs.
+
+Nothing was displaced to make room. Material's fixed bottom bar takes five
+items, and at our narrowest supported width (320px) that is 64px per tab, which
+fits an icon and a short label — hence "Ranks" and "Daily" rather than their
+full titles. `type: fixed` is set explicitly: five items otherwise flips the bar
+to `shifting`, which hides every inactive label.
+
+Rendering it as a tab meant giving `DailyChallengeScreen` an `embedded` flag,
+the same one `BrowseQuestions`, `LeaderboardScreen` and `ProfileScreen` already
+take — the shell draws the app bar, so the screen must not. The archive link
+moves from an app-bar action to the top of the body when embedded, since there
+is no app bar to hang it on and the copy at the foot of the solver list is a
+long scroll away.

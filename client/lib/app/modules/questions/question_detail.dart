@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/widgets/async_states.dart';
-import '../../../core/widgets/labeled_field.dart';
 import '../../../core/widgets/reward_burst.dart';
 import '../../../core/widgets/skeletons.dart';
 import '../../../models/ai_hint.dart';
@@ -46,7 +45,6 @@ class _QuestionDetailState extends State<QuestionDetail> {
   String? get _myId => Supabase.instance.client.auth.currentUser?.id;
   bool get _isAuthor => _quest != null && _quest!.author.id == _myId;
 
-  static const _minAnswer = 10;
 
   /// Bumped after a successful post to reset the code editor — see
   /// [_submitAnswer].
@@ -74,8 +72,10 @@ class _QuestionDetailState extends State<QuestionDetail> {
 
   /// Prose long enough, or code. The server applies the same rule — an answer
   /// that is a working solution does not also owe ten characters of English.
+  /// Any non-empty answer will do. "No, use a set" is a complete answer, and
+  /// the old ten-character floor only ever produced padding.
   bool get _canAnswer =>
-      _answerLength >= _minAnswer || _submission.hasCode || _submission.hasAttachment;
+      _answerLength > 0 || _submission.hasCode || _submission.hasAttachment;
 
   Future<void> _load() async {
     setState(() {
@@ -224,7 +224,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
   Future<void> _submitAnswer() async {
     final body = _answerController.text.trim();
     if (!_canAnswer) {
-      _notify('Write at least 10 characters, or attach some code.');
+      _notify('Write an answer, or attach some code.');
       return;
     }
     if ((_submission.codeBody ?? '').length > maxCodeChars) {
@@ -656,11 +656,6 @@ class _QuestionDetailState extends State<QuestionDetail> {
                     decoration:
                         const InputDecoration(hintText: 'Write your answer...'),
                   ),
-                  // Only once they have started — an untouched composer does
-                  // not need to nag. Code answers are exempt: the minimum does
-                  // not apply to them.
-                  if (_answerLength > 0 && !_submission.hasCode)
-                    MinLengthHint(length: _answerLength, minimum: _minAnswer),
                   CodeComposer(
                     key: ValueKey('answer-code-$_composerGeneration'),
                     enabled: !_submitting,
