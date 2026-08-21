@@ -642,6 +642,155 @@ void main() {
     }
   });
 
+  /// The regression this guards was reported as "there is no code submit
+  /// button". There was an editor, but it was collapsed behind a text link and
+  /// the only thing that persisted what you typed was "Claim" — which refuses
+  /// unless Codeforces already shows an accepted verdict.
+  testWidgets('the code editor offers a submit button once there is code',
+      (WidgetTester tester) async {
+    CodeSubmission? submitted;
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(
+        tester,
+        SingleChildScrollView(
+          child: CodeComposer(
+            // Without a per-size key the element — and so the text controller
+            // — is reused across the two pumps, and the second iteration
+            // starts with the first one's code already typed in.
+            key: ValueKey('composer-$size'),
+            startOpen: true,
+            onChanged: (_) {},
+            onSubmit: (value) async => submitted = value,
+          ),
+        ),
+        size,
+      );
+
+      // Open, not hidden behind "Add code".
+      expect(find.byType(TextField), findsOneWidget, reason: 'editor at $size');
+
+      final button = find.widgetWithText(ElevatedButton, 'Submit code');
+      expect(button, findsOneWidget, reason: 'submit button at $size');
+
+      // Nothing typed yet: offering to submit an empty solution would only
+      // produce a server error.
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNull,
+          reason: 'empty editor at $size');
+
+      await tester.enterText(find.byType(TextField), 'print(1)');
+      await tester.pump();
+
+      expect(tester.widget<ElevatedButton>(button).onPressed, isNotNull,
+          reason: 'typed editor at $size');
+
+      await tester.tap(button);
+      await tester.pump();
+
+      expect(submitted?.codeBody, 'print(1)');
+      expect(tester.takeException(), isNull, reason: 'submit at $size');
+      submitted = null;
+    }
+  });
+
+  /// The one that made "code submit is not working" true for a brand new
+  /// account: the whole editor sat behind `if (!today.codeforcesVerified)`, so
+  /// the first thing anyone saw on this screen was one sentence about
+  /// Codeforces and no submit button anywhere. Verifying gates *claiming* —
+  /// `PUT /challenges/{id}/submission` has never asked for it (D40).
+  testWidgets('an unverified user still gets the code editor',
+      (WidgetTester tester) async {
+    Widget unverified() => DailyChallengeView(
+          today: _archived(ageDays: 0, award: 50, verified: false),
+          solvers: const [],
+          onSubmissionChanged: (_) {},
+          onSubmitCode: (_) async {},
+        );
+
+    for (final size in const [_phone, _narrow]) {
+      await _pumpAt(tester, unverified(), size);
+      expect(tester.takeException(), isNull, reason: 'unverified at $size');
+    }
+
+    // Content checks get a tall viewport: the screen is a lazy ListView, so on
+    // a 640px phone the editor is simply not built yet and a `findsNothing`
+    // here would be about scrolling rather than about the fix.
+    await _pumpAt(tester, unverified(), const Size(360, 2400));
+
+    expect(find.byType(CodeComposer), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Submit code'), findsOneWidget);
+    // ...and the screen still says why claiming is blocked, rather than
+    // leaving the pinned "Verify Codeforces handle" button unexplained.
+    expect(find.textContaining('verify which account is yours'), findsOneWidget);
+  });
+
+  /// The editor comes before the rules. It used to come after a three-step
+  /// explainer and a warning panel, which put the submit button a screen and a
+  /// half below the fold on a phone — the reason it read as missing.
+  testWidgets('the solution editor sits above the claim rules',
+      (WidgetTester tester) async {
+    await _pumpAt(
+      tester,
+      DailyChallengeView(
+        today: _archived(ageDays: 0, award: 50),
+        solvers: const [],
+        onSubmissionChanged: (_) {},
+        onSubmitCode: (_) async {},
+      ),
+      // Tall, because the screen is a lazy ListView: on a 640px phone the
+      // rules simply are not built yet and this would compare against nothing.
+      const Size(360, 2400),
+    );
+
+    final editor = tester.getTopLeft(find.byType(CodeComposer)).dy;
+    final rules = tester.getTopLeft(find.text('How claiming works')).dy;
+    expect(editor, lessThan(rules));
+  });
+
+  /// The pinned action bar reserves its own space instead of being drawn over
+  /// the body. As a `bottomSheet` it overlaid the list, which is why the screen
+  /// carried 140px of guessed bottom padding and still covered the last row
+  /// whenever the bar wrapped.
+  testWidgets('the pinned claim bar does not overlap the content',
+      (WidgetTester tester) async {
+    await _pumpScreen(
+      tester,
+      Scaffold(
+        body: DailyChallengeView(
+          today: _archived(ageDays: 0, award: 50),
+          solvers: const [],
+        ),
+        bottomNavigationBar: ChallengeActionBar(
+          today: _archived(ageDays: 0, award: 50),
+          onClaim: () {},
+          onVerify: () {},
+          onOpenProblem: () {},
+        ),
+      ),
+      _narrow,
+    );
+
+    expect(tester.takeException(), isNull);
+    final barTop = tester.getTopLeft(find.byType(ChallengeActionBar)).dy;
+    final listBottom = tester.getBottomLeft(find.byType(ListView)).dy;
+    expect(listBottom, lessThanOrEqualTo(barTop),
+        reason: 'the list must end where the bar begins, not under it');
+  });
+
+  testWidgets('the answer composer keeps its editor collapsed',
+      (WidgetTester tester) async {
+    // The mirror of the test above: prose is the common case there, and an
+    // always-open code pane would push the text field off a phone screen.
+    await _pumpAt(
+      tester,
+      SingleChildScrollView(child: CodeComposer(onChanged: (_) {})),
+      _phone,
+    );
+
+    expect(find.byType(TextField), findsNothing);
+    expect(find.widgetWithText(ElevatedButton, 'Submit code'), findsNothing);
+  });
+
   /// An archived challenge renders through the same view as today's, with the
   /// decay note and a stored solution added — both new, both able to overflow.
   testWidgets('an archived challenge with a saved solution fits a phone',

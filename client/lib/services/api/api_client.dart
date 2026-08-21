@@ -164,6 +164,22 @@ class ApiClient {
         ));
   }
 
+  Future<dynamic> put(
+    String path, {
+    Object? body,
+    bool auth = true,
+    Duration? timeout,
+  }) async {
+    return _send(
+      () async => http.put(
+        await _uri(path),
+        headers: _headers(auth: auth),
+        body: jsonEncode(body ?? const {}),
+      ),
+      timeout: timeout,
+    );
+  }
+
   Future<dynamic> delete(String path) async {
     return _send(() async => http.delete(await _uri(path), headers: _headers()));
   }

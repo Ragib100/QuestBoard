@@ -453,3 +453,120 @@ no alternative on Android, and CLAUDE.md's rule names Riverpod/GoRouter/Dio,
 which are architectural choices rather than a missing platform capability. The
 `<queries>` intent for `https` is required in `AndroidManifest.xml` or
 `canLaunchUrl` returns false on Android 11+ even when a browser is installed.
+
+### D38 — Saving code and claiming the bonus are two different acts
+
+Reported twice as "there is no code submit button". There was an editor, and
+after D36 it was reachable — but nothing in the flow *submitted* it:
+
+- `CodeComposer` stayed collapsed behind a blue text link ("Write or upload your
+  code"), which reads as a link, not as an editor with an action.
+- The only writer of `challenge_attempts.code_body` was `POST /solve`, and
+  `/solve` refuses unless Codeforces already shows an accepted verdict. So
+  someone who had written a solution but not yet submitted it upstream had no
+  way to save it at all, and the only button anywhere near the editor said
+  **Claim**.
+- The copy made it worse by calling the field "Your solution (optional)" and
+  saying it "is not what earns the points" — true, but it framed the editor as
+  decoration.
+
+Split into two: `PUT /challenges/{id}/submission` stores the code and never
+calls Codeforces, and `POST /solve` still pays on the verdict. The editor now
+opens expanded on the challenge screen with its own **Submit code** button and
+a note confirming what is stored. It deliberately needs neither a verified
+handle nor an unsolved challenge — keeping a record of your work has nothing to
+do with claiming a bonus.
+
+The answer composer keeps the collapsed editor and no submit button of its own:
+most answers are prose, an always-open code pane pushes the text field off a
+phone screen, and it already has a send button. `startOpen` and `onSubmit` are
+what separate the two.
+
+`CodeComposer` also never called `setState` as you typed, so its character
+counter sat at 0 forever; the submit button's enabled state reads the same
+controller, which is what surfaced it.
+
+### D39 — The landing page keeps one alignment axis
+
+The hero centres itself on a phone (and left-aligns beside the art on desktop),
+but the highlights band under it was always left-aligned. On a phone that put a
+centred heading directly above a left-aligned list — two competing alignments
+on one screen, which is what "the alignment is completely wrong" meant. It
+survived two earlier rounds of fixes because both were about width (the 1200px
+cap, the full-bleed band), not about the axis.
+
+The band now centres its icon, title and body. The hero's tagline also gained an
+explicit `textAlign`: it had none, so it only *looked* centred while it fitted
+on one line, and a larger system font setting wrapped it back to the left.
+
+Confirmed against the running app at 360px rather than from reading the widget
+tree — the same method D36 records, and the reason it was found at all.
+
+### D40 — Verifying a handle gates claiming, not saving
+
+D38 split the write in two — `PUT /challenges/{id}/submission` stores code and
+never calls Codeforces, `POST /solve` still pays on the verdict — but the screen
+kept the whole editor behind `if (!today.codeforcesVerified)`. A brand new
+account therefore opened the daily challenge, saw one sentence about Codeforces,
+and had no submit button anywhere on the page. The endpoint had never asked for
+a verified handle; only the UI did.
+
+The editor is now offered whatever the verification state, and the lock is
+explained in a banner at the top of the screen next to the stale-challenge one,
+where it belongs — it is the reason the pinned button says **Verify Codeforces
+handle** rather than **Claim**.
+
+Four more things on the same screen, all of which made submitting feel broken
+even once the button was there:
+
+- **The editor came after the rules.** A three-step explainer plus a warning
+  panel sat between the problem and the only thing you can do with it, which put
+  the submit button about a screen and a half below the fold on a phone. Action
+  first, reference material after it.
+- **The action bar was a `bottomSheet`.** A sheet is drawn *over* the body, which
+  is why the list carried 140px of guessed bottom padding and still covered its
+  last row whenever the bar wrapped to two lines — and why the bar parked itself
+  on top of the code editor as soon as the keyboard opened. `bottomNavigationBar`
+  is the slot that reserves real space, so the padding is now an ordinary 32.
+- **Every write was followed by a full reload.** Saving code blanked the screen
+  to a spinner, rebuilt the editor from the server mid-edit, and — if that read
+  happened to fail — replaced a save that had worked with an error page. Saving
+  now patches the returned attempt straight into state; a claim still re-reads
+  but does it silently, because the reward burst is already on screen.
+- **`PUT` had no timeout override**, so a solution going to a cold free-tier
+  Render dyno hit the 10s default and surfaced as "could not reach the server".
+  It gets the same 20s `/challenges/today` already uses.
+
+Also removed: "Your last claim did not find an accepted verdict." It keyed off
+an unsolved attempt existing, which stopped meaning "a claim failed" the moment
+saving code started creating attempt rows of its own.
+
+`CopyableUrl` became `ExternalLink` and `AttachmentChip` now opens what it points
+at. Both still copied a URL and told you to paste it in a browser yourself,
+which predates url_launcher landing in D37 and is exactly what CLAUDE.md's link
+rule forbids. `openLink` still falls back to the clipboard when there is no
+browser, so the old behaviour survives where it is actually the truth.
+
+### D41 — The first two screens carry the brand mark
+
+Reported as "that page is so massy", about the launch screen — the one held
+while [_Launch] resolves a restored session, which on a cold start against a
+sleeping server is on screen for several seconds.
+
+It was a flat tinted disc, a wordmark and a tagline in a bare full-bleed
+`Column` with **no horizontal padding at all**, and a progress bar pinned to the
+bottom of the window with a `Spacer` between. So the text ran off both edges at
+a large system font setting, and on a tall window a dead half-page separated the
+logo from the only moving thing on screen.
+
+It carries [BrandArt] now — the same mark as the landing and auth screens, so
+the app opens on something of its own — and mark, wordmark, tagline and loader
+are one centred block with the wordmark in a scale-down `FittedBox`.
+
+The landing page got the same treatment in the same pass. `BrandArt` lived only
+in the desktop hero's second column, and a phone has no second column, so the
+first screen of the app was three stacked paragraphs of grey text; the phone
+hero has the mark now. The highlights band was three centred paragraphs floating
+in 32px of whitespace with no container around them, which read as a long sparse
+scroll rather than as a list of three things — they are `AppCard`s, and they
+stagger in with `FadeSlideIn`. The band still centres its contents, so D39 holds.

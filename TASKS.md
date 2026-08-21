@@ -585,3 +585,76 @@ window to a phone and taking screenshots before and after.
 - [x] Android `applicationId` renamed to `io.questboard.app` (M6)
 - [x] Deploy the API so the app works off your Wi-Fi (M6)
 - [x] CI: `flutter analyze` + `flutter test` + `ruff check` on every PR
+
+## The two that were still wrong ✅
+
+See [decisions.md](docs/decisions.md) D38–D39. Both had been reported twice
+before. Same method as the round above — Linux build against the live API,
+sized to 360px, screenshots before and after.
+
+- [x] **Nothing actually submitted the code.** The editor existed and was
+      reachable, but it stayed collapsed behind a text link, and the only thing
+      that persisted `code_body` was `POST /solve` — which refuses unless
+      Codeforces already shows an accepted verdict. So code written before
+      solving upstream could not be saved at all, and the nearest button said
+      **Claim**
+- [x] `PUT /challenges/{id}/submission` stores a submission without calling
+      Codeforces. No verified handle required, works before and after the
+      solve, and creates the attempt row if there is not one yet
+- [x] The challenge screen opens the editor expanded (`startOpen`) with its own
+      **Submit code** button and a note confirming what is stored. The answer
+      composer deliberately keeps the collapsed editor and its send button
+- [x] Fixed while in there: `CodeComposer` never rebuilt as you typed, so its
+      character counter was frozen at 0; and "Open problem" wrapped onto two
+      lines at 360px
+- [x] **The landing page used two alignments at once.** Centred hero directly
+      above a left-aligned feature list. The band now centres too, and the
+      tagline gained the explicit `textAlign` it never had — without it, it only
+      looked centred while it fitted on one line
+- [x] **New tests:** six server tests for `save_submission` (no Codeforces call,
+      no verified handle needed, a second submit updates rather than inserting,
+      a later claim does not wipe the code, editing after solving does not pay
+      twice, missing challenge raises); client tests that the submit button
+      appears and stays disabled until there is code, that the answer composer
+      does *not* get one, and that the landing page holds one alignment axis
+
+## Round three: the submit button, and the first screen ✅
+
+See [decisions.md](docs/decisions.md) D40–D41. Same method again — Linux build,
+window sized to a phone, screenshots of every state before and after.
+
+- [x] **The editor was still hidden from anyone unverified.** D38 built
+      `PUT /submission` so saving needs no Codeforces handle, then left the
+      whole editor behind `if (!today.codeforcesVerified)` — so a new account's
+      first sight of the screen was one sentence and no submit button. The
+      editor is offered in every state; the lock is a banner at the top that
+      explains the pinned **Verify Codeforces handle** button
+- [x] Editor moved **above** the claim rules. The three-step explainer and the
+      warning panel used to sit between the problem and the only action on the
+      page
+- [x] The pinned bar moved from `bottomSheet` to `bottomNavigationBar` — a sheet
+      overlays the body, which is why the list carried 140px of guessed padding,
+      still covered its last row, and got sat on by the keyboard
+- [x] Saving no longer reloads the screen: it patches the returned attempt into
+      state, so the editor is not rebuilt mid-edit and a failed refresh cannot
+      replace a successful save with an error page. Claim refreshes silently
+- [x] `PUT` got a timeout override (20s, as `/challenges/today` has). On a cold
+      Render dyno the 10s default surfaced a working save as "could not reach
+      the server"
+- [x] Dropped "Your last claim did not find an accepted verdict" — it keyed off
+      an unsolved attempt existing, which stopped meaning that once saving code
+      began creating attempt rows
+- [x] `CopyableUrl` → `ExternalLink`, and `AttachmentChip` opens the file. Both
+      still copied a URL and asked you to paste it in a browser, which CLAUDE.md
+      forbids and D37 made unnecessary
+- [x] **The launch splash.** No horizontal padding at all, so the wordmark ran
+      off both edges at a large font scale, and the loader was stranded at the
+      bottom of the window. Now one centred block carrying `BrandArt`, with the
+      wordmark in a scale-down `FittedBox`
+- [x] **The landing page**: `BrandArt` in the phone hero (it was desktop-only,
+      so a phone got three paragraphs of grey text and no image), and the
+      highlights are `AppCard`s that stagger in instead of loose centred
+      paragraphs in 32px of whitespace
+- [x] **New tests:** an unverified user gets the editor and the submit button;
+      the editor sits above the claim rules; the pinned bar does not overlap
+      the list

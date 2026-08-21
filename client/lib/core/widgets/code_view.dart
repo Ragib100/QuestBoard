@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_colors.dart';
+import '../open_link.dart';
 import 'app_snack.dart';
 
 /// The languages the picker offers. Must match `LANGUAGES` in
@@ -195,11 +196,14 @@ class AttachmentChip extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(8),
+      // Opens the file. It used to copy the URL and tell you to paste it in a
+      // browser yourself, which predates url_launcher landing (D37) and is the
+      // exact pattern CLAUDE.md's link rule forbids. [openLink] still falls
+      // back to the clipboard when there is no browser to open.
       onTap: () async {
-        await Clipboard.setData(ClipboardData(text: url));
-        if (context.mounted) {
-          showAppSnack(context, 'Link copied — paste it in your browser',
-              tone: SnackTone.success);
+        final failure = await openLink(url);
+        if (failure != null && context.mounted) {
+          showAppSnack(context, failure);
         }
       },
       child: Container(

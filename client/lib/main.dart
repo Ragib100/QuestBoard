@@ -11,6 +11,8 @@ import 'app/profile/profile_create.dart';
 import 'app/common/reset_password.dart';
 import 'config/supabase_config.dart';
 import 'core/app_colors.dart';
+import 'core/motion.dart';
+import 'core/widgets/brand_art.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -365,13 +367,21 @@ class _LaunchState extends State<_Launch> {
 }
 
 /// Shown while [_Launch] resolves the restored session — which is the very first
-/// thing anyone sees after the Android splash hands over. It used to be a bare
-/// centred spinner on an otherwise empty background.
+/// thing anyone sees after the Android splash hands over, and on a cold start
+/// against a sleeping server it holds the screen for several seconds.
+///
+/// It carries [BrandArt], the same mark as the landing and auth screens, so the
+/// app opens on something of its own rather than a flat placeholder disc. The
+/// wordmark is wrapped in a scale-down [FittedBox] and the whole column is
+/// padded and centred: before that the text sat in a bare full-bleed `Column`
+/// with no horizontal padding, so a large system font setting ran it off both
+/// edges of a phone.
 ///
 /// The indefinite [LinearProgressIndicator] here is an uncapped animation, which
 /// would hang `pumpAndSettle`. That is safe only because no test pumps this
 /// widget: `widget_test.dart` passes `isSupabaseConfigured: false`, which routes
 /// to [ConfigurationRequiredScreen] instead. Do not reuse it elsewhere.
+/// [FadeSlideIn] around the mark is fine either way — it is one finite tween.
 class _SplashView extends StatelessWidget {
   const _SplashView();
 
@@ -382,35 +392,63 @@ class _SplashView extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: const BoxDecoration(
-                color: AppColors.primaryTint,
-                shape: BoxShape.circle,
+        child: Center(
+          child: ConstrainedBox(
+            // Otherwise the mark drifts to the middle of a 1400px desktop
+            // window with nothing around it.
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                children: [
+                  // 4:5 rather than an even split, so the block sits a little
+                  // above the optical centre — which is where the eye looks
+                  // for it on a screen this empty.
+                  const Spacer(flex: 4),
+                  FadeSlideIn(
+                    // Mark, wordmark, tagline and loader are one block. The
+                    // loader used to be pinned to the foot of the screen with
+                    // a Spacer between, which on a tall window left a whole
+                    // dead half-page between the logo and the only moving
+                    // thing on it.
+                    child: Column(
+                      children: [
+                        const BrandArt(size: 160),
+                        const SizedBox(height: 28),
+                        // scaleDown, so the wordmark shrinks to fit instead of
+                        // being clipped at a 2x system font scale.
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('QuestBoard',
+                              maxLines: 1, style: text.displaySmall),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Ask. Answer. Earn.',
+                          textAlign: TextAlign.center,
+                          style: text.bodyLarge
+                              ?.copyWith(color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 40),
+                        const SizedBox(
+                          width: 120,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.all(Radius.circular(4)),
+                            child: LinearProgressIndicator(
+                              minHeight: 4,
+                              color: AppColors.primary,
+                              backgroundColor: AppColors.primaryTint,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(flex: 5),
+                ],
               ),
-              child: const Icon(Icons.bolt_rounded,
-                  size: 52, color: AppColors.primary),
             ),
-            const SizedBox(height: 24),
-            Text('QuestBoard', style: text.displaySmall),
-            const SizedBox(height: 8),
-            Text(
-              'Ask. Answer. Earn.',
-              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
-            ),
-            const Spacer(),
-            const SizedBox(
-              width: 140,
-              child: ClipRRect(
-                borderRadius: BorderRadius.all(Radius.circular(4)),
-                child: LinearProgressIndicator(minHeight: 3),
-              ),
-            ),
-            const SizedBox(height: 48),
-          ],
+          ),
         ),
       ),
     );

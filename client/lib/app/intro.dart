@@ -1,14 +1,16 @@
-import '../core/breakpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/app_colors.dart';
+import '../core/breakpoints.dart';
+import '../core/motion.dart';
+import '../core/widgets/app_card.dart';
 import '../core/widgets/brand_art.dart';
 import 'auth/login.dart';
 import 'auth/signup.dart';
 
 void _open(BuildContext context, Widget screen) {
-  Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  Navigator.push(context, appRoute((_) => screen));
 }
 
 class Intro extends StatelessWidget {
@@ -81,7 +83,7 @@ class Intro extends StatelessWidget {
           // edges. The capped sections centre themselves inside it.
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(height: isWeb ? 60 : 32),
+            SizedBox(height: isWeb ? 56 : 24),
             _capped(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: isWeb ? 40 : 24),
@@ -89,15 +91,14 @@ class Intro extends StatelessWidget {
                     ? Row(
                         children: [
                           Expanded(child: _buildHero(context, isWeb)),
-                          const Expanded(child: _HeroArt()),
+                          const Expanded(child: Center(child: BrandArt(size: 300))),
                         ],
                       )
                     : _buildHero(context, isWeb),
               ),
             ),
-            SizedBox(height: isWeb ? 100 : 56),
+            SizedBox(height: isWeb ? 88 : 40),
             _buildHighlights(isWeb),
-            const SizedBox(height: 80),
           ],
         ),
       ),
@@ -117,28 +118,40 @@ class Intro extends StatelessWidget {
       crossAxisAlignment:
           isWeb ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
+        // A phone gets the mark too. [BrandArt] used to live only in the
+        // desktop hero's second column, and a phone has no second column — so
+        // the first screen of the app was three stacked paragraphs of grey
+        // text and nothing to look at.
+        if (!isWeb) ...[
+          const BrandArt(size: 132),
+          const SizedBox(height: 20),
+        ],
         Text(
           'Welcome to\nQuestBoard',
           textAlign: isWeb ? TextAlign.start : TextAlign.center,
           style: GoogleFonts.outfit(
-              fontSize: isWeb ? 56 : 38,
+              fontSize: isWeb ? 56 : 36,
               fontWeight: FontWeight.bold,
               height: 1.1),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: isWeb ? 20 : 14),
         Text(
           'Ask. Answer. Learn. Grow.',
+          textAlign: isWeb ? TextAlign.start : TextAlign.center,
           style: GoogleFonts.inter(
-              fontSize: isWeb ? 20 : 18, color: AppColors.textSecondary),
+              fontSize: isWeb ? 20 : 17,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text(
           'Post a question with a point bounty, get help from other students, '
           'and reward the answer that actually solved it.',
           textAlign: isWeb ? TextAlign.start : TextAlign.center,
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 16),
+          style: const TextStyle(
+              color: AppColors.textSecondary, fontSize: 15, height: 1.6),
         ),
-        const SizedBox(height: 40),
+        SizedBox(height: isWeb ? 40 : 28),
         // Side by side on desktop, stacked full-width on a phone. Wrap rather
         // than Row on desktop: the two labels together need more than half of
         // a 1200px page, so a hard Row overflows instead of breaking.
@@ -174,23 +187,34 @@ class Intro extends StatelessWidget {
     return ColoredBox(
       color: AppColors.background,
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 60, horizontal: isWeb ? 40 : 24),
-        // A fixed 340px card overflows a 360px phone once padding is
-        // subtracted, so the phone layout takes whatever width is left.
+        padding: EdgeInsets.symmetric(
+            vertical: isWeb ? 64 : 40, horizontal: isWeb ? 40 : 24),
         child: _capped(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Wrap(
-              spacing: 32,
-              runSpacing: 32,
-              alignment: WrapAlignment.center,
-              children: items
-                  .map((item) => SizedBox(
-                        width: isWeb ? 300 : constraints.maxWidth,
-                        child: item,
-                      ))
-                  .toList(),
-            ),
-          ),
+          // A Row of Expanded cards on desktop, stacked full width on a phone.
+          // IntrinsicHeight because three cards of unequal text length in a
+          // row leave ragged bottoms otherwise; a fixed 340px card would
+          // overflow a 360px phone once padding is subtracted, which is why
+          // the phone case takes whatever width is left instead.
+          child: isWeb
+              ? IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (i, item) in items.indexed) ...[
+                        if (i > 0) const SizedBox(width: 24),
+                        Expanded(child: FadeSlideIn(index: i, child: item)),
+                      ],
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    for (final (i, item) in items.indexed) ...[
+                      if (i > 0) const SizedBox(height: 12),
+                      FadeSlideIn(index: i, child: item),
+                    ],
+                  ],
+                ),
         ),
       ),
     );
@@ -207,14 +231,14 @@ class _HeroActions extends StatelessWidget {
     final signUp = ElevatedButton(
       onPressed: () => _open(context, const Signup()),
       style: ElevatedButton.styleFrom(
-          minimumSize: Size(isWeb ? 180 : double.infinity, 56)),
+          minimumSize: Size(isWeb ? 180 : double.infinity, 54)),
       child: const Text('Get Started'),
     );
 
     final logIn = OutlinedButton(
       onPressed: () => _open(context, const Login()),
       style: OutlinedButton.styleFrom(
-        minimumSize: Size(isWeb ? 180 : double.infinity, 56),
+        minimumSize: Size(isWeb ? 180 : double.infinity, 54),
         side: const BorderSide(color: AppColors.border),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -245,34 +269,41 @@ class _Highlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: const BoxDecoration(
-              color: AppColors.primaryTint, shape: BoxShape.circle),
-          child: Icon(icon, color: AppColors.primary, size: 24),
-        ),
-        const SizedBox(height: 16),
-        Text(title,
-            style: GoogleFonts.outfit(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary)),
-        const SizedBox(height: 8),
-        Text(body,
-            style: const TextStyle(
-                color: AppColors.textSecondary, fontSize: 15, height: 1.5)),
-      ],
+    // A card, not a loose text block. The band used to be three centred
+    // paragraphs floating in 32px of whitespace with no container around them,
+    // which on a phone read as a long sparse scroll rather than a list of
+    // three things. [AppCard] is the app's standard container — white, 1px
+    // border, radius 16, no shadow (design-system.md) — and it reads against
+    // the band's grey.
+    //
+    // The contents stay centred so the band keeps the hero's axis: a centred
+    // heading above a left-aligned list was the original complaint (D39).
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(
+                color: AppColors.primaryTint, shape: BoxShape.circle),
+            child: Icon(icon, color: AppColors.primary, size: 24),
+          ),
+          const SizedBox(height: 14),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary)),
+          const SizedBox(height: 6),
+          Text(body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 14, height: 1.5)),
+        ],
+      ),
     );
   }
-}
-
-class _HeroArt extends StatelessWidget {
-  const _HeroArt();
-
-  @override
-  Widget build(BuildContext context) => const BrandArt(size: 300);
 }
