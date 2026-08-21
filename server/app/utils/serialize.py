@@ -6,6 +6,7 @@ spreading it across every router.
 """
 
 from app.models import award_for
+from app.services import codeforces_service as cf
 from app.schemas.challenge import AttemptResponse, ChallengeResponse, ChallengeView
 from app.schemas.question import AnswerResponse, QuestionDetail, QuestionSummary
 from app.schemas.user import UserSummary
@@ -85,6 +86,9 @@ def challenge_view(
         challenge.bonus_points, challenge.challenge_date, on=today
     )
     body.age_days = max(0, (today - challenge.challenge_date).days)
+    body.submit_url = (
+        cf.submit_url(challenge.codeforces_id) if challenge.codeforces_id else None
+    )
 
     return ChallengeView(
         challenge=body,

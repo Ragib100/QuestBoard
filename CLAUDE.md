@@ -47,8 +47,10 @@ server/app/
   dependencies/auth.py get_current_user_id — verifies Supabase JWT
 server/schema.sql      the live tables; run in the Supabase SQL editor
 client/lib/
-  main.dart            app entry, theme, deep-link handling
-  core/                app_colors.dart (the palette), widgets/ (shared UI)
+  main.dart            app entry, theme, splash, deep-link handling. Bootstraps
+                       *after* runApp — startup does no blocking network (D42)
+  core/                app_colors.dart (the palette), widgets/ (shared UI),
+                       codeforces_web.dart (Codeforces in an in-app WebView)
   config/              env-backed config
   services/common/     auth_service, user_service, supabase_services (singletons)
   app/auth/            login, signup, forgot_password, email_verification
@@ -77,10 +79,18 @@ client/lib/
   the client reads `body['detail']`. Do not invent a custom error envelope.
 - **Server layering:** router → service → model. Routers do no DB work.
 - **Client state:** `StatefulWidget` + `setState`, `Navigator` (no router package),
-  `package:http`. No Riverpod / GoRouter / Dio — do not add them.
+  `package:http`. No Riverpod / GoRouter / Dio — do not add them. A package that
+  supplies a *platform capability* is a different question and has been added
+  twice (`url_launcher` D37, `webview_flutter` D43); an architectural preference
+  is not.
 - **Links:** open external URLs with `openLink()` from `core/open_link.dart`
   (url_launcher), never by showing a URL to copy. Android needs the `https`
   `<queries>` intent in the manifest or it silently fails (decisions.md D37).
+  **Codeforces** links go through `openCodeforces()` in
+  `core/codeforces_web.dart` instead, which hosts the page in an in-app WebView
+  on Android/iOS/macOS and falls back to `openLink` elsewhere. Codeforces has no
+  submit API and no statement API, so hosting their pages is the only way to
+  read a problem and submit a solution without leaving the app (D43).
 - **Alignment:** `Center` centres vertically too, so a page shorter than the
   viewport floats down the middle of it. Content screens use
   `Align(alignment: Alignment.topCenter)`; only auth forms use `Center` (D36).

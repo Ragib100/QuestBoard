@@ -13,6 +13,13 @@ void main() {
       (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp(isSupabaseConfigured: false));
 
+    // One pump past the splash. Startup is asynchronous now — `main` calls
+    // `runApp` before loading the env or bringing Supabase up, so the first
+    // frame of the app is always the splash and the answer lands on the next
+    // one. Never `pumpAndSettle` here: the splash's progress bar is an
+    // indefinite animation and would never settle.
+    await tester.pump();
+
     expect(find.text('Configuration Required'), findsOneWidget);
     expect(find.byType(Intro), findsNothing);
   });

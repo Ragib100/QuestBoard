@@ -12,6 +12,7 @@ class DailyChallenge {
     required this.cfRating,
     required this.difficulty,
     required this.sourceUrl,
+    this.submitUrl,
     required this.bonusPoints,
     required this.challengeDate,
     this.awardPoints = 0,
@@ -25,6 +26,12 @@ class DailyChallenge {
   final int? cfRating;
   final String? difficulty;
   final String? sourceUrl;
+
+  /// Codeforces' own submit form for this problem. The app hosts this page in
+  /// a WebView rather than posting anywhere itself — Codeforces has no submit
+  /// API (decisions.md D43).
+  final String? submitUrl;
+
   /// The challenge's value on its own day. Do not show this as what solving
   /// pays — [awardPoints] is that, and for an archived challenge they differ.
   final int bonusPoints;
@@ -48,6 +55,7 @@ class DailyChallenge {
         cfRating: json['cf_rating'] as int?,
         difficulty: json['difficulty'] as String?,
         sourceUrl: json['source_url'] as String?,
+        submitUrl: json['submit_url'] as String?,
         bonusPoints: json['bonus_points'] as int? ?? 0,
         challengeDate:
             parseServerDate(json['challenge_date'] as String? ?? '') ??
@@ -170,12 +178,16 @@ class CodeforcesVerification {
     required this.handle,
     required this.codeforcesId,
     required this.problemUrl,
+    required this.submitUrl,
     required this.windowMinutes,
   });
 
   final String handle;
   final String codeforcesId;
   final String problemUrl;
+
+  /// Where the deliberate compilation error is actually submitted.
+  final String submitUrl;
   final int windowMinutes;
 
   factory CodeforcesVerification.fromJson(Map<String, dynamic> json) =>
@@ -183,6 +195,11 @@ class CodeforcesVerification {
         handle: json['handle'] as String? ?? '',
         codeforcesId: json['codeforces_id'] as String? ?? '',
         problemUrl: json['problem_url'] as String? ?? '',
+        // Falls back to the statement page, which also carries a submit box —
+        // an older server that does not send this is degraded, not broken.
+        submitUrl: json['submit_url'] as String? ??
+            json['problem_url'] as String? ??
+            '',
         windowMinutes: json['window_minutes'] as int? ?? 30,
       );
 }

@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/app_time.dart';
-import '../../../core/open_link.dart';
+import '../../../core/codeforces_web.dart';
 import '../../../core/widgets/async_states.dart';
 import '../../../core/widgets/reward_burst.dart';
 import '../../../core/widgets/code_composer.dart';
@@ -127,7 +127,13 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     if (mounted) await _load();
   }
 
-  Future<void> _claim() async {
+  /// Checks Codeforces for the verdict and pays out.
+  ///
+  /// [auto] marks the run that fires by itself when the submit page closes.
+  /// A verdict takes a moment to land, so the honest outcome there is often
+  /// "not yet" — which is worth saying gently, and is not the same thing as
+  /// the user tapping Claim and being told no.
+  Future<void> _claim({bool auto = false}) async {
     final today = _today;
     if (today == null) return;
 
@@ -149,7 +155,13 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       // read fails, would both misreport a claim that worked.
       await _load(silent: true);
     } on ApiException catch (e) {
-      _tell(e.message);
+      _tell(
+        auto
+            ? 'Submitted. Codeforces has not returned an accepted verdict yet '
+                '— tap Claim once it does.'
+            : e.message,
+        tone: auto ? SnackTone.neutral : SnackTone.error,
+      );
     } finally {
       if (mounted) setState(() => _claiming = false);
     }
@@ -188,17 +200,52 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
         onClaim: _claim,
         onVerify: _verify,
         onOpenProblem: _openProblem,
+        onSubmitOnCodeforces: _submitOnCodeforces,
       );
 
-  /// Opens the Codeforces problem in a browser.
+  /// Opens the problem statement, in the app where the platform allows it.
   Future<void> _openProblem() async {
     final url = _today?.challenge.sourceUrl;
     if (url == null) {
       _tell('This challenge has no problem link.');
       return;
     }
-    final failure = await openLink(url);
-    if (failure != null) _tell(failure);
+    if (!mounted) return;
+    await openCodeforces(context, url, title: _today?.challenge.title ?? 'Problem');
+  }
+
+  /// Opens Codeforces' submit form for this problem, with the code from the
+  /// in-app editor already in it, and checks the verdict on the way back.
+  ///
+  /// This is the whole reason the WebView exists. Codeforces has no submit API
+  /// (decisions.md D43), so the alternatives were to ask for someone's
+  /// Codeforces password or to send them out to a browser and hope they came
+  /// back. Their own form, hosted here, is neither.
+  Future<void> _submitOnCodeforces() async {
+    final today = _today;
+    final url = today?.challenge.submitUrl ?? today?.challenge.sourceUrl;
+    if (today == null || url == null) {
+      _tell('This challenge has no problem to submit to.');
+      return;
+    }
+
+    final code = _submission.hasCode
+        ? _submission.codeBody
+        : today.myAttempt?.submission.codeBody;
+
+    if (!mounted) return;
+    final outcome = await openCodeforces(
+      context,
+      url,
+      title: 'Submit — ${today.challenge.title}',
+      prefillCode: code,
+    );
+
+    // Only after the in-app page closes do we know the user has finished with
+    // it. Handing off to a browser returns the instant it launches, and
+    // claiming then would check for a verdict they have not made yet.
+    if (outcome != CodeforcesOpen.embedded || !mounted) return;
+    await _claim(auto: true);
   }
 
   @override
@@ -777,16 +824,18 @@ class DailyChallengeView extends StatelessWidget {
   }
 }
 
-/// An external link: tap the row to open it, or the icon to copy it.
+/// A Codeforces link: tap the row to open it in the app, or the icon to copy.
 ///
 /// It used to be a box of raw URL text with a copy button, on the grounds that
-/// the app had no browser launcher. It has had one since D37, and CLAUDE.md's
-/// rule is that an external URL opens rather than asking to be pasted — a
-/// whole line of `https://codeforces.com/problemset/problem/1873/D` is also
-/// most of a phone's width spent on something nobody reads.
+/// the app had no browser launcher. It has had one since D37 and an in-app
+/// WebView since D43, and CLAUDE.md's rule is that an external URL opens rather
+/// than asking to be pasted — a whole line of
+/// `https://codeforces.com/problemset/problem/1873/D` is also most of a phone's
+/// width spent on something nobody reads.
 ///
-/// Copy stays as the secondary action: [openLink] falls back to the clipboard
-/// on a device with no browser, and this makes that deliberate too.
+/// Copy stays as the secondary action: on a platform with no WebView this falls
+/// back to a browser, and on one with no browser to the clipboard, so making
+/// that deliberate costs one icon.
 class ExternalLink extends StatelessWidget {
   const ExternalLink({
     super.key,
@@ -809,12 +858,7 @@ class ExternalLink extends StatelessWidget {
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () async {
-                final failure = await openLink(url);
-                if (failure != null && context.mounted) {
-                  showAppSnack(context, failure);
-                }
-              },
+              onTap: () => openCodeforces(context, url, title: label),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
                 child: Row(
@@ -883,6 +927,7 @@ class ChallengeActionBar extends StatelessWidget {
     this.onClaim,
     this.onVerify,
     this.onOpenProblem,
+    this.onSubmitOnCodeforces,
   });
 
   final TodayChallenge today;
@@ -890,6 +935,10 @@ class ChallengeActionBar extends StatelessWidget {
   final VoidCallback? onClaim;
   final VoidCallback? onVerify;
   final VoidCallback? onOpenProblem;
+
+  /// Opens Codeforces' submit form in the app. Null in tests and on the
+  /// archive's detail view.
+  final VoidCallback? onSubmitOnCodeforces;
 
   @override
   Widget build(BuildContext context) {
@@ -938,27 +987,35 @@ class ChallengeActionBar extends StatelessWidget {
       );
     }
 
-    // Both halves of the actual job: the problem lives on Codeforces and only
-    // a verdict there pays, so getting there is half of the action bar.
+    // Submitting is the primary act and Claim is the follow-up, which is the
+    // opposite of how this bar used to read. Only a Codeforces verdict pays, so
+    // for anyone who has not submitted yet Claim can only ever fail — it was
+    // the loud blue button telling people no.
+    //
+    // Reading the statement is not here: it is a row in the body, and a third
+    // button does not fit 320px.
     return Row(
       children: [
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: claiming ? null : onOpenProblem,
-            icon: const Icon(Icons.open_in_new_rounded, size: 18),
-            // Half a 360px screen minus the icon does not fit "Open problem"
-            // at the default button size, and it wrapped onto two lines.
-            label: const Text('Open problem',
-                maxLines: 1, style: TextStyle(fontSize: 13)),
+          child: OutlinedButton(
+            onPressed: claiming ? null : onClaim,
             style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8)),
+            // Half a 360px screen minus padding does not fit much at the
+            // default button size, and the label wrapped onto two lines.
+            child: Text(claiming ? 'Checking…' : 'Claim',
+                maxLines: 1, style: const TextStyle(fontSize: 13)),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: ElevatedButton(
-            onPressed: claiming ? null : onClaim,
-            child: Text(claiming ? 'Checking…' : 'Claim'),
+          child: ElevatedButton.icon(
+            onPressed: claiming ? null : (onSubmitOnCodeforces ?? onOpenProblem),
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('Submit',
+                maxLines: 1, style: TextStyle(fontSize: 13)),
+            style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8)),
           ),
         ),
       ],

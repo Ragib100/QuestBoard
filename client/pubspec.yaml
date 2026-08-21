@@ -48,6 +48,13 @@ dependencies:
   # this was added the app showed a URL you had to copy and paste by hand,
   # which is most of why "I solved it" never worked for anyone.
   url_launcher: ^6.3.2
+  # Codeforces inside the app. Their public API is read-only — no submit
+  # method, no statements — so hosting Codeforces' own pages is the only way
+  # to read a problem and submit a solution without leaving QuestBoard, and
+  # the only one that never asks anyone for their Codeforces password
+  # (decisions.md D43). Android/iOS/macOS only; desktop falls back to
+  # url_launcher, which is why both are here.
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:
