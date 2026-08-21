@@ -8,10 +8,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Thrown for any non-2xx response. [message] is always safe to show a user:
 /// it carries the API's `detail` string, never a raw exception.
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode});
+  ApiException(this.message, {this.statusCode, this.isOffline = false});
 
   final String message;
   final int? statusCode;
+
+  /// The request never reached a server — no signal, wrong host, dyno asleep.
+  ///
+  /// Worth distinguishing from every other failure because it is the only one
+  /// that fixes itself: a 403 will still be a 403 in ten seconds, so the screen
+  /// shows it and stops, while this one is worth waiting through. [ErrorState]
+  /// reads it to decide between an error and a reconnecting spinner.
+  final bool isOffline;
 
   /// The caller is authenticated but has not completed onboarding yet.
   bool get isNotFound => statusCode == 404;
@@ -137,6 +145,8 @@ class ApiClient {
     return _send(
       () async => http.get(await _uri(path, query), headers: _headers(auth: auth)),
       timeout: timeout,
+      // Safe to replay: a GET that never arrived changed nothing.
+      retry: true,
     );
   }
 
@@ -184,23 +194,50 @@ class ApiClient {
     return _send(() async => http.delete(await _uri(path), headers: _headers()));
   }
 
+  /// How long to wait before each automatic re-attempt of a read.
+  ///
+  /// Two extra tries, under two and a half seconds in total. That covers the
+  /// failure this app actually hits — a phone changing networks, or the first
+  /// connection to a sleeping free-tier dyno — without making a genuinely
+  /// offline device sit through a long stall before it is told so.
+  static const _readBackoff = [
+    Duration(milliseconds: 700),
+    Duration(milliseconds: 1600),
+  ];
+
   Future<dynamic> _send(
     Future<http.Response> Function() request, {
     Duration? timeout,
+    bool retry = false,
   }) async {
-    final http.Response response;
-    try {
-      response = await request().timeout(timeout ?? defaultTimeout);
-    } on ApiException {
-      rethrow;
-    } catch (_) {
-      // The chosen host stopped answering — the laptop's IP changed, or the
-      // phone moved between Wi-Fi and USB. Re-probe on the next call so a
-      // retry recovers without restarting the app.
-      _invalidateBase();
-      throw ApiException(
-        'Could not reach the server. Check your connection and try again.',
-      );
+    late final http.Response response;
+    var attempt = 0;
+
+    while (true) {
+      try {
+        response = await request().timeout(timeout ?? defaultTimeout);
+        break;
+      } on ApiException {
+        rethrow;
+      } catch (_) {
+        // The chosen host stopped answering — the laptop's IP changed, or the
+        // phone moved between Wi-Fi and USB. Re-probe so the next attempt can
+        // land somewhere else.
+        _invalidateBase();
+
+        // Reads only. A network failure means we never learned whether the
+        // request arrived, so replaying a POST could accept an answer twice or
+        // claim a challenge twice — `retry` is set by `get` and nothing else.
+        if (retry && attempt < _readBackoff.length) {
+          await Future<void>.delayed(_readBackoff[attempt++]);
+          continue;
+        }
+
+        throw ApiException(
+          'Could not reach the server. Check your connection and try again.',
+          isOffline: true,
+        );
+      }
     }
 
     if (response.statusCode == 204 || response.body.isEmpty) return null;

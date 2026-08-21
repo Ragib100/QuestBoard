@@ -86,6 +86,23 @@ class ChallengeService {
     return ChallengeAttempt.fromJson(json as Map<String, dynamic>);
   }
 
+  /// The real Codeforces problem statement.
+  ///
+  /// Never throws for "Codeforces would not give it to us" — that comes back as
+  /// `available: false`, because it is a routine outcome and the screen has an
+  /// honest fallback for it.
+  Future<ProblemStatement> statement(String challengeId) async {
+    final json = await _api.get(
+      '/challenges/$challengeId/statement',
+      auth: false,
+      // The first reader for a given problem pays for the scrape: a request to
+      // codeforces.com, on top of a possibly cold dyno. Every reader after that
+      // is served from the cached copy on the row.
+      timeout: const Duration(seconds: 30),
+    );
+    return ProblemStatement.fromJson(json as Map<String, dynamic>);
+  }
+
   Future<List<ChallengeSolver>> leaderboard(String challengeId) async {
     final json = await _api.get('/challenges/$challengeId/leaderboard',
         auth: false);

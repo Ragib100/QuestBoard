@@ -706,3 +706,61 @@ See [decisions.md](docs/decisions.md) D42–D44.
 - [x] The leaderboard card and the challenge card were hand-rolled `Container`s
       at radius 20 with raw `Colors.white`; both use `AppCard` / the standard
       radius now, and the top three ranks are gold, silver and bronze
+
+## Round five: the real statement, real submission, and offline ✅
+
+See [decisions.md](docs/decisions.md) D45–D46.
+
+> **Schema change.** `daily_challenges` gained `statement` (jsonb) and
+> `statement_fetched_at`. Both are `add column if not exists` in `schema.sql`,
+> so re-running it in the Supabase SQL editor is safe and is all that is needed.
+> They have already been applied to the live project.
+
+### The problem statement
+
+- [x] **There was no statement, and there could not have been** — the Codeforces
+      API returns name, rating and tags and nothing else. `statement_service`
+      scrapes the problem page and lifts `div.problem-statement` out of it
+- [x] Cached on the row forever (statements never change, and Codeforces is
+      behind Cloudflare — every refetch is another 403 risk). A *failure* is
+      never cached: the next caller usually gets through
+- [x] Sanitised server-side — scripts, frames, forms and `on*` handlers stripped,
+      every URL absolutised — because it renders in a WebView with a channel
+      open to the app
+- [x] `GET /challenges/{id}/statement` returns `available: false` as a **200**
+      when Codeforces refuses, and the screen falls back to the summary it has
+      plus a button to Codeforces. It never invents a statement
+- [x] Rendered in a WebView with our own stylesheet and MathJax configured for
+      Codeforces' `$$$` delimiters; sample boxes get a **Copy** button
+- [x] Desktop fallback (no WebView on Linux/Windows): text plus native sample
+      blocks, with the maths converted — `$$$1 \le n \le 2 \cdot 10^5$$$` reads
+      as `1 ≤ n ≤ 2 · 10⁵`
+- [x] Verified by generating the document and rendering it in a browser, since
+      `webview_flutter` has no Linux build — which is how two glyphs were caught
+      rendering as tofu boxes
+
+### Submission, vjudge-style — with no password
+
+- [x] **The Codeforces password is not needed and is not stored.** The user is
+      already signed into Codeforces in the app's WebView; that session is what
+      submits. Storing passwords would have put a reversible secret for every
+      user's Codeforces account in the Postgres
+- [x] `submitToCodeforces` fills Codeforces' own form, picks the compiler by
+      matching **their option labels** (never a hardcoded `programTypeId` —
+      those change, and a stale one submits C++ as Python), and posts it
+- [x] Refuses to guess: no form, or no compiler matching the language, and it
+      fills the form and hands it back instead of submitting
+- [x] Polls for the verdict afterwards — five tries, four seconds apart — because
+      a submission sits "In queue" and claiming instantly reports a false "not
+      accepted yet"
+
+### Offline
+
+- [x] **"Internet issues, then press retry" was a dead end.** `ApiException`
+      now distinguishes "never reached the server" from "the server said no"
+- [x] `ApiClient` retries **reads** automatically (700ms, 1600ms, re-probing the
+      host). Never writes: a replayed POST could claim a challenge twice
+- [x] `ErrorState(offline: true)` renders as `ReconnectingState` — a spinner
+      that retries every 5s, capped at 6 attempts, then offers the button. The
+      home banner does the same while keeping its tiles on screen
+- [x] Threaded through all 12 screens that had the old error page

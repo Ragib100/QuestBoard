@@ -23,6 +23,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _loading = true;
   String? _error;
 
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
+
   @override
   void initState() {
     super.initState();
@@ -38,7 +43,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final result = await GamificationService.instance.notifications();
       if (mounted) setState(() => (_items = result.items, _loading = false));
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -112,7 +123,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (_loading) {
       return ListSkeleton(count: 5, item: NotificationRowSkeleton.new);
     }
-    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load, offline: _offline);
     if (_items.isEmpty) {
       return const EmptyState(
         icon: Icons.notifications_none_rounded,

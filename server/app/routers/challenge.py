@@ -12,11 +12,13 @@ from app.schemas.challenge import (
     ChallengePage,
     ChallengeSolver,
     ChallengeView,
+    ProblemStatement,
     SolveRequest,
     TodayResponse,
 )
 from app.schemas.code import CodeSubmission
 from app.schemas.user import UserSummary
+from app.services import codeforces_service as cf
 from app.services.challenge_service import ChallengeService
 from app.utils.serialize import challenge_view
 
@@ -129,6 +131,42 @@ def one(
         attempt=attempt,
         solver_count=ChallengeService.solver_count(db, challenge.id),
         codeforces_verified=_viewer_is_verified(db, viewer_id),
+    )
+
+
+@router.get("/{challenge_id}/statement", response_model=ProblemStatement)
+def statement(challenge_id: UUID, db: Session = Depends(get_db)):
+    """Public. The real Codeforces statement, scraped once and cached.
+
+    A 200 with `available: false` when Codeforces will not serve it. That is a
+    routine outcome — their API has no statement method, so the only source is
+    the problem page, and it sits behind Cloudflare — and the screen has an
+    honest fallback for it. Failing the request instead would turn a degraded
+    read into a broken one.
+    """
+    try:
+        challenge = ChallengeService.get(db, challenge_id)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    stored = ChallengeService.statement(db, challenge_id)
+    submit = cf.submit_url(challenge.codeforces_id) if challenge.codeforces_id else None
+
+    if not stored:
+        return ProblemStatement(
+            available=False,
+            source_url=challenge.source_url,
+            submit_url=submit,
+        )
+
+    return ProblemStatement(
+        available=True,
+        html=stored.get("html", ""),
+        time_limit=stored.get("time_limit", ""),
+        memory_limit=stored.get("memory_limit", ""),
+        samples=stored.get("samples", []),
+        source_url=challenge.source_url,
+        submit_url=submit,
     )
 
 

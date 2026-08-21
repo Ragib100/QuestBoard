@@ -7,6 +7,7 @@ import 'package:client/core/widgets/labeled_field.dart';
 import 'package:client/models/quest.dart';
 import 'package:client/core/widgets/search_field.dart';
 import 'package:client/main.dart';
+import 'package:client/app/modules/daily_challenge/problem_statement_screen.dart';
 
 void main() {
   testWidgets('shows the configuration screen when Supabase is not set up',
@@ -206,6 +207,70 @@ void main() {
       );
       expect(summary.displayName, 'saifahmedsakib');
       expect(summary.displayName, isNot(contains('@')));
+    });
+  });
+
+  /// The desktop fallback for a problem statement — no WebView on Linux or
+  /// Windows, so no MathJax. Half the sentences in a Codeforces statement carry
+  /// maths, so leaving `$$$1 \le n$$$` on screen makes the page unreadable
+  /// rather than merely plain (decisions.md D45).
+  group('statement text fallback', () {
+    test('maths becomes readable instead of raw TeX', () {
+      expect(
+        htmlToText(r'<p>There are $$$n$$$ students.</p>'),
+        'There are n students.',
+      );
+      expect(
+        htmlToText(r'<p>($$$1 \le n \le 2 \cdot 10^5$$$)</p>'),
+        '(1 ≤ n ≤ 2 · 10⁵)',
+      );
+      expect(
+        htmlToText(r'<p>$$$a_1, a_2, \dots, a_n$$$</p>'),
+        'a₁, a₂, …, aₙ',
+      );
+    });
+
+    test('an unknown macro loses its backslash rather than shouting it', () {
+      // Better to read "operatorname{lcm}(a, b)" than to print a backslash at
+      // someone mid-sentence. Nothing here is pretending to be a TeX engine.
+      expect(htmlToText(r'<p>$$$\unknownmacro x$$$</p>'), 'unknownmacro x');
+    });
+
+    test('a superscript with no glyph keeps its ASCII form', () {
+      // ^{i+1} has no unicode equivalent, so it must stay legible rather than
+      // silently losing characters.
+      expect(htmlToText(r'<p>$$$2^{i+1}$$$</p>'), '2^i+1');
+    });
+
+    test('block tags become line breaks and entities are unwrapped', () {
+      expect(
+        htmlToText('<p>One</p><p>Two &amp; three</p>'),
+        'One\n\nTwo & three',
+      );
+    });
+
+    test('the worked examples are dropped but the note is kept', () {
+      // The fallback renders samples itself, from the structured data, where
+      // they stay exact and copyable — leaving them in the prose prints each
+      // example twice.
+      const html = '<div>Legend</div>'
+          '<div class="sample-tests"><pre>8</pre></div>'
+          '<div class="note">Explanation</div>';
+
+      final trimmed = withoutSamples(html);
+      expect(trimmed, isNot(contains('sample-tests')));
+      expect(trimmed, contains('note'));
+      expect(trimmed, contains('Legend'));
+    });
+
+    test('a statement with no note keeps everything before the samples', () {
+      const html = '<div>Legend</div><div class="sample-tests"><pre>8</pre></div>';
+      expect(withoutSamples(html), '<div>Legend</div>');
+    });
+
+    test('a statement with no samples is left alone', () {
+      const html = '<div>Legend</div>';
+      expect(withoutSamples(html), html);
     });
   });
 

@@ -28,6 +28,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Leaderboard? _board;
   bool _loading = true;
   String? _error;
+
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
   String _period = 'all_time';
 
   @override
@@ -45,7 +50,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       final board = await GamificationService.instance.leaderboard(period: _period);
       if (mounted) setState(() => (_board = board, _loading = false));
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -104,7 +115,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     if (_loading) {
       return ListSkeleton(count: 7, item: LeaderboardRowSkeleton.new);
     }
-    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load, offline: _offline);
 
     final board = _board!;
     if (board.entries.isEmpty) {

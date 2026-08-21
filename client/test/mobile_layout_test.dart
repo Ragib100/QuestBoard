@@ -782,6 +782,64 @@ void main() {
         reason: 'the list must end where the bar begins, not under it');
   });
 
+  /// Being offline used to be a dead end: an error page with a **Try again**
+  /// button, so a phone that lost signal for four seconds needed a tap to come
+  /// back. `offline` is the one failure that fixes itself, so it is drawn as a
+  /// spinner that retries on its own (decisions.md D46).
+  testWidgets('an offline failure retries itself instead of asking',
+      (WidgetTester tester) async {
+    var attempts = 0;
+
+    await _pumpAt(
+      tester,
+      ErrorState(
+        message: 'Could not reach the server.',
+        offline: true,
+        onRetry: () => attempts++,
+      ),
+      _phone,
+    );
+
+    // A spinner, not an error page — and no button to hunt for.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Waiting for a connection…'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Try again'), findsNothing);
+
+    await tester.pump(ReconnectingState.gap);
+    expect(attempts, 1, reason: 'it retries without being asked');
+
+    // ...but not forever. design-system.md's rule is that nothing repeats
+    // endlessly, and after the cap the button genuinely means something.
+    for (var i = 1; i < ReconnectingState.maxAttempts; i++) {
+      await tester.pump(ReconnectingState.gap);
+    }
+    expect(attempts, ReconnectingState.maxAttempts);
+
+    await tester.pump();
+    expect(find.text('Still offline'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Try again'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // Nothing is left ticking — a pending Timer fails a testWidgets body.
+    await tester.pump(ReconnectingState.gap * 3);
+    expect(attempts, ReconnectingState.maxAttempts);
+  });
+
+  testWidgets('a server refusal is still an error, not a spinner',
+      (WidgetTester tester) async {
+    // A 403 will still be a 403 in ten seconds. Only `offline` is worth
+    // waiting through, so everything else keeps the message and the button.
+    await _pumpAt(
+      tester,
+      ErrorState(message: 'You are not allowed to do that.', onRetry: () {}),
+      _phone,
+    );
+
+    expect(find.text('You are not allowed to do that.'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Try again'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('the answer composer keeps its editor collapsed',
       (WidgetTester tester) async {
     // The mirror of the test above: prose is the common case there, and an

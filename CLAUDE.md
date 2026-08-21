@@ -44,6 +44,7 @@ server/app/
   schemas/             Pydantic request/response models
   routers/             HTTP endpoints (thin — delegate to services)
   services/            business logic
+  services/statement_service.py  scrapes + sanitises Codeforces statements (D45)
   dependencies/auth.py get_current_user_id — verifies Supabase JWT
 server/schema.sql      the live tables; run in the Supabase SQL editor
 client/lib/
@@ -77,6 +78,9 @@ client/lib/
   `Depends(get_current_user_id)` and trusts the `sub` claim.
 - **Errors:** plain FastAPI. Raise `HTTPException(status_code=..., detail="message")`;
   the client reads `body['detail']`. Do not invent a custom error envelope.
+  On the client, a failure that never reached the server sets
+  `ApiException.isOffline`; pass it to `ErrorState(offline:)` so the screen
+  waits and retries instead of demanding a tap (decisions.md D46).
 - **Server layering:** router → service → model. Routers do no DB work.
 - **Client state:** `StatefulWidget` + `setState`, `Navigator` (no router package),
   `package:http`. No Riverpod / GoRouter / Dio — do not add them. A package that

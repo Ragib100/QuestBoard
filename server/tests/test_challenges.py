@@ -22,6 +22,7 @@ from app.schemas.answer import AnswerCreate
 from app.schemas.challenge import SolveRequest
 from app.schemas.code import CodeSubmission
 from app.services import codeforces_service as cf
+from app.services import statement_service
 from app.services.challenge_service import ChallengeService
 from app.services.user_service import UserService
 
@@ -263,6 +264,129 @@ def test_submitting_to_a_missing_challenge_is_a_lookup_error(db: Session, verifi
         ChallengeService.save_submission(
             db, uuid4(), user.id, CodeSubmission(code_body="x")
         )
+
+
+def test_the_statement_is_fetched_once_and_then_cached(
+    db: Session, make_challenge, monkeypatch
+):
+    """Codeforces has no statement API, so this comes off the problem page —
+    which is behind Cloudflare. Every refetch is another roll of those dice, and
+    statements never change, so the second read must not go near the network."""
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    calls = []
+
+    def fake_fetch(codeforces_id):
+        calls.append(codeforces_id)
+        return statement_service.Statement(
+            html="<p>Statement body</p>",
+            time_limit="1 second",
+            memory_limit="256 megabytes",
+            samples=[{"input": "8", "output": "YES"}],
+        )
+
+    monkeypatch.setattr(statement_service, "fetch", fake_fetch)
+
+    first = ChallengeService.statement(db, challenge.id)
+    assert first["html"] == "<p>Statement body</p>"
+    assert first["samples"] == [{"input": "8", "output": "YES"}]
+    assert calls == ["1873/D"]
+
+    db.refresh(challenge)
+    assert challenge.statement is not None, "it has to land on the row"
+    assert challenge.statement_fetched_at is not None
+
+    second = ChallengeService.statement(db, challenge.id)
+    assert second["html"] == "<p>Statement body</p>"
+    assert calls == ["1873/D"], "the second read must be served from the cache"
+
+
+def test_a_blocked_statement_is_not_an_error(db: Session, make_challenge, monkeypatch):
+    """Cloudflare refusing us is routine, not a failure.
+
+    Returning None leaves the screen showing the generated summary it already
+    had. It must not be cached either — the next caller often gets through.
+    """
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    def blocked(codeforces_id):
+        raise statement_service.StatementError("Codeforces returned 403.")
+
+    monkeypatch.setattr(statement_service, "fetch", blocked)
+
+    assert ChallengeService.statement(db, challenge.id) is None
+
+    db.refresh(challenge)
+    assert challenge.statement is None, "a refusal must not poison the cache"
+
+
+def test_a_challenge_with_no_codeforces_id_has_no_statement(
+    db: Session, make_challenge
+):
+    challenge = make_challenge(age_days=0, bonus=50)
+    challenge.codeforces_id = None
+    db.commit()
+
+    assert ChallengeService.statement(db, challenge.id) is None
+
+
+def test_statement_html_is_stripped_of_anything_executable():
+    """The statement is third-party HTML rendered in a WebView that has a
+    channel open to the app, so scripts must not survive the trip."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(
+        """<div class="problem-statement">
+             <div class="header"><div class="title">D. X</div></div>
+             <div><p>Body</p>
+               <script>steal()</script>
+               <img src="/predownloaded/a/b.png" onerror="steal()">
+               <a href="javascript:steal()">x</a>
+               <iframe src="https://evil.test"></iframe>
+             </div>
+           </div>""",
+        "html.parser",
+    )
+    node = soup.select_one("div.problem-statement")
+    statement_service._sanitise(node, "https://codeforces.com/problemset/problem/1/A")
+    html = node.decode_contents()
+
+    assert "<script" not in html
+    assert "<iframe" not in html
+    assert "onerror" not in html
+    assert "javascript:" not in html
+    # ...and relative images still resolve, since the WebView's base is not CF.
+    assert "https://codeforces.com/predownloaded/a/b.png" in html
+
+
+def test_sample_lines_survive_both_codeforces_layouts():
+    """Codeforces wraps each line of a multi-test sample in its own div now, so
+    `get_text()` on the <pre> runs every line together. Older problems are still
+    a plain <pre> with newlines, and both are live on the site."""
+    from bs4 import BeautifulSoup
+
+    modern = BeautifulSoup(
+        """<div class="sample-test">
+             <div class="input"><pre>
+               <div class="test-example-line">2</div>
+               <div class="test-example-line">6 3</div>
+             </pre></div>
+             <div class="output"><pre>
+               <div class="test-example-line">2</div>
+             </pre></div>
+           </div>""",
+        "html.parser",
+    )
+    legacy = BeautifulSoup(
+        """<div class="sample-test">
+             <div class="input"><pre>8\n</pre></div>
+             <div class="output"><pre>YES\n</pre></div>
+           </div>""",
+        "html.parser",
+    )
+
+    assert statement_service._samples(modern) == [{"input": "2\n6 3", "output": "2"}]
+    assert statement_service._samples(legacy) == [{"input": "8", "output": "YES"}]
 
 
 def test_claiming_twice_is_refused(

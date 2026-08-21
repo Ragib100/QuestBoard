@@ -216,6 +216,13 @@ create table if not exists public.daily_challenges (
     created_at     timestamptz not null default now()
 );
 
+-- The scraped problem statement, cached forever. Codeforces has no statement
+-- API and the problem page is behind Cloudflare, so a fetch can fail for
+-- reasons unrelated to us; statements never change, so one that succeeds is
+-- kept and never fetched again (decisions.md D45).
+alter table public.daily_challenges add column if not exists statement            jsonb;
+alter table public.daily_challenges add column if not exists statement_fetched_at timestamptz;
+
 create table if not exists public.challenge_attempts (
     id              uuid primary key  default gen_random_uuid(),
     challenge_id    uuid    not null  references public.daily_challenges (id) on delete cascade,
