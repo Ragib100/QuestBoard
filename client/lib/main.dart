@@ -6,6 +6,7 @@ import 'package:app_links/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app/auth/post_login_router.dart';
+import 'app/dashboard.dart';
 import 'app/intro.dart';
 import 'app/profile/profile_create.dart';
 import 'app/common/reset_password.dart';
@@ -14,24 +15,25 @@ import 'core/app_colors.dart';
 import 'core/motion.dart';
 import 'core/widgets/brand_art.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
-
-  if (SupabaseConfig.isConfigured) {
-    await Supabase.initialize(
-      url: SupabaseConfig.url,
-      publishableKey: SupabaseConfig.publishableKey,
-    );
-  }
-
-  runApp(MyApp(isSupabaseConfigured: SupabaseConfig.isConfigured));
+  // runApp first, bootstrap second. `dotenv.load` reads a file and
+  // `Supabase.initialize` restores the stored session — which usually means
+  // refreshing an expired token over the network. Awaiting both here held the
+  // *operating system's* splash on screen for all of it, so the app looked
+  // frozen on something we do not control and cannot put a progress bar on.
+  // Now our own splash paints on the first frame and the wait happens behind
+  // it (decisions.md D42).
+  runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, required this.isSupabaseConfigured});
+  const MyApp({super.key, this.isSupabaseConfigured});
 
-  final bool isSupabaseConfigured;
+  /// Skips the bootstrap and forces the answer. Tests only: it is the one way
+  /// to reach [ConfigurationRequiredScreen] without a `.env` on disk. Null in
+  /// production, where [_MyAppState._bootstrap] works it out.
+  final bool? isSupabaseConfigured;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -41,11 +43,38 @@ class _MyAppState extends State<MyApp> {
   final _appLinks = AppLinks();
   final _navigatorKey = GlobalKey<NavigatorState>();
 
+  late final Future<bool> _bootstrap = _start();
+
+  /// Loads the env and brings Supabase up. Returns whether the app is
+  /// configured at all.
+  Future<bool> _start() async {
+    final forced = widget.isSupabaseConfigured;
+    if (forced != null) return forced;
+
+    try {
+      await dotenv.load(fileName: '.env');
+    } catch (_) {
+      // A missing .env is a setup problem, not a crash — the configuration
+      // screen says so, and saying it beats a red frame on first launch.
+      return false;
+    }
+
+    if (!SupabaseConfig.isConfigured) return false;
+
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.publishableKey,
+    );
+    _watchAuth();
+    return true;
+  }
+
   @override
   void initState() {
     super.initState();
+    // Deep links need no Supabase, so they are armed immediately; _watchAuth
+    // cannot be, and runs at the end of _start instead.
     _initDeepLinks();
-    _watchAuth();
   }
 
   /// supabase_flutter parses the recovery link itself and only then emits
@@ -53,7 +82,6 @@ class _MyAppState extends State<MyApp> {
   /// used to — raced that work and landed on the form with no session, so
   /// `updateUser` failed with "Auth session missing".
   void _watchAuth() {
-    if (!widget.isSupabaseConfigured) return;
     Supabase.instance.client.auth.onAuthStateChange.listen((state) {
       if (state.event == AuthChangeEvent.passwordRecovery) {
         _navigatorKey.currentState?.pushAndRemoveUntil(
@@ -103,9 +131,17 @@ class _MyAppState extends State<MyApp> {
         title: 'QuestBoard',
         debugShowCheckedModeBanner: false,
         theme: _buildTheme(),
-        home: widget.isSupabaseConfigured
-            ? const _Launch()
-            : const ConfigurationRequiredScreen(),
+        home: FutureBuilder<bool>(
+          future: _bootstrap,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const _SplashView();
+            }
+            return snapshot.data == true
+                ? const _Launch()
+                : const ConfigurationRequiredScreen();
+          },
+        ),
       ),
     );
   }
@@ -335,34 +371,29 @@ class _MyAppState extends State<MyApp> {
 /// Decides the first screen: the landing page for signed-out visitors, or —
 /// for a restored session — the dashboard or onboarding, depending on whether
 /// the profile was ever completed.
-class _Launch extends StatefulWidget {
+/// Where a cold start lands: the landing page, or straight into the app.
+///
+/// Deliberately synchronous. This used to `await landingScreenForCurrentUser()`,
+/// which calls `GET /users/me` purely to tell a fully onboarded user apart from
+/// one who quit halfway through signup — so every launch sat on the splash for
+/// a network round trip (up to [ApiClient.fastTimeout], and longer than that in
+/// wall-clock terms against a sleeping free-tier dyno). The dashboard *already*
+/// calls `/users/me` when it mounts, so this was the same request twice, the
+/// first one blocking.
+///
+/// The rare half-onboarded case is handled where it is discovered instead:
+/// [Dashboard] redirects to [ProfileCreate] when that call comes back 404.
+/// [goToLanding] still resolves it up front, because straight after a login tap
+/// there is nothing on screen to flash and the user is already expecting a wait.
+class _Launch extends StatelessWidget {
   const _Launch();
 
   @override
-  State<_Launch> createState() => _LaunchState();
-}
-
-class _LaunchState extends State<_Launch> {
-  late final Future<Widget> _destination = _resolve();
-
-  Future<Widget> _resolve() async {
+  Widget build(BuildContext context) {
     if (Supabase.instance.client.auth.currentSession == null) {
       return const Intro();
     }
-    return landingScreenForCurrentUser();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Widget>(
-      future: _destination,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _SplashView();
-        }
-        return snapshot.data ?? const Intro();
-      },
-    );
+    return const Dashboard();
   }
 }
 
@@ -377,10 +408,11 @@ class _LaunchState extends State<_Launch> {
 /// with no horizontal padding, so a large system font setting ran it off both
 /// edges of a phone.
 ///
-/// The indefinite [LinearProgressIndicator] here is an uncapped animation, which
-/// would hang `pumpAndSettle`. That is safe only because no test pumps this
-/// widget: `widget_test.dart` passes `isSupabaseConfigured: false`, which routes
-/// to [ConfigurationRequiredScreen] instead. Do not reuse it elsewhere.
+/// The indefinite [LinearProgressIndicator] here is an uncapped animation, so
+/// `pumpAndSettle` on any tree containing it would never return. `widget_test`
+/// does now pump this widget — it is the first frame of every launch, forced
+/// flag or not — but only ever with `pump()`, and one frame later the tree has
+/// replaced it. Do not `pumpAndSettle` a tree that still has it mounted.
 /// [FadeSlideIn] around the mark is fine either way — it is one finite tween.
 class _SplashView extends StatelessWidget {
   const _SplashView();

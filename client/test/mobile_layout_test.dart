@@ -465,7 +465,7 @@ void main() {
     }
   });
 
-  testWidgets('a claimable challenge offers both the problem and the claim',
+  testWidgets('a claimable challenge offers both submit and claim',
       (WidgetTester tester) async {
     await _pumpAt(
       tester,
@@ -474,13 +474,17 @@ void main() {
         onClaim: () {},
         onVerify: () {},
         onOpenProblem: () {},
+        onSubmitOnCodeforces: () {},
       ),
       _narrow,
     );
 
-    // Getting to Codeforces is half the job: nothing else can earn the points.
-    expect(find.text('Open problem'), findsOneWidget);
+    // Submitting is the primary act: only a Codeforces verdict pays, so for
+    // anyone who has not submitted yet, Claim can only fail. It used to be the
+    // blue button, which made it the loud way of saying no.
+    expect(find.text('Submit'), findsOneWidget);
     expect(find.text('Claim'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('the Codeforces verification sheet fits a phone',
@@ -489,6 +493,7 @@ void main() {
       handle: 'a_very_long_codeforces_handle_indeed',
       codeforcesId: '1873/D',
       problemUrl: 'https://codeforces.com/problemset/problem/1873/D',
+      submitUrl: 'https://codeforces.com/problemset/submit/1873/D',
       windowMinutes: 30,
     );
 

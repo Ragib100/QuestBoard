@@ -10,6 +10,7 @@ import 'modules/leaderboard/leaderboard_screen.dart';
 import 'modules/daily_challenge/daily_challenge_screen.dart';
 import 'modules/notifications/notifications_screen.dart';
 import 'modules/profile/profile_screen.dart';
+import 'profile/profile_create.dart';
 import '../core/app_colors.dart';
 import '../core/display_name.dart';
 import '../core/motion.dart';
@@ -78,12 +79,26 @@ class _DashboardState extends State<Dashboard> {
 
   /// The signed-in user's balance, shown in the app bar and refreshed whenever
   /// the user comes back from a screen that can spend or earn points.
+  ///
+  /// Also the app's onboarding guard. A valid session with no `users` row means
+  /// someone quit mid-signup, or signed in on a new device before finishing —
+  /// they belong in [ProfileCreate], not here. That check used to happen on the
+  /// splash, ahead of this screen, which put exactly this request on the
+  /// critical path of every cold start twice over (decisions.md D42).
   Future<void> _loadMe() async {
     try {
       final me = await UserService.instance.me();
       if (mounted) setState(() => _me = me);
-    } on ApiException {
-      // Not onboarded yet, or offline — the app bar simply omits the balance.
+    } on ApiException catch (e) {
+      if (e.isNotFound && mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          appRoute((_) => const ProfileCreate()),
+          (route) => false,
+        );
+        return;
+      }
+      // Offline — the app bar simply omits the balance.
     }
   }
 
@@ -146,7 +161,7 @@ class _DashboardState extends State<Dashboard> {
   /// there is nowhere else to put a balance, a bell, or a way to sign out.
   PreferredSizeWidget _buildMobileTopBar() {
     return AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surface,
       elevation: 0,
       titleSpacing: 16,
       shape: const Border(bottom: BorderSide(color: AppColors.border)),
@@ -601,31 +616,10 @@ class _UserHomeState extends State<UserHome> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_error != null) _errorBanner(),
-            Text(
-              _me == null
-                  ? 'Welcome back!'
-                  : 'Welcome back, '
-                      '${greetingName(firstName: _me!.firstName, username: _me!.username)}!',
-              // Two lines at most. The greeting is the largest text on the
-              // screen and the name in it is user-supplied, so without a cap a
-              // long one pushes everything else below the fold.
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Keep learning and earning points!',
-              style:
-                  GoogleFonts.inter(color: AppColors.textSecondary, fontSize: 16),
-            ),
-            const SizedBox(height: 32),
+            _greeting(),
+            const SizedBox(height: 24),
             _buildStatsRow(isWeb),
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -639,6 +633,83 @@ class _UserHomeState extends State<UserHome> {
           ],
         ),
       ),
+    );
+  }
+
+  /// The top of the screen: who you are, and one true line about where you are.
+  ///
+  /// The subtitle used to read "Keep learning and earning points!" — filler,
+  /// and the largest block of the screen was spent on it. It says something
+  /// real now, off `streakDays`, or falls back to what the app is for. The
+  /// avatar is an initial in a tinted circle rather than a network image: a
+  /// broken avatar at the top of the home screen is worse than no avatar.
+  Widget _greeting() {
+    final me = _me;
+    final name =
+        me == null ? null : greetingName(firstName: me.firstName, username: me.username);
+    final streak = me?.streakDays ?? 0;
+
+    return Row(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: AppColors.primaryTint,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            (name == null || name.isEmpty) ? '?' : name.substring(0, 1).toUpperCase(),
+            style: GoogleFonts.outfit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name == null ? 'Welcome back!' : 'Welcome back, $name!',
+                // Two lines at most. The name is user-supplied, so without a
+                // cap a long one pushes everything else below the fold.
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (streak > 0) ...[
+                    const Icon(Icons.local_fire_department_rounded,
+                        size: 15, color: AppColors.streak),
+                    const SizedBox(width: 4),
+                  ],
+                  Flexible(
+                    child: Text(
+                      streak > 0
+                          ? '$streak-day streak — keep it going.'
+                          : 'Ask, answer, and earn points.',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                          color: AppColors.textSecondary, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -702,7 +773,8 @@ class _UserHomeState extends State<UserHome> {
           spacing: gap,
           runSpacing: gap,
           children: [
-            for (final tile in tiles) SizedBox(width: width, child: tile),
+            for (final (i, tile) in tiles.indexed)
+              SizedBox(width: width, child: FadeSlideIn(index: i, child: tile)),
           ],
         );
       },
@@ -764,16 +836,17 @@ class _UserHomeState extends State<UserHome> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // On a phone this used to sit below the whole quest list, so the app's
+        // headline feature was three tiles of scrolling away. Desktop keeps it
+        // in the sidebar, where it is already beside the fold.
+        if (!isWeb) ...[
+          _buildDailyChallenge(context),
+          const SizedBox(height: 32),
+        ],
         _buildSectionHeader('Recent Quests', widget.onBrowseAll),
         const SizedBox(height: 16),
         if (_recent.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
-            ),
+          AppCard(
             child: Text(
               _loadFailed
                   ? 'Could not load quests. Pull to refresh once you are back online.'
@@ -797,8 +870,6 @@ class _UserHomeState extends State<UserHome> {
               ),
             ),
         if (!isWeb) ...[
-          const SizedBox(height: 32),
-          _buildDailyChallenge(context),
           const SizedBox(height: 32),
           _buildTopLeaderboard(context),
         ],
@@ -835,40 +906,72 @@ class _UserHomeState extends State<UserHome> {
     );
   }
 
+  /// The one deliberately loud card on the screen.
+  ///
+  /// Radius 16 like every other card — it had drifted to 20, which is the
+  /// pill radius — and the flame sits in a frosted disc rather than floating
+  /// on the gradient, so the card has a focal point instead of a stray icon.
   Widget _buildDailyChallenge(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryDark]),
-        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.local_fire_department,
-              color: AppColors.streak, size: 32),
-          const SizedBox(height: 16),
-          Text(
-            'Daily Challenge',
-            style: GoogleFonts.outfit(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.local_fire_department_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Daily Challenge',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           // No number here on purpose: this card never fetches the challenge,
           // so the bonus was hardcoded to 50 and would have quietly lied the
           // day it changed. The real figure is on the challenge screen.
-          const Text(
-            'Solve today\'s challenge and earn bonus points.',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+          Text(
+            'One Codeforces problem a day. Read it, submit it and claim the '
+            'bonus without leaving the app.',
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 14,
+                height: 1.45),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           ElevatedButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyChallengeScreen())),
+            onPressed: () => Navigator.push(
+                context, appRoute((_) => const DailyChallengeScreen())),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: AppColors.primary,
               minimumSize: const Size(double.infinity, 48),
             ),
-            child: const Text('Solve Challenge'),
+            child: const Text('Solve today\'s challenge'),
           ),
         ],
       ),
@@ -876,21 +979,31 @@ class _UserHomeState extends State<UserHome> {
   }
 
   Widget _buildTopLeaderboard(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
+    // AppCard, not a hand-rolled Container: this one had drifted to radius 20
+    // and a raw `Colors.white`, which is the exact drift AppCard exists to
+    // stop (design-system.md).
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Top Leaderboard',
-            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          Row(
+            children: [
+              const Icon(Icons.emoji_events_rounded,
+                  size: 18, color: AppColors.points),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Top Leaderboard',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           if (_top.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
@@ -899,14 +1012,15 @@ class _UserHomeState extends State<UserHome> {
             )
           else
             for (final entry in _top)
-              _leaderboardItem('${entry.rank}', entry.user.displayName,
+              _leaderboardItem(entry.rank, entry.user.displayName,
                   '${entry.score} pts'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           Center(
             child: TextButton(
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
-              child: const Text('View full leaderboard', style: TextStyle(color: AppColors.primary)),
+              onPressed: () => Navigator.push(
+                  context, appRoute((_) => const LeaderboardScreen())),
+              child: const Text('View full leaderboard',
+                  style: TextStyle(color: AppColors.primary)),
             ),
           ),
         ],
@@ -914,12 +1028,31 @@ class _UserHomeState extends State<UserHome> {
     );
   }
 
-  Widget _leaderboardItem(String rank, String name, String pts) {
+  /// Gold, silver and bronze for the podium, the standard grey below it.
+  /// Three identical grey discs made a leaderboard look like a list.
+  static (Color, Color) _rankColors(int rank) => switch (rank) {
+        1 => (AppColors.points, Colors.white),
+        2 => (AppColors.textMuted, Colors.white),
+        3 => (AppColors.streak, Colors.white),
+        _ => (AppColors.subtleFill, AppColors.textSecondary),
+      };
+
+  Widget _leaderboardItem(int rank, String name, String pts) {
+    final (background, foreground) = _rankColors(rank);
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         children: [
-          CircleAvatar(radius: 14, backgroundColor: AppColors.subtleFill, child: Text(rank, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary))),
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: background,
+            child: Text('$rank',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: foreground)),
+          ),
           const SizedBox(width: 12),
           // A long display name must ellipsize, not push the score off-screen.
           Expanded(

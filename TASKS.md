@@ -658,3 +658,51 @@ window sized to a phone, screenshots of every state before and after.
 - [x] **New tests:** an unverified user gets the editor and the submit button;
       the editor sits above the claim rules; the pinned bar does not overlap
       the list
+
+## Round four: startup, Codeforces in-app, and the home screen ✅
+
+See [decisions.md](docs/decisions.md) D42–D44.
+
+### Startup
+
+- [x] **The launch splash took too long, twice over.** `main` awaited
+      `dotenv.load` and `Supabase.initialize` before `runApp`, so a token
+      refresh happened while the *OS* splash was up — a screen we cannot brand
+      or put a progress bar on. `runApp` runs first now
+- [x] `_Launch` awaited `GET /users/me` purely to tell an onboarded user from a
+      half-onboarded one — a call the dashboard already makes when it mounts.
+      Startup is synchronous now; the dashboard redirects to ProfileCreate when
+      its own `/users/me` 404s
+
+### Codeforces, without leaving the app
+
+- [x] **Established the constraint first:** the Codeforces API has no submit
+      method and no statement method. Only `user.status` (verdicts) is
+      available, which is what already pays the bounty
+- [x] `webview_flutter` + `core/codeforces_web.dart` — Codeforces' own pages
+      hosted inside QuestBoard. Sign in on their real login page; we never see
+      a credential, and the Submit button is theirs
+- [x] Read the statement in-app; submit in-app with the code from the editor
+      prefilled (and on the clipboard as the fallback); the verdict check fires
+      automatically when the page closes
+- [x] Handle verification is one button now instead of four written steps and a
+      link out — it opens the submit form with a non-compiling line already in
+      it and checks on the way back
+- [x] `submit_url` added to the challenge and verification payloads (server
+      derives it; the client never builds a Codeforces URL itself)
+- [x] Action bar reversed: **Submit** is primary, **Claim** is secondary. Claim
+      can only fail before you have submitted, and it was the loud blue button
+- [x] Android/iOS/macOS get the WebView; Linux, Windows and web fall back to
+      `openLink` and the manual "Check now"
+- [x] Verified with `flutter build apk --debug` — the plugin integrates and the
+      Android build is green
+
+### Home screen
+
+- [x] Greeting: initial avatar, and a subtitle that says something true off
+      `streakDays` instead of "Keep learning and earning points!"
+- [x] The Daily Challenge card moved above the quest list on a phone — the
+      app's headline feature was three tiles of scrolling away
+- [x] The leaderboard card and the challenge card were hand-rolled `Container`s
+      at radius 20 with raw `Colors.white`; both use `AppCard` / the standard
+      radius now, and the top three ranks are gold, silver and bronze

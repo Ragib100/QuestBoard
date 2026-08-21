@@ -104,6 +104,7 @@ def codeforces_verification(
         handle=handle,
         codeforces_id=codeforces_id,
         problem_url=cf.problem_url(codeforces_id),
+        submit_url=cf.submit_url(codeforces_id),
         window_minutes=int(cf.VERIFICATION_WINDOW.total_seconds() // 60),
     )
 

@@ -570,3 +570,95 @@ hero has the mark now. The highlights band was three centred paragraphs floating
 in 32px of whitespace with no container around them, which read as a long sparse
 scroll rather than as a list of three things — they are `AppCard`s, and they
 stagger in with `FadeSlideIn`. The band still centres its contents, so D39 holds.
+
+### D42 — Startup does no network work
+
+"The launch splash takes too much time." It took as long as two blocking waits,
+and neither had to be on the critical path.
+
+`main` awaited `dotenv.load` and `Supabase.initialize` *before* `runApp`.
+Restoring a stored session usually means refreshing an expired token over the
+network, so all of that happened while the **operating system's** splash was on
+screen — a screen we do not control, cannot brand, and cannot put a progress
+bar on. `runApp` comes first now and the bootstrap runs behind our own splash.
+
+Then `_Launch` awaited `landingScreenForCurrentUser()`, which calls
+`GET /users/me` for one reason: telling a fully onboarded user apart from one
+who quit halfway through signup. [Dashboard] *already* makes that exact call
+when it mounts, so every cold start paid for it twice and the first one blocked.
+`_Launch` is synchronous now — session or no session — and the half-onboarded
+case is handled where it is actually discovered: the dashboard redirects to
+[ProfileCreate] when its own `/users/me` comes back 404.
+
+`goToLanding` still resolves the destination up front. Straight after a login
+tap there is nothing on screen to flash, and the user is already expecting a
+wait.
+
+### D43 — Codeforces is read-only, so the app hosts Codeforces
+
+The ask was for the whole loop to happen in QuestBoard: set your handle, read
+the problem, submit, get the verdict. Codeforces makes three of those four
+impossible through its API.
+
+**Their public API has no write methods at all.** There is no submit endpoint —
+their own admins have said so repeatedly ([blog 99189], [blog 86022]) — and no
+method that returns a problem *statement* either; `problemset.problems` gives
+name, rating and tags, which is exactly why the daily challenge's `body` is a
+generated summary rather than the real text. What the API *does* give is
+`user.status`, the verdict feed, which is what has always paid the bounty.
+
+That leaves two ways to submit from inside an app: ask people for their
+Codeforces password and drive the site as them, or host Codeforces' own pages.
+The first is credential harvesting whatever the intent, breaks the moment they
+add a captcha, and is against their terms. So: `webview_flutter`, and
+`core/codeforces_web.dart`.
+
+- The user signs in on Codeforces' real login page. The session cookie lives in
+  the platform WebView's store; we never see a credential, and the Submit
+  button they press is Codeforces' own.
+- The app bar says `codeforces.com` under the title. An embedded browser that
+  does not say whose site it is showing is one a user could mistake for our own
+  login form.
+- The submit form is prefilled with the code from the in-app editor, and the
+  code goes on the clipboard too. The paste is best effort — Codeforces' markup
+  has changed before — so the JavaScript reports whether it landed and the
+  message says which of the two actually happened rather than assuming.
+- Closing the page triggers the verdict check automatically. That is the one
+  moment we know the user is done with it, which is why the browser fallback
+  does *not* auto-check: it returns the instant the browser launches.
+
+`webview_flutter` covers Android, iOS and macOS. Linux, Windows and web fall
+back to `openLink` and the manual "Check now" button, which is the flow as it
+was. Adding the package is the same call as `url_launcher` in D37: a missing
+*platform capability*, not an architectural preference of the kind CLAUDE.md
+rules out.
+
+Handle verification moved into the same flow. It used to be four written steps
+and a link out; it is now one button that opens the submit form with a
+deliberately non-compiling line already in it, and checks on the way back.
+
+The action bar changed with it. **Submit** is the primary button and **Claim**
+is the outline one, which is the reverse of before — only a Codeforces verdict
+pays, so for anyone who has not submitted yet Claim could only ever fail, and it
+was the loud blue button telling them no.
+
+[blog 99189]: https://codeforces.com/blog/entry/99189
+[blog 86022]: https://codeforces.com/blog/entry/86022
+
+### D44 — The home screen leads with the thing the app is for
+
+Three fixes, one theme: the screen you land on was spending its best space on
+filler and burying its headline feature.
+
+- The greeting's subtitle read "Keep learning and earning points!" — filler,
+  under a 28px heading, in the largest empty block on the screen. It says
+  something true now, off `streakDays`, next to an initial avatar.
+- The Daily Challenge card sat *below* the entire quest list on a phone, so the
+  feature the app is built around was three tiles of scrolling away. It is
+  directly under the stats now. Desktop keeps it in the sidebar, where it was
+  already beside the fold.
+- `_buildTopLeaderboard` and the daily-challenge card were hand-rolled
+  `Container`s at radius 20 with raw `Colors.white`, which is the precise drift
+  [AppCard] was written to stop. Both use the standard card now, and the
+  podium's first three ranks are gold, silver and bronze instead of three
+  identical grey discs.

@@ -94,13 +94,13 @@ mean a second fetch to render an answer.
 
 | | Endpoint | Notes |
 |---|---|---|
-| ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
+| ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. Every `challenge` carries `source_url` (the statement) and `submit_url` (Codeforces' own submit form) — both derived from `codeforces_id`, neither stored. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
 | ✅ | `GET /challenges` | Public. The archive, newest first — `page`, `limit` ≤ 50, same page shape as `/questions`. Today's challenge is included only when `include_today=true`. Every row carries `award_points`: what solving it is worth **now**, after the age decay below. |
 | ✅ | `GET /challenges/{id}` | Public. One challenge in the same shape as `/challenges/today`, so a past challenge reuses the whole screen. `404` if it does not exist. |
 | ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem **dated on or after the challenge's own day (00:00 Asia/Dhaka)**, then awards `award_points` — `bonus_points` decayed by the challenge's age, never `bonus_points` itself for an old one. Optional body `{ code_body?, code_language?, attachment_url?, attachment_name? }` stores the solution on the attempt. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt — with the code, so nothing typed is lost. |
 | ✅ | `PUT /challenges/{id}/submission` | Saves the solution written or uploaded in the app onto the caller's attempt **without touching Codeforces**. Body `{ code_body?, code_language?, attachment_url?, attachment_name? }` — an omitted field is left alone, an empty string clears it. Creates the attempt row if there is not one yet, and works before the problem is solved, after it is solved, and without a verified handle: keeping your code is not the same act as claiming the bonus, and requiring a Codeforces verdict to save a draft meant there was no way to submit code at all. Returns the updated `my_attempt`. `404` if the challenge does not exist. |
 | ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. Each row carries the `awarded_points` that solver actually received, which differs between a same-day solve and a late one. |
-| ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. `400` without a handle on the profile. |
+| ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. Returns `problem_url` and `submit_url`. `400` without a handle on the profile. |
 | ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
 
 ### The clock is Asia/Dhaka
@@ -119,6 +119,20 @@ local time and render everything six hours out.
 
 `challenge_date` is a plain `YYYY-MM-DD` calendar day and has no zone to
 convert — shifting one moves it a day.
+
+### Codeforces is read-only
+
+There is no Codeforces API for submitting a solution, and none for reading a
+problem statement — the public API exposes problem *metadata* (name, rating,
+tags) and submission *verdicts*, nothing more. So QuestBoard never posts to
+Codeforces. It serves `source_url` and `submit_url`, the client hosts those two
+Codeforces pages in an in-app WebView, and the user submits on Codeforces' own
+form under their own session. The verdict then comes back the way it always
+has, through `user.status` on `POST /challenges/{id}/solve`.
+
+That is also why the daily challenge's `body` is a generated summary rather than
+the real statement: we do not have the statement, and inventing one would be
+worse than saying so. See [decisions.md](decisions.md) D43.
 
 ### Challenge point decay
 

@@ -17,6 +17,9 @@ class ChallengeResponse(BaseModel):
     cf_rating: int | None
     difficulty: str | None
     source_url: str | None
+    # Codeforces' own submit form for this problem. Computed, never stored —
+    # like `award_points`, it is derived from `codeforces_id`.
+    submit_url: str | None = None
     # The challenge's value on its own day. What a solve pays *now* is
     # `award_points`, which is this decayed by age — see docs/api.md.
     bonus_points: int
@@ -91,4 +94,6 @@ class VerificationChallenge(BaseModel):
     handle: str
     codeforces_id: str
     problem_url: str
+    # Where the deliberate compilation error actually gets submitted.
+    submit_url: str
     window_minutes: int

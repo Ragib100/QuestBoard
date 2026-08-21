@@ -65,6 +65,19 @@ def problem_url(codeforces_id: str) -> str:
     return f"https://codeforces.com/problemset/problem/{contest_id}/{index}"
 
 
+def submit_url(codeforces_id: str) -> str:
+    """The page with Codeforces' own submit form for this problem.
+
+    There is no API for this. Codeforces' public API is read-only — it has no
+    submit method and does not expose statements either — so the only way to
+    submit without asking a user for their Codeforces password is to send them
+    to Codeforces' own form. The client hosts this page in an in-app WebView so
+    that still happens without leaving QuestBoard (decisions.md D43).
+    """
+    contest_id, index = codeforces_id.split("/", 1)
+    return f"https://codeforces.com/problemset/submit/{contest_id}/{index}"
+
+
 def difficulty_for(rating: int | None) -> str:
     """Maps a Codeforces rating onto our three-level scale."""
     from app.models import Difficulty
