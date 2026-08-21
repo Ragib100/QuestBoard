@@ -15,6 +15,7 @@ from app.models import (
 )
 from app.schemas.code import CodeSubmission, apply_submission
 from app.services import codeforces_service as cf
+from app.services import statement_service
 from app.services.activity_service import ActivityService
 from app.services.badge_service import BadgeService
 from app.services.point_service import PointService
@@ -99,6 +100,41 @@ class ChallengeService:
 
         db.refresh(challenge)
         return challenge
+
+    @classmethod
+    def statement(cls, db: Session, challenge_id: UUID) -> dict | None:
+        """The real problem statement, fetched once and cached on the row.
+
+        Returns None when Codeforces will not give it to us — which is a normal
+        outcome, not an error: the page is behind Cloudflare and the API has no
+        statement method at all. The caller shows the generated summary and the
+        button that opens the real page instead of inventing anything (D45).
+        """
+        challenge = cls.get(db, challenge_id)
+
+        if challenge.statement:
+            return challenge.statement
+        if not challenge.codeforces_id:
+            return None
+
+        try:
+            fetched = statement_service.fetch(challenge.codeforces_id)
+        except statement_service.StatementError:
+            # Deliberately not recorded as a failure. Cloudflare lets the next
+            # caller through often enough that one refusal should not turn into
+            # a permanent "no statement" for this problem.
+            return None
+
+        challenge.statement = {
+            "html": fetched.html,
+            "time_limit": fetched.time_limit,
+            "memory_limit": fetched.memory_limit,
+            "samples": fetched.samples,
+        }
+        challenge.statement_fetched_at = clock.naive_utc_now()
+        db.commit()
+        db.refresh(challenge)
+        return challenge.statement
 
     @classmethod
     def get(cls, db: Session, challenge_id: UUID) -> DailyChallenge:

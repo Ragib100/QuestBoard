@@ -6,6 +6,10 @@ SQLAlchemy>=2.0,<3.0
 psycopg[binary]>=3.3,<4.0
 supabase>=2.31,<3.0
 httpx>=0.28,<1.0        # Codeforces API + AI hints — arrives via supabase too, pinned here because we import it directly
+# Parsing the Codeforces problem page. Their API has no statement method, so the
+# page itself is the only source, and picking a nested div subtree out of 60KB of
+# real-world HTML is not a job for a regex (decisions.md D45).
+beautifulsoup4>=4.12,<5
 
 # Optional: only needed if you set ANTHROPIC_API_KEY. The free OpenAI-compatible
 # providers (Gemini, Groq, OpenRouter) go through httpx and need nothing extra,

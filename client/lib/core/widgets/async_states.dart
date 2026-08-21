@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -17,14 +19,29 @@ class LoadingState extends StatelessWidget {
 
 /// Something failed. Always shows the API's own message plus a way to recover —
 /// never a raw exception.
+///
+/// Set [offline] when the request never reached a server. That failure is the
+/// one that fixes itself, so it is drawn as [ReconnectingState] — a spinner
+/// that keeps trying — instead of an error with a button. A 403 will still be
+/// a 403 in ten seconds; a train going into a tunnel will not.
 class ErrorState extends StatelessWidget {
-  const ErrorState({super.key, required this.message, this.onRetry});
+  const ErrorState({
+    super.key,
+    required this.message,
+    this.onRetry,
+    this.offline = false,
+  });
 
   final String message;
   final VoidCallback? onRetry;
+  final bool offline;
 
   @override
   Widget build(BuildContext context) {
+    if (offline && onRetry != null) {
+      return ReconnectingState(onRetry: onRetry!, message: message);
+    }
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -43,6 +60,130 @@ class ErrorState extends StatelessWidget {
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: onRetry,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Try again'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Waiting for the connection to come back, and retrying by itself.
+///
+/// Replaces the dead end this used to be: an unreachable server produced an
+/// error page with a **Try again** button, so a phone that lost signal for four
+/// seconds needed a tap to recover, and a user watching a sleeping free-tier
+/// dyno wake up had no idea whether tapping would help.
+///
+/// Capped rather than endless — design-system.md's rule is that nothing repeats
+/// forever, and an app quietly retrying in someone's pocket all afternoon is
+/// exactly what that rule is about. After [maxAttempts] it stops and offers the
+/// button, which by then genuinely means something.
+class ReconnectingState extends StatefulWidget {
+  const ReconnectingState({
+    super.key,
+    required this.onRetry,
+    this.message = '',
+  });
+
+  final VoidCallback onRetry;
+
+  /// The API's own words, shown once the automatic attempts are spent.
+  final String message;
+
+  /// Six tries at five seconds is half a minute of patience, which covers a
+  /// tunnel, a lift, and a cold dyno's first wake-up.
+  static const maxAttempts = 6;
+  static const gap = Duration(seconds: 5);
+
+  @override
+  State<ReconnectingState> createState() => _ReconnectingStateState();
+}
+
+class _ReconnectingStateState extends State<ReconnectingState> {
+  Timer? _timer;
+  int _attempts = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedule();
+  }
+
+  @override
+  void dispose() {
+    // Without this a `testWidgets` body fails outright on the pending timer,
+    // and a screen popped mid-retry would go on calling into dead state.
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _schedule() {
+    if (_attempts >= ReconnectingState.maxAttempts) return;
+    _timer = Timer(ReconnectingState.gap, () {
+      if (!mounted) return;
+      setState(() => _attempts++);
+      widget.onRetry();
+      _schedule();
+    });
+  }
+
+  void _retryNow() {
+    _timer?.cancel();
+    setState(() => _attempts = 0);
+    widget.onRetry();
+    _schedule();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final givenUp = _attempts >= ReconnectingState.maxAttempts;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (givenUp)
+              const Icon(Icons.wifi_off_rounded,
+                  size: 44, color: AppColors.textMuted)
+            else
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+            const SizedBox(height: 20),
+            Text(
+              givenUp ? 'Still offline' : 'Waiting for a connection…',
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              givenUp
+                  ? (widget.message.isEmpty
+                      ? 'We could not reach the server.'
+                      : widget.message)
+                  : 'This will pick up on its own as soon as you are back.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            if (givenUp) ...[
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: _retryNow,
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('Try again'),
                 style: OutlinedButton.styleFrom(

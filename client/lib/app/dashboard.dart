@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../core/breakpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -535,10 +537,41 @@ class _UserHomeState extends State<UserHome> {
   /// load" and leave the user with nowhere to go.
   String? _error;
 
+  /// True when nothing reached the server at all, rather than one call failing.
+  /// That one comes back by itself, so the banner waits instead of demanding a
+  /// tap (decisions.md D46).
+  bool _offline = false;
+
+  Timer? _retry;
+  int _retries = 0;
+
+  /// Three tries at five seconds. Past that the banner's button is the honest
+  /// offer, and a dashboard retrying in someone's pocket all afternoon is what
+  /// design-system.md's "nothing repeats forever" rule exists to prevent.
+  static const _maxRetries = 3;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    // A pending Timer fails a testWidgets body outright, and a popped screen
+    // would go on calling into dead state.
+    _retry?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleRetry() {
+    _retry?.cancel();
+    if (!_offline || _retries >= _maxRetries) return;
+    _retry = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      _retries++;
+      _load();
+    });
   }
 
   /// Loads each tile independently.
@@ -553,6 +586,7 @@ class _UserHomeState extends State<UserHome> {
   /// They still go out together; only the failure handling is per-call.
   Future<void> _load() async {
     final failures = <String>[];
+    var offline = false;
 
     Future<void> attempt(String what, Future<void> Function() run) async {
       try {
@@ -561,6 +595,7 @@ class _UserHomeState extends State<UserHome> {
         // Never fall back to a plausible-looking number: an empty tile is
         // honest, a made-up one is not.
         failures.add('$what (${e.message})');
+        if (e.isOffline) offline = true;
       }
     }
 
@@ -596,7 +631,10 @@ class _UserHomeState extends State<UserHome> {
     setState(() {
       _loadFailed = failures.isNotEmpty;
       _error = failures.isEmpty ? null : 'Could not load ${failures.first}.';
+      _offline = offline && failures.isNotEmpty;
+      if (failures.isEmpty) _retries = 0;
     });
+    _scheduleRetry();
   }
 
   @override
@@ -726,20 +764,38 @@ class _UserHomeState extends State<UserHome> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.cloud_off_rounded,
-              color: AppColors.warningDark, size: 20),
+          if (_offline && _retries < _maxRetries)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.warningDark),
+            )
+          else
+            const Icon(Icons.cloud_off_rounded,
+                color: AppColors.warningDark, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _error!,
+              _offline
+                  ? (_retries < _maxRetries
+                      ? 'You are offline. This will fill in on its own as soon '
+                          'as you are back.'
+                      : 'Still offline. Nothing here is missing — it just has '
+                          'not loaded yet.')
+                  : _error!,
               style: const TextStyle(
                   color: AppColors.warningDark, fontSize: 13, height: 1.4),
             ),
           ),
-          TextButton(
-            onPressed: _load,
-            child: const Text('Retry'),
-          ),
+          if (!_offline || _retries >= _maxRetries)
+            TextButton(
+              onPressed: () {
+                _retries = 0;
+                _load();
+              },
+              child: const Text('Retry'),
+            ),
         ],
       ),
     );

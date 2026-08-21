@@ -172,6 +172,63 @@ class ChallengeSolver {
       );
 }
 
+/// One worked example from a problem statement.
+class StatementSample {
+  const StatementSample({required this.input, required this.output});
+
+  final String input;
+  final String output;
+
+  factory StatementSample.fromJson(Map<String, dynamic> json) => StatementSample(
+        input: json['input'] as String? ?? '',
+        output: json['output'] as String? ?? '',
+      );
+}
+
+/// `GET /api/challenges/{id}/statement` — the real Codeforces problem text.
+///
+/// [available] is false whenever Codeforces would not serve the page. That is a
+/// routine outcome rather than an error: their API has no statement method, so
+/// the only source is the problem page and it sits behind Cloudflare. The
+/// screen falls back to the challenge's own summary and says so (D45).
+class ProblemStatement {
+  const ProblemStatement({
+    required this.available,
+    this.html = '',
+    this.timeLimit = '',
+    this.memoryLimit = '',
+    this.samples = const [],
+    this.sourceUrl,
+    this.submitUrl,
+  });
+
+  final bool available;
+
+  /// Sanitised HTML — scripts, frames and event handlers already removed
+  /// server-side, because this is rendered in a WebView with a channel open
+  /// back into the app.
+  final String html;
+  final String timeLimit;
+  final String memoryLimit;
+  final List<StatementSample> samples;
+  final String? sourceUrl;
+  final String? submitUrl;
+
+  factory ProblemStatement.fromJson(Map<String, dynamic> json) =>
+      ProblemStatement(
+        available: json['available'] as bool? ?? false,
+        html: json['html'] as String? ?? '',
+        timeLimit: json['time_limit'] as String? ?? '',
+        memoryLimit: json['memory_limit'] as String? ?? '',
+        samples: [
+          for (final row in (json['samples'] as List? ?? const []))
+            StatementSample.fromJson(row as Map<String, dynamic>),
+        ],
+        sourceUrl: json['source_url'] as String?,
+        submitUrl: json['submit_url'] as String?,
+      );
+}
+
 /// What the server wants submitted to prove a Codeforces handle is yours.
 class CodeforcesVerification {
   const CodeforcesVerification({

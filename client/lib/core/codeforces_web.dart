@@ -80,6 +80,78 @@ Future<CodeforcesOpen> openCodeforces(
   return CodeforcesOpen.embedded;
 }
 
+/// Codeforces' compiler labels, in preference order, for each language the
+/// in-app editor offers.
+///
+/// Matched against the text of the options in Codeforces' own `programTypeId`
+/// select rather than against their numeric ids: the ids change when they roll
+/// a compiler, and a stale id would submit C++17 code as Python. First regex
+/// that matches any option wins, which is why 64-bit GNU builds come first.
+///
+/// A language with no entry — Dart, TypeScript, Swift, SQL — is one Codeforces
+/// does not accept. [submitToCodeforces] leaves the form for the user rather
+/// than guessing, because guessing here means a wrong-language verdict.
+const codeforcesCompilers = <String, List<String>>{
+  'cpp': [r'gnu g\+\+2[03].*64', r'gnu g\+\+', r'clang\+\+', r'c\+\+'],
+  'c': [r'gnu gcc', r'\bgcc\b'],
+  'python': [r'python 3', r'pypy 3', r'\bpython\b'],
+  'java': [r'java 2\d', r'\bjava\b'],
+  'kotlin': [r'kotlin'],
+  'csharp': [r'c#', r'\.net'],
+  'javascript': [r'node\.?js', r'javascript'],
+  'go': [r'\bgo\b'],
+  'rust': [r'rust'],
+  'php': [r'php'],
+  'ruby': [r'ruby'],
+};
+
+/// What an auto-submit run did.
+enum CodeforcesSubmit {
+  /// Codeforces accepted the form and moved on to the status page.
+  submitted,
+
+  /// The page is loaded and filled, but we could not choose a language for the
+  /// user — so they finish it themselves.
+  needsUser,
+
+  /// The page never got as far as a submit form: cancelled, offline, or the
+  /// user closed it during sign-in.
+  incomplete,
+}
+
+/// Opens Codeforces' submit form, fills it from the in-app editor, and submits.
+///
+/// This is the vjudge-shaped flow, minus the part where vjudge holds your
+/// Codeforces password. The session is the one the user established themselves
+/// in this WebView, so nothing of theirs is stored anywhere and the request is
+/// made by them, from their own browser context.
+///
+/// Falls back to [CodeforcesSubmit.needsUser] rather than submitting whenever
+/// anything is uncertain — no matching compiler, no form, an unexpected page.
+Future<CodeforcesSubmit> submitToCodeforces(
+  BuildContext context, {
+  required String url,
+  required String code,
+  String? language,
+  String title = 'Submit',
+}) async {
+  if (!canEmbedCodeforces) {
+    await openCodeforces(context, url, title: title, prefillCode: code);
+    return CodeforcesSubmit.incomplete;
+  }
+
+  final outcome = await Navigator.push<CodeforcesSubmit>(
+    context,
+    appRoute((_) => CodeforcesWebView(
+          url: url,
+          title: title,
+          prefillCode: code,
+          autoSubmitLanguage: language,
+        )),
+  );
+  return outcome ?? CodeforcesSubmit.incomplete;
+}
+
 /// One Codeforces page, in a QuestBoard frame.
 class CodeforcesWebView extends StatefulWidget {
   const CodeforcesWebView({
@@ -87,6 +159,7 @@ class CodeforcesWebView extends StatefulWidget {
     required this.url,
     this.title = 'Codeforces',
     this.prefillCode,
+    this.autoSubmitLanguage,
   });
 
   final String url;
@@ -95,6 +168,10 @@ class CodeforcesWebView extends StatefulWidget {
   /// Pasted into the submit form's source box when the page has loaded. Null
   /// on a statement page, which has no form to fill.
   final String? prefillCode;
+
+  /// When set, the form is submitted as well as filled, choosing the Codeforces
+  /// compiler that matches this language key. Null means fill only.
+  final String? autoSubmitLanguage;
 
   @override
   State<CodeforcesWebView> createState() => _CodeforcesWebViewState();
@@ -111,6 +188,28 @@ class _CodeforcesWebViewState extends State<CodeforcesWebView> {
   /// edited would be worse than not pasting at all.
   bool _prefillTried = false;
 
+  /// Set while the form is being filled and posted, so the page underneath is
+  /// covered rather than flickering through a submit the user never watched.
+  bool _submitting = false;
+
+  /// Codeforces bounces an unauthenticated submit link to `/enter`, so the form
+  /// usually only appears on the *second* page load. Once a solution has gone
+  /// through, every further load is the user browsing and is left alone.
+  bool _submitted = false;
+
+  /// How many times the form has been auto-filled and posted.
+  ///
+  /// Hard-capped, and the cap is the point. Codeforces re-renders the submit
+  /// page with an error message when it rejects a post — "you have submitted
+  /// exactly the same code before" is the common one — which fires
+  /// `onPageFinished` again. Without a bound, that is an unbounded loop
+  /// hammering their submit endpoint on the user's own account.
+  int _submitAttempts = 0;
+
+  /// One retry, which covers exactly one real case: the first load was the
+  /// sign-in page and the form only appeared after the user signed in.
+  static const _maxSubmitAttempts = 2;
+
   @override
   void initState() {
     super.initState();
@@ -120,9 +219,25 @@ class _CodeforcesWebViewState extends State<CodeforcesWebView> {
         onProgress: (value) {
           if (mounted) setState(() => _progress = value);
         },
-        onPageFinished: (_) {
+        onPageFinished: (url) {
           if (mounted) setState(() => _progress = 100);
-          _prefill();
+          if (_submitted) return;
+          // Landing on the status list is Codeforces confirming the post — the
+          // submit form redirects there and nothing else does.
+          if (_looksLikeSubmitted(url)) {
+            _finish(CodeforcesSubmit.submitted);
+            return;
+          }
+          if (widget.autoSubmitLanguage != null) {
+            _fillAndSubmit();
+          } else {
+            _prefill();
+          }
+        },
+        onUrlChange: (change) {
+          final url = change.url;
+          if (_submitted || url == null) return;
+          if (_looksLikeSubmitted(url)) _finish(CodeforcesSubmit.submitted);
         },
         onWebResourceError: (error) {
           // Only when we are certain the *page* failed. `isForMainFrame` is
@@ -175,6 +290,126 @@ class _CodeforcesWebViewState extends State<CodeforcesWebView> {
     );
   }
 
+  static bool _looksLikeSubmitted(String url) =>
+      url.contains('/submissions/') || url.contains('problemset/status');
+
+  void _finish(CodeforcesSubmit outcome) {
+    if (_submitted || !mounted) return;
+    _submitted = true;
+    Navigator.of(context).pop(outcome);
+  }
+
+  /// Fills Codeforces' own form and posts it.
+  ///
+  /// Bails to [CodeforcesSubmit.needsUser] rather than guessing whenever the
+  /// page is not what we expect — no form (the sign-in page, for one) or no
+  /// compiler matching the language the code was written in. Submitting C++ as
+  /// Python would earn a compile error on the user's public record, which is a
+  /// far worse outcome than one extra tap.
+  Future<void> _fillAndSubmit() async {
+    final code = widget.prefillCode ?? '';
+    final patterns = codeforcesCompilers[widget.autoSubmitLanguage] ?? const [];
+    if (code.isEmpty || patterns.isEmpty) {
+      await _prefill();
+      return;
+    }
+    if (_submitAttempts >= _maxSubmitAttempts) {
+      // Codeforces bounced it and re-rendered the form. Whatever it objects to,
+      // posting the same thing again will not fix it — hand the page over.
+      //
+      // Clearing _submitting matters: the previous attempt returned 'ok' and so
+      // left the overlay up waiting for a redirect that never came. Without
+      // this the user is left staring at "Submitting to Codeforces…" over a
+      // page that is actually asking them something.
+      if (mounted) setState(() => _submitting = false);
+      await _prefill();
+      return;
+    }
+    _submitAttempts++;
+
+    if (mounted) setState(() => _submitting = true);
+    await Clipboard.setData(ClipboardData(text: code));
+
+    final script = '''
+      (function (source, patterns) {
+        var box = document.getElementById('sourceCodeTextarea') ||
+                  document.querySelector('textarea[name="source"]');
+        if (!box) return 'noform';
+        box.value = source;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+
+        var select = document.querySelector('select[name="programTypeId"]');
+        if (!select) return 'nolang';
+
+        var chosen = -1;
+        for (var p = 0; p < patterns.length && chosen < 0; p++) {
+          var rx = new RegExp(patterns[p], 'i');
+          for (var o = 0; o < select.options.length; o++) {
+            if (rx.test(select.options[o].text)) { chosen = o; break; }
+          }
+        }
+        if (chosen < 0) return 'nolang';
+
+        select.selectedIndex = chosen;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+
+        var form = box.form || document.querySelector('form[action*="submit"]');
+        if (!form) return 'nolang';
+
+        // Click Codeforces' own control rather than calling form.submit():
+        // submit() bypasses the page's submit handlers, and those are what
+        // populate their anti-automation hidden fields and run their checks.
+        // Falling back to submit() only if there is no button to press.
+        var go = form.querySelector('input[type=submit], button[type=submit]');
+        if (go) { go.click(); } else { form.submit(); }
+        return 'ok';
+      })(${jsonStringLiteral(code)},
+         ${jsonStringLiteral(patterns.join('|||'))}.split('|||'));
+    ''';
+
+    Object? result;
+    try {
+      result = await _controller.runJavaScriptReturningResult(script);
+    } catch (_) {
+      result = 'noform';
+    }
+
+    final answer = _unwrap(result);
+    if (!mounted) return;
+
+    // The redirect that follows is what confirms it; onUrlChange finishes.
+    if (answer == 'ok') return;
+
+    setState(() => _submitting = false);
+
+    if (answer == 'noform') {
+      // Almost always the sign-in page. Saying so beats a silent nothing.
+      showAppSnack(
+        context,
+        'Sign in to Codeforces here, and your solution goes in automatically.',
+        tone: SnackTone.neutral,
+      );
+      return;
+    }
+
+    showAppSnack(
+      context,
+      'Your code is in the form — Codeforces has no compiler matching that '
+      'language, so pick one and press Submit.',
+      tone: SnackTone.neutral,
+    );
+  }
+
+  /// Android hands JavaScript results back JSON-encoded; iOS does not.
+  static String _unwrap(Object? value) {
+    final text = (value ?? '').toString();
+    if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
+      return text.substring(1, text.length - 1);
+    }
+    return text;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Back navigates *within* Codeforces before it leaves. Signing in bounces
@@ -192,7 +427,11 @@ class _CodeforcesWebViewState extends State<CodeforcesWebView> {
           await _controller.goBack();
           return;
         }
-        if (mounted) navigator.pop();
+        if (mounted) {
+          navigator.pop(widget.autoSubmitLanguage == null
+              ? null
+              : CodeforcesSubmit.needsUser);
+        }
       },
       child: _scaffold(context),
     );
@@ -207,7 +446,11 @@ class _CodeforcesWebViewState extends State<CodeforcesWebView> {
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         leading: IconButton(
           tooltip: 'Close',
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(
+              context,
+              widget.autoSubmitLanguage == null
+                  ? null
+                  : CodeforcesSubmit.needsUser),
           icon: const Icon(Icons.close_rounded),
         ),
         title: Column(
@@ -259,7 +502,44 @@ class _CodeforcesWebViewState extends State<CodeforcesWebView> {
                 ),
               ),
       ),
-      body: _error != null ? _failure() : WebViewWidget(controller: _controller),
+      body: Stack(
+        children: [
+          if (_error != null)
+            _failure()
+          else
+            WebViewWidget(controller: _controller),
+          if (_submitting) _posting(),
+        ],
+      ),
+    );
+  }
+
+  /// Covers the form while it is being filled and posted. Without it the user
+  /// watches a page they did not open flicker through a submit they did not
+  /// type, which reads as the app acting behind their back.
+  Widget _posting() {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: AppColors.surface,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+              const SizedBox(height: 18),
+              Text('Submitting to Codeforces…',
+                  style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

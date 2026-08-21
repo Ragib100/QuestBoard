@@ -49,6 +49,11 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
   bool _hasMore = false;
   int _page = 1;
   String? _error;
+
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
   String _sort = 'latest';
   String? _tag;
   String _search = '';
@@ -106,7 +111,13 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
         _loading = false;
       });
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -248,7 +259,7 @@ class _BrowseQuestionsState extends State<BrowseQuestions> {
 
   Widget _body() {
     if (_loading) return ListSkeleton(count: 4, item: QuestTileSkeleton.new);
-    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load, offline: _offline);
     if (_quests.isEmpty) {
       // Three different nothings, and they need different copy: an empty
       // board, a tag nobody has used, and a search that missed.

@@ -81,6 +81,30 @@ class SolveRequest(CodeSubmission):
     """
 
 
+class StatementSample(BaseModel):
+    """One worked example from the statement."""
+
+    input: str
+    output: str
+
+
+class ProblemStatement(BaseModel):
+    """`GET /challenges/{id}/statement`.
+
+    `available` is false whenever Codeforces would not give us the page — which
+    is a routine outcome, not an error, so this is a 200 with an honest flag
+    rather than a 502. The client falls back to the challenge's own summary.
+    """
+
+    available: bool
+    html: str = ""
+    time_limit: str = ""
+    memory_limit: str = ""
+    samples: list[StatementSample] = []
+    source_url: str | None = None
+    submit_url: str | None = None
+
+
 class ChallengeSolver(BaseModel):
     rank: int
     solved_at: datetime | None

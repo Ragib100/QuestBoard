@@ -662,3 +662,97 @@ filler and burying its headline feature.
   [AppCard] was written to stop. Both use the standard card now, and the
   podium's first three ranks are gold, silver and bronze instead of three
   identical grey discs.
+
+### D45 — The statement is a scrape, and it is cached forever
+
+"There is no problem statement showing in the app." Correct, and it could not
+have been: the Codeforces API returns a problem's name, rating and tags and
+nothing else — no statement, at all. The generated summary in `body` was never
+a stand-in for one, it was an admission that we did not have it.
+
+The only source is the problem page, so `statement_service` fetches it and lifts
+`div.problem-statement` out. Three things that decides:
+
+**It is cached on the row, permanently.** `daily_challenges.statement` (jsonb)
+plus `statement_fetched_at`. Codeforces sits behind Cloudflare, and a bare
+`Mozilla/5.0` from a datacenter IP gets a 403 "Just a moment" challenge — which
+Render's egress is exactly the kind of address to attract. Statements never
+change, so every refetch is a needless roll of those dice. A *failure* is
+deliberately not cached: the next caller often gets through, and one refusal
+must not become a permanent "no statement" for that problem.
+
+**A refusal is a 200 with `available: false`, not a 502.** It is a routine
+outcome rather than an error, and the screen has somewhere to go: the generated
+summary, an explanation, and the button that opens Codeforces. What it must
+never do is invent a statement.
+
+**The HTML is sanitised server-side.** Scripts, frames, forms and `on*`
+handlers are stripped and every URL is absolutised. This is third-party HTML
+going into a WebView that has a JavaScript channel open back into the app; the
+channel does one thing (copy to clipboard) but the right place to stop hostile
+markup is before it is served, not after.
+
+Rendering is a WebView with our own stylesheet over Codeforces' markup, plus
+MathJax configured for their `$$$` delimiters. Flattening a statement into a
+`Text` widget would lose the half of it that carries the meaning — the maths,
+the images, the exact sample blocks. Sample boxes get a **Copy** button that
+posts back through the channel.
+
+`webview_flutter` has no Linux build, so this was verified by generating the
+document and opening it in a browser rather than by guessing — which is how the
+two ⏱/▨ glyphs were caught rendering as tofu boxes.
+
+The desktop fallback strips the HTML to text and renders the samples natively.
+It also converts the maths: `$$$1 \le n \le 2 \cdot 10^5$$$` becomes
+`1 ≤ n ≤ 2 · 10⁵`. Nowhere near a TeX engine and it does not need to be — half
+the sentences in a Codeforces statement contain maths, so leaving the source
+visible makes the page unreadable rather than merely plain.
+
+#### On the Codeforces password
+
+The ask was for submission to work "as vjudge does", offering the Codeforces
+password with secure binding if that was what it took. It was not needed, so it
+is not stored anywhere.
+
+The user already signs into Codeforces inside the app's WebView, and that
+session is enough: `submitToCodeforces` fills Codeforces' own form, picks the
+compiler by matching **their option labels** (never a hardcoded `programTypeId`
+— those change when they roll a compiler, and a stale id submits C++ as
+Python), and posts it. Same result, and QuestBoard never holds a credential
+that would let anyone act as that user on Codeforces. Storing one would have put
+a reversible secret for every account in the Postgres, where password reuse
+makes the blast radius far larger than a QuestBoard login.
+
+It refuses to guess: no form on the page, or no compiler matching the language
+the code was written in, and it fills the form and hands it back rather than
+submitting. A wrong-language verdict lands on the user's public record.
+
+After a successful post the app polls for the verdict — five tries, four
+seconds apart — because a submission sits "In queue" for a few seconds and
+claiming instantly would report "not accepted yet" for a solve that is about to
+pass.
+
+### D46 — Offline is a wait, not an error
+
+"It shows internet issues then you need to press retry." It did, and that was a
+dead end: every screen turned any failure into an error page with a **Try
+again** button, so a phone that lost signal for four seconds needed a tap to
+come back, and someone watching a sleeping free-tier dyno wake up had no way to
+know whether tapping would help.
+
+The distinction that was missing: a 403 will still be a 403 in ten seconds, but
+a train going into a tunnel will not. `ApiException.isOffline` marks the failures
+that fix themselves, and two things use it.
+
+`ApiClient` retries reads by itself — twice, at 700ms and 1600ms, re-probing the
+host in between. **Reads only.** A network failure means we never learned whether
+the request arrived, so replaying a POST could accept an answer twice or claim a
+challenge twice; `retry` is set by `get` and nothing else.
+
+Past that, `ErrorState(offline: true)` renders as `ReconnectingState` — a
+spinner saying "Waiting for a connection…", retrying every five seconds. Capped
+at six attempts, because design-system.md's rule is that nothing repeats forever
+and an app retrying in someone's pocket all afternoon is what that rule is for.
+After the cap it says "Still offline" and offers the button, which by then
+genuinely means something. The home screen's banner does the same thing in
+miniature, keeping the tiles it already has on screen.

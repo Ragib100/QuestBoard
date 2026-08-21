@@ -22,6 +22,11 @@ class _UserManagementState extends State<UserManagement> {
 
   bool _loading = true;
   String? _error;
+
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
   String _search = '';
   String? _busyId;
 
@@ -51,7 +56,13 @@ class _UserManagementState extends State<UserManagement> {
         _loading = false;
       });
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -140,7 +151,7 @@ class _UserManagementState extends State<UserManagement> {
     if (_loading) {
       return ListSkeleton(count: 6, item: NotificationRowSkeleton.new);
     }
-    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load, offline: _offline);
     if (_users.isEmpty) {
       return EmptyState(
         icon: Icons.person_search_outlined,

@@ -36,6 +36,11 @@ class _QuestionDetailState extends State<QuestionDetail> {
   bool _submitting = false;
   String? _error;
 
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
+
   /// Null until the status call answers; the hint button stays hidden until
   /// then rather than promising something the server may not offer.
   HintStatus? _hintStatus;
@@ -86,7 +91,13 @@ class _QuestionDetailState extends State<QuestionDetail> {
       final quest = await QuestService.instance.get(widget.questId);
       if (mounted) setState(() => (_quest = quest, _loading = false));
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -317,7 +328,7 @@ class _QuestionDetailState extends State<QuestionDetail> {
       body: _loading
           ? const QuestDetailSkeleton()
           : _error != null
-              ? ErrorState(message: _error!, onRetry: _load)
+              ? ErrorState(message: _error!, onRetry: _load, offline: _offline)
               : _content(),
       bottomSheet: (_quest == null || _quest!.isSolved || _isAuthor)
           ? null

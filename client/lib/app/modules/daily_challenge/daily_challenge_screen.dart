@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_time.dart';
 import '../../../core/codeforces_web.dart';
+import '../../../core/motion.dart';
 import '../../../core/widgets/async_states.dart';
 import '../../../core/widgets/reward_burst.dart';
 import '../../../core/widgets/code_composer.dart';
@@ -15,6 +16,7 @@ import '../../../services/api/api_client.dart';
 import '../../../services/common/challenge_service.dart';
 import '../profile/codeforces_verify.dart';
 import 'past_challenges_screen.dart';
+import 'problem_statement_screen.dart';
 import '../../../core/widgets/app_snack.dart';
 
 /// One Codeforces problem a day, worth bonus points — and the same screen for
@@ -53,7 +55,15 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   bool _loading = true;
   bool _claiming = false;
   bool _savingCode = false;
+
+  /// True while [_awaitVerdict] is polling Codeforces after an in-app submit.
+  bool _verdictPending = false;
   String? _error;
+
+  /// True when [_error] came from never reaching the server, rather than from
+  /// the server saying no. Only the first kind is worth waiting through, and
+  /// [ErrorState] draws that one as a spinner that retries itself.
+  bool _offline = false;
 
   @override
   void initState() {
@@ -89,7 +99,11 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
         _tell(e.message);
         return;
       }
-      setState(() => (_error = e.message, _loading = false));
+      setState(() => (
+            _error = e.message,
+            _offline = e.isOffline,
+            _loading = false
+          ));
     }
   }
 
@@ -194,24 +208,82 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     }
   }
 
+  /// Waits for the Codeforces verdict after an in-app submit.
+  ///
+  /// A submission sits "In queue" / "Running" for a few seconds, so claiming
+  /// the instant the form posts would almost always report "no accepted
+  /// verdict yet" for a solve that is about to pass. This polls instead — a
+  /// handful of times, a few seconds apart, and it stops the moment the answer
+  /// arrives or the screen goes away.
+  Future<void> _awaitVerdict() async {
+    const attempts = 5;
+    const gap = Duration(seconds: 4);
+
+    setState(() => _verdictPending = true);
+    try {
+      for (var i = 0; i < attempts; i++) {
+        await Future<void>.delayed(gap);
+        if (!mounted) return;
+        if (await _claimQuietly()) return;
+      }
+      _tell(
+        'Submitted. Codeforces has not returned a verdict yet — pull to '
+        'refresh, or tap Claim once it lands.',
+        tone: SnackTone.neutral,
+      );
+    } finally {
+      if (mounted) setState(() => _verdictPending = false);
+    }
+  }
+
+  /// One claim attempt that says whether it worked instead of announcing it.
+  Future<bool> _claimQuietly() async {
+    final today = _today;
+    if (today == null) return false;
+    try {
+      final attempt = await ChallengeService.instance
+          .claim(today.challenge.id, submission: _submission);
+      if (!mounted) return true;
+      showRewardBurst(
+        context,
+        message: 'Challenge solved',
+        detail: '+${attempt.awardedPoints} points',
+      );
+      await _load(silent: true);
+      return true;
+    } on ApiException {
+      // Still queued, or genuinely not accepted. Either way the loop decides.
+      return false;
+    }
+  }
+
   Widget _claimBar() => ChallengeActionBar(
         today: _today!,
-        claiming: _claiming,
+        claiming: _claiming || _verdictPending,
         onClaim: _claim,
         onVerify: _verify,
         onOpenProblem: _openProblem,
         onSubmitOnCodeforces: _submitOnCodeforces,
+        waitingForVerdict: _verdictPending,
       );
 
-  /// Opens the problem statement, in the app where the platform allows it.
+  /// Opens the real problem statement, rendered inside QuestBoard.
+  ///
+  /// Not the Codeforces page any more: the statement is scraped, cached and
+  /// re-styled to match the app (decisions.md D45). The Codeforces page is one
+  /// tap further in, from that screen's app bar.
   Future<void> _openProblem() async {
-    final url = _today?.challenge.sourceUrl;
-    if (url == null) {
-      _tell('This challenge has no problem link.');
-      return;
-    }
-    if (!mounted) return;
-    await openCodeforces(context, url, title: _today?.challenge.title ?? 'Problem');
+    final today = _today;
+    if (today == null) return;
+
+    await Navigator.push(
+      context,
+      appRoute((_) => ProblemStatementScreen(
+            challengeId: today.challenge.id,
+            title: today.challenge.title,
+            fallbackBody: today.challenge.body,
+          )),
+    );
   }
 
   /// Opens Codeforces' submit form for this problem, with the code from the
@@ -229,23 +301,37 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       return;
     }
 
-    final code = _submission.hasCode
-        ? _submission.codeBody
-        : today.myAttempt?.submission.codeBody;
+    // Whatever is in the editor wins over what was last saved: the point of
+    // the button is to submit what you are looking at.
+    final live = _submission.hasCode ? _submission : today.myAttempt?.submission;
+    final code = live?.codeBody ?? '';
 
+    if (code.trim().isEmpty) {
+      _tell('Write your solution first — there is nothing to submit yet.');
+      return;
+    }
     if (!mounted) return;
-    final outcome = await openCodeforces(
-      context,
-      url,
-      title: 'Submit — ${today.challenge.title}',
-      prefillCode: code,
-    );
 
-    // Only after the in-app page closes do we know the user has finished with
-    // it. Handing off to a browser returns the instant it launches, and
-    // claiming then would check for a verdict they have not made yet.
-    if (outcome != CodeforcesOpen.embedded || !mounted) return;
-    await _claim(auto: true);
+    final outcome = await submitToCodeforces(
+      context,
+      url: url,
+      code: code,
+      language: live?.codeLanguage,
+      title: 'Submit — ${today.challenge.title}',
+    );
+    if (!mounted) return;
+
+    switch (outcome) {
+      case CodeforcesSubmit.submitted:
+        // Codeforces has it. The verdict is seconds behind, so this waits for
+        // it rather than making the user come back and press Claim.
+        await _awaitVerdict();
+      case CodeforcesSubmit.needsUser:
+      case CodeforcesSubmit.incomplete:
+        // They closed it, or finished the form by hand and we cannot tell.
+        // Checking once is cheap and is right more often than not.
+        await _claim(auto: true);
+    }
   }
 
   @override
@@ -291,7 +377,8 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       body: _loading
           ? const LoadingState()
           : _error != null
-              ? ErrorState(message: _error!, onRetry: _load)
+              ? ErrorState(
+                  message: _error!, onRetry: _load, offline: _offline)
               : RefreshIndicator(
                   // The spinner is the feedback; blanking the screen behind it
                   // as well would be two loading states for one refresh.
@@ -311,6 +398,7 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                     onSubmissionChanged: (value) => _submission = value,
                     onSubmitCode: _submitCode,
                     savingCode: _savingCode,
+                    onOpenProblem: _openProblem,
                   ),
                 ),
     );
@@ -335,6 +423,7 @@ class DailyChallengeView extends StatelessWidget {
     this.onSubmissionChanged,
     this.onSubmitCode,
     this.savingCode = false,
+    this.onOpenProblem,
   });
 
   final TodayChallenge today;
@@ -357,6 +446,9 @@ class DailyChallengeView extends StatelessWidget {
   /// Saves the code on its own, with no Codeforces check. Null in tests.
   final Future<void> Function(CodeSubmission)? onSubmitCode;
   final bool savingCode;
+
+  /// Opens the statement. Null in tests, where the row renders disabled.
+  final VoidCallback? onOpenProblem;
 
   @override
   Widget build(BuildContext context) {
@@ -407,12 +499,8 @@ class DailyChallengeView extends StatelessWidget {
             SelectableText(c.body,
                 style: const TextStyle(
                     color: AppColors.textSecondary, fontSize: 15, height: 1.6)),
-            if (c.sourceUrl != null) ...[
-              const SizedBox(height: 16),
-              ExternalLink(
-                  url: c.sourceUrl!,
-                  label: 'Read the statement on Codeforces'),
-            ],
+            const SizedBox(height: 16),
+            _StatementLink(title: c.title, onOpen: onOpenProblem),
             // Above the fold when this is a tab: without an app bar the
             // history icon is gone, and the link at the foot of the solver
             // list is a long scroll away.
@@ -824,6 +912,63 @@ class DailyChallengeView extends StatelessWidget {
   }
 }
 
+/// The way into the problem statement.
+///
+/// It used to be a box of raw URL text with a copy button — a whole line of
+/// `https://codeforces.com/problemset/problem/1873/D` spent on something nobody
+/// reads — and then a link that opened Codeforces itself. The statement is
+/// rendered inside the app now (D45), so this is a row that says what it opens.
+class _StatementLink extends StatelessWidget {
+  const _StatementLink({required this.title, this.onOpen});
+
+  final String title;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.subtleFill,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              const Icon(Icons.menu_book_rounded,
+                  size: 20, color: AppColors.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Read the full problem',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary)),
+                    Text('Statement, limits and examples — here in the app',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 20, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A Codeforces link: tap the row to open it in the app, or the icon to copy.
 ///
 /// It used to be a box of raw URL text with a copy button, on the grounds that
@@ -928,6 +1073,7 @@ class ChallengeActionBar extends StatelessWidget {
     this.onVerify,
     this.onOpenProblem,
     this.onSubmitOnCodeforces,
+    this.waitingForVerdict = false,
   });
 
   final TodayChallenge today;
@@ -939,6 +1085,10 @@ class ChallengeActionBar extends StatelessWidget {
   /// Opens Codeforces' submit form in the app. Null in tests and on the
   /// archive's detail view.
   final VoidCallback? onSubmitOnCodeforces;
+
+  /// True while the app is polling Codeforces for the verdict of a submission
+  /// it just made. The bar says what it is waiting for rather than going inert.
+  final bool waitingForVerdict;
 
   @override
   Widget build(BuildContext context) {
@@ -1003,8 +1153,12 @@ class ChallengeActionBar extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8)),
             // Half a 360px screen minus padding does not fit much at the
             // default button size, and the label wrapped onto two lines.
-            child: Text(claiming ? 'Checking…' : 'Claim',
-                maxLines: 1, style: const TextStyle(fontSize: 13)),
+            child: Text(
+                waitingForVerdict
+                    ? 'Waiting…'
+                    : (claiming ? 'Checking…' : 'Claim'),
+                maxLines: 1,
+                style: const TextStyle(fontSize: 13)),
           ),
         ),
         const SizedBox(width: 10),

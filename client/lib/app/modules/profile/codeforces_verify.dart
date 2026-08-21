@@ -28,6 +28,11 @@ class _CodeforcesVerifyState extends State<CodeforcesVerify> {
   bool _checking = false;
   String? _error;
 
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
+
   @override
   void initState() {
     super.initState();
@@ -43,7 +48,13 @@ class _CodeforcesVerifyState extends State<CodeforcesVerify> {
       final task = await ChallengeService.instance.verificationChallenge();
       if (mounted) setState(() => (_task = task, _loading = false));
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -114,7 +125,7 @@ class _CodeforcesVerifyState extends State<CodeforcesVerify> {
       body: _loading
           ? const LoadingState()
           : _error != null
-              ? ErrorState(message: _error!, onRetry: _load)
+              ? ErrorState(message: _error!, onRetry: _load, offline: _offline)
               : CodeforcesInstructions(
                   task: _task!,
                   checking: _checking,

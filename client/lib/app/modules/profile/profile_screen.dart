@@ -37,6 +37,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loading = true;
   String? _error;
 
+  /// True when [_error] came from never reaching the server, rather
+  /// than from the server saying no. Only the first kind is worth
+  /// waiting through, and [ErrorState] draws it as a spinner.
+  bool _offline = false;
+
   bool get _isMe =>
       widget.userId == null ||
       widget.userId == Supabase.instance.client.auth.currentUser?.id;
@@ -74,7 +79,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _loading = false;
       });
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (mounted) {
+        setState(() => (
+              _error = e.message,
+              _offline = e.isOffline,
+              _loading = false
+            ));
+      }
     }
   }
 
@@ -103,7 +114,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: _loading
           ? const ProfileSkeleton()
           : _error != null
-              ? ErrorState(message: _error!, onRetry: _load)
+              ? ErrorState(message: _error!, onRetry: _load, offline: _offline)
               : _content(isWeb),
     );
   }

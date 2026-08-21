@@ -11,7 +11,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core import clock
 from app.db.base import Base
@@ -80,6 +80,20 @@ class DailyChallenge(Base):
     source_url = Column(Text)
     bonus_points = Column(Integer, nullable=False, server_default=str(CHALLENGE_BONUS))
     challenge_date = Column(Date, nullable=False, unique=True)
+
+    # The real problem statement, scraped once and kept.
+    #
+    # Codeforces has no statement API, so the only source is the problem page,
+    # and that page is behind Cloudflare — which means a fetch can fail at any
+    # time for reasons that have nothing to do with us. Statements never change,
+    # so one that arrives is worth keeping forever: this column is what stops
+    # every reader re-rolling the Cloudflare dice. Null means "not fetched, or
+    # the fetch failed", and the screen falls back to `body` (D45).
+    #
+    # `{html, time_limit, memory_limit, samples: [{input, output}]}`.
+    statement = Column(JSONB)
+    statement_fetched_at = Column(DateTime(timezone=True))
+
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

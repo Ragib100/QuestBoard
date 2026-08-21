@@ -99,6 +99,7 @@ mean a second fetch to render an answer.
 | ✅ | `GET /challenges/{id}` | Public. One challenge in the same shape as `/challenges/today`, so a past challenge reuses the whole screen. `404` if it does not exist. |
 | ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem **dated on or after the challenge's own day (00:00 Asia/Dhaka)**, then awards `award_points` — `bonus_points` decayed by the challenge's age, never `bonus_points` itself for an old one. Optional body `{ code_body?, code_language?, attachment_url?, attachment_name? }` stores the solution on the attempt. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt — with the code, so nothing typed is lost. |
 | ✅ | `PUT /challenges/{id}/submission` | Saves the solution written or uploaded in the app onto the caller's attempt **without touching Codeforces**. Body `{ code_body?, code_language?, attachment_url?, attachment_name? }` — an omitted field is left alone, an empty string clears it. Creates the attempt row if there is not one yet, and works before the problem is solved, after it is solved, and without a verified handle: keeping your code is not the same act as claiming the bonus, and requiring a Codeforces verdict to save a draft meant there was no way to submit code at all. Returns the updated `my_attempt`. `404` if the challenge does not exist. |
+| ✅ | `GET /challenges/{id}/statement` | Public. The **real** Codeforces statement, scraped from the problem page once and cached on the row forever. `{ available, html, time_limit, memory_limit, samples[{input,output}], source_url, submit_url }`. `html` is sanitised server-side — no scripts, frames or event handlers, every URL absolute — because the client renders it in a WebView with a channel open to the app. `available: false` (a **200**, not a 502) when Codeforces refuses us: their API has no statement method, so the only source is the page, and it sits behind Cloudflare. A refusal is never cached. `404` if the challenge does not exist. |
 | ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. Each row carries the `awarded_points` that solver actually received, which differs between a same-day solve and a late one. |
 | ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. Returns `problem_url` and `submit_url`. `400` without a handle on the profile. |
 | ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
@@ -127,12 +128,22 @@ problem statement — the public API exposes problem *metadata* (name, rating,
 tags) and submission *verdicts*, nothing more. So QuestBoard never posts to
 Codeforces. It serves `source_url` and `submit_url`, the client hosts those two
 Codeforces pages in an in-app WebView, and the user submits on Codeforces' own
-form under their own session. The verdict then comes back the way it always
-has, through `user.status` on `POST /challenges/{id}/solve`.
+form under their own session — prefilled from the in-app editor, with the
+compiler chosen by matching Codeforces' own option labels. The verdict comes
+back the way it always has, through `user.status` on
+`POST /challenges/{id}/solve`. See [decisions.md](decisions.md) D43.
 
-That is also why the daily challenge's `body` is a generated summary rather than
-the real statement: we do not have the statement, and inventing one would be
-worse than saying so. See [decisions.md](decisions.md) D43.
+The **statement** is a scrape, not an API read, and is the one place this app
+parses someone else's HTML. `GET /challenges/{id}/statement` fetches the problem
+page once, lifts `div.problem-statement` out of it, strips anything executable,
+absolutises every URL, and stores the result on `daily_challenges.statement`
+(jsonb). Statements never change, so a success is kept forever and a failure is
+never cached — Cloudflare lets the next caller through often enough that one
+refusal must not become a permanent "no statement" (D45).
+
+A challenge's `body` remains a generated summary. It is the fallback the screen
+shows when `available` is false, and it is deliberately not an attempt at the
+statement itself.
 
 ### Challenge point decay
 
