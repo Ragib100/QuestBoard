@@ -764,3 +764,43 @@ See [decisions.md](docs/decisions.md) D45–D46.
       that retries every 5s, capped at 6 attempts, then offers the button. The
       home banner does the same while keeping its tiles on screen
 - [x] Threaded through all 12 screens that had the old error page
+
+## Round six: the false alarm, the honest button, and one action at a time ✅
+
+### "Always showing that Codeforces is unreachable"
+
+- [x] **The false one.** `is_today` is false both when the server fell back and
+      when you opened an archived challenge on purpose. The screen showed the
+      "Codeforces is unreachable" banner for both, so every archive row carried
+      it permanently. `DailyChallengeView.askedForToday` separates them
+- [x] **The true one.** `GET /challenges/{id}/statement` succeeds locally and
+      fails on Render for every uncached problem — Cloudflare reads a datacenter
+      IP as a robot. Verified against the deployed API, not assumed
+- [x] The phone is the way through: on Android/iOS a refused statement now falls
+      back to loading Codeforces' own page in the WebView, stripped to
+      `div.problem-statement` and restyled with **the same** `statementCss` the
+      cached path uses. Their MathJax survives the move; the limits row is
+      rebuilt so both paths look identical (D47)
+- [x] That WebView opens **no** JavaScript channel — it is codeforces.com running
+      its own scripts. Pinned by a test
+- [x] Verified by running the real reader script against a live Codeforces page
+      in a browser, since `webview_flutter` has no Linux build
+
+### "Why does the save button work as a save button?"
+
+- [x] It said **Submit code** and only saved. It says `Save solution` /
+      `Update saved solution` now, with a save icon, and the surrounding copy
+      says which button reaches the judge (D48)
+
+### "I don't like the way submitting works"
+
+- [x] The bar was Claim and Submit side by side at half a phone width, equally
+      weighted, plus a third submit-ish button in the editor. It is one
+      full-width primary action per stage now — `Submit to Codeforces` →
+      `Check verdict` — with the other as a quiet link beneath
+- [x] Nothing written yet: the primary button is disabled and says why, instead
+      of failing when pressed
+- [x] **Submitting saves the code first.** It used to store nothing until a claim
+      succeeded, so a submission whose verdict never landed left the attempt empty
+- [x] The verdict poll has a determinate progress bar (`2 of 6`) and a **Stop**.
+      Six checks, four seconds apart

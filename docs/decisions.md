@@ -756,3 +756,67 @@ and an app retrying in someone's pocket all afternoon is what that rule is for.
 After the cap it says "Still offline" and offers the button, which by then
 genuinely means something. The home screen's banner does the same thing in
 miniature, keeping the tiles it already has on screen.
+
+### D47 — The phone is a better scraper than the server
+
+"Always showing that Codeforces is unreachable." Two separate things were saying
+it, and only one of them was even true.
+
+The false one: `is_today` is false for two unrelated reasons — the server fell
+back because Codeforces was down (D45), or you opened a challenge from the
+archive on purpose. The screen treated both as the first, so every archived
+challenge, permanently, carried a banner claiming Codeforces was unreachable
+while showing a challenge that had loaded fine. The screen knows which question
+it asked, so `DailyChallengeView.askedForToday` is what the banner keys off now.
+
+The true one: `GET /challenges/{id}/statement` really does fail in production.
+Locally it succeeds every time; on Render it fails for every problem not already
+cached. The difference is the IP. Cloudflare reads a datacenter address as a
+robot and a residential one as a person, and Render's outbound address is about
+as datacenter as an address gets. D45 predicted this and built the cache and the
+honest fallback for it. What D45 did not do was notice that we already ship the
+thing that gets through: a phone, on mobile data or home wifi, running a real
+browser engine.
+
+So the statement now has two paths. The server's cached scrape stays primary —
+it is faster, it is sanitised, and when it works it works for everyone at once.
+When it comes back `available: false`, the WebView loads Codeforces' own page and
+`statementReaderScript` strips it down to `div.problem-statement`, drops their
+stylesheets, and applies `statementCss` — the *same* stylesheet the cached path
+uses, shared rather than copied so the fallback cannot start looking like
+somebody else's website. Their MathJax has already typeset by then, and moving a
+node does not untypeset it; the script re-queues `MathJax.Hub` anyway in case it
+had not finished. The rebuilt limits row is what keeps the two paths visually
+identical after the header comes off.
+
+**No JavaScript channel on that WebView.** The cached path opens `QBCopy` for
+the sample copy buttons and can afford to, because the server sanitised that HTML
+first. The live path is codeforces.com running its own scripts in its own origin;
+handing it a bridge into the app would give a third party exactly what the
+sanitiser exists to prevent. The cost is that samples there are selected by hand,
+which is a fair price and is pinned by a test.
+
+Desktop keeps the D45 behaviour — no WebView, so no live path, and the stripped
+text fallback stands. This is a phone app.
+
+### D48 — One action at a time on the challenge bar
+
+"Why does the save button work as a save button?" Because it was labelled
+"Submit code" and only saved. Three buttons on that screen had submit-ish names:
+**Submit code** in the editor (wrote to `PUT /submission`, touched no judge),
+**Submit** in the bottom bar (opened Codeforces' form), and **Claim** beside it
+(checked the verdict and paid). Two of them sat side by side at half a phone
+width, equally weighted, so nothing said which one you were supposed to press.
+
+What is actually true is that this is a sequence, not a menu: write it, send it
+to the judge, collect the verdict. The bar shows the step you are on as one
+full-width primary button and keeps the other as a quiet link under it —
+`Submit to Codeforces` → `Check verdict`, with "Already solved it? Claim" for
+people who solved it on the Codeforces site and never pressed submit. The editor
+button says `Save solution`, because that is what it does.
+
+Two things changed underneath the labels. Submitting now saves the code first:
+it used to store nothing until a claim succeeded, so a submission whose verdict
+never landed left the attempt empty. And the verdict poll got a determinate
+progress bar and a **Stop** — half a minute behind an indeterminate spinner is
+indistinguishable from a hang, and a wait with no way out is a trap.

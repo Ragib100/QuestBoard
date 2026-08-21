@@ -22,7 +22,8 @@ class CodeComposer extends StatefulWidget {
     this.enabled = true,
     this.label = 'Add code',
     this.onSubmit,
-    this.submitLabel = 'Submit code',
+    this.submitLabel = 'Save code',
+    this.submitIcon = Icons.save_outlined,
     this.submitting = false,
     this.startOpen = false,
   });
@@ -43,7 +44,14 @@ class CodeComposer extends StatefulWidget {
   /// that saves the code is "Claim", which refuses unless Codeforces already
   /// shows an accepted verdict.
   final Future<void> Function(CodeSubmission)? onSubmit;
+
+  /// What that button says. It must describe what it *does*: this one writes
+  /// the code to the attempt and nothing else, so on the challenge screen it
+  /// says "Save", not "Submit". It said "Submit code" for a while, next to a
+  /// second button that submitted to Codeforces for real, and the two were
+  /// indistinguishable.
   final String submitLabel;
+  final IconData submitIcon;
   final bool submitting;
 
   /// Draws the editor already expanded.
@@ -268,7 +276,7 @@ class _CodeComposerState extends State<CodeComposer> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : const Icon(Icons.upload_rounded, size: 18),
+                    : Icon(widget.submitIcon, size: 18),
                 label: Text(widget.submitting ? 'Saving…' : widget.submitLabel),
               ),
             ),
