@@ -6,7 +6,7 @@ import '../../../core/widgets/async_states.dart';
 import '../../../models/challenge.dart';
 import '../../../services/api/api_client.dart';
 import '../../../services/common/challenge_service.dart';
-import '../daily_challenge/daily_challenge_screen.dart' show CopyableUrl;
+import '../daily_challenge/daily_challenge_screen.dart' show ExternalLink;
 import '../../../core/widgets/app_snack.dart';
 
 /// Proves the Codeforces handle on a profile belongs to the person holding it.
@@ -136,7 +136,9 @@ class CodeforcesInstructions extends StatelessWidget {
               _step(4,
                   'Come back within ${task.windowMinutes} minutes and tap Check.'),
               const SizedBox(height: 16),
-              CopyableUrl(url: task.problemUrl),
+              ExternalLink(
+                  url: task.problemUrl,
+                  label: 'Open problem ${task.codeforcesId}'),
               const SizedBox(height: 28),
               ElevatedButton(
                 onPressed: checking ? null : onCheck,

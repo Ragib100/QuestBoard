@@ -15,6 +15,7 @@ from app.schemas.challenge import (
     SolveRequest,
     TodayResponse,
 )
+from app.schemas.code import CodeSubmission
 from app.schemas.user import UserSummary
 from app.services.challenge_service import ChallengeService
 from app.utils.serialize import challenge_view
@@ -153,6 +154,25 @@ def solve(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+
+@router.put("/{challenge_id}/submission", response_model=AttemptResponse)
+def save_submission(
+    challenge_id: UUID,
+    data: CodeSubmission = Body(default_factory=CodeSubmission),
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Stores the caller's code on their attempt. Codeforces is never called.
+
+    Separate from `/solve` because saving your work and claiming the bonus are
+    separate acts. `/solve` refuses without an accepted verdict upstream, so
+    when it was the only writer there was no way to submit code before solving.
+    """
+    try:
+        return ChallengeService.save_submission(db, challenge_id, user_id, data)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.get("/{challenge_id}/leaderboard", response_model=list[ChallengeSolver])

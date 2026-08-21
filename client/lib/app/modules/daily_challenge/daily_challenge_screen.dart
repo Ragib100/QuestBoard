@@ -52,6 +52,7 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   CodeSubmission _submission = CodeSubmission.empty;
   bool _loading = true;
   bool _claiming = false;
+  bool _savingCode = false;
   String? _error;
 
   @override
@@ -60,21 +61,35 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  /// Fetches the challenge. [silent] keeps whatever is already on screen
+  /// instead of blanking it to a spinner, and reports a failure as a snackbar
+  /// rather than an error page.
+  ///
+  /// Every refresh that follows a *successful* write is silent: a claim that
+  /// paid out, or code that saved, must not end up looking like it failed
+  /// because the read after it timed out.
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final id = widget.challengeId;
       final today = id == null
           ? await ChallengeService.instance.today()
           : await ChallengeService.instance.detail(id);
       if (!mounted) return;
-      setState(() => (_today = today, _loading = false));
+      setState(() => (_today = today, _loading = false, _error = null));
       await _loadSolvers(today.challenge.id);
     } on ApiException catch (e) {
-      if (mounted) setState(() => (_error = e.message, _loading = false));
+      if (!mounted) return;
+      if (silent) {
+        _tell(e.message);
+        return;
+      }
+      setState(() => (_error = e.message, _loading = false));
     }
   }
 
@@ -129,11 +144,41 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
           detail: '+${attempt.awardedPoints} points',
         );
       }
-      await _load();
+      // Silent: the burst is on screen and the balance has already changed
+      // server-side. A spinner over the top of it, or an error page if this
+      // read fails, would both misreport a claim that worked.
+      await _load(silent: true);
     } on ApiException catch (e) {
       _tell(e.message);
     } finally {
       if (mounted) setState(() => _claiming = false);
+    }
+  }
+
+  /// Saves the code without touching Codeforces.
+  ///
+  /// Distinct from [_claim] on purpose: claiming refuses unless Codeforces
+  /// already shows an accepted verdict, so before this existed there was no
+  /// button that submitted code at all.
+  Future<void> _submitCode(CodeSubmission submission) async {
+    final today = _today;
+    if (today == null) return;
+
+    setState(() => _savingCode = true);
+    try {
+      final attempt = await ChallengeService.instance
+          .saveSubmission(today.challenge.id, submission);
+      _submission = submission;
+      if (!mounted) return;
+      // Patched in from the response instead of re-reading the screen. A
+      // reload rebuilds the editor from the server mid-edit, and a reload that
+      // fails would replace a save that worked with an error page.
+      setState(() => _today = today.withAttempt(attempt));
+      showAppSnack(context, 'Solution saved.', tone: SnackTone.success);
+    } on ApiException catch (e) {
+      _tell(e.message);
+    } finally {
+      if (mounted) setState(() => _savingCode = false);
     }
   }
 
@@ -187,7 +232,13 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       // off the bottom of a phone and behind the tab bar. It was reported as
       // "there is no submit button", which is exactly what it looked like.
       // It is pinned now, the way the answer composer is on a quest.
-      bottomSheet: _loading || _error != null || _today == null
+      //
+      // bottomNavigationBar, not bottomSheet: a sheet is drawn *over* the body,
+      // which is why this screen used to carry 140px of guessed bottom padding
+      // and still hid the last solver row whenever the bar wrapped to two
+      // lines. Scaffold reserves real space for a nav bar, and moves it above
+      // the keyboard instead of parking it on top of the code editor.
+      bottomNavigationBar: _loading || _error != null || _today == null
           ? null
           : _claimBar(),
       body: _loading
@@ -195,7 +246,9 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
           : _error != null
               ? ErrorState(message: _error!, onRetry: _load)
               : RefreshIndicator(
-                  onRefresh: _load,
+                  // The spinner is the feedback; blanking the screen behind it
+                  // as well would be two loading states for one refresh.
+                  onRefresh: () => _load(silent: true),
                   child: DailyChallengeView(
                     today: _today!,
                     solvers: _solvers,
@@ -209,6 +262,8 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                         : null,
                     showArchiveLink: widget.embedded,
                     onSubmissionChanged: (value) => _submission = value,
+                    onSubmitCode: _submitCode,
+                    savingCode: _savingCode,
                   ),
                 ),
     );
@@ -231,6 +286,8 @@ class DailyChallengeView extends StatelessWidget {
     this.onOpenArchive,
     this.showArchiveLink = false,
     this.onSubmissionChanged,
+    this.onSubmitCode,
+    this.savingCode = false,
   });
 
   final TodayChallenge today;
@@ -250,6 +307,10 @@ class DailyChallengeView extends StatelessWidget {
   /// is not offered.
   final ValueChanged<CodeSubmission>? onSubmissionChanged;
 
+  /// Saves the code on its own, with no Codeforces check. Null in tests.
+  final Future<void> Function(CodeSubmission)? onSubmitCode;
+  final bool savingCode;
+
   @override
   Widget build(BuildContext context) {
     final c = today.challenge;
@@ -257,11 +318,14 @@ class DailyChallengeView extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: ListView(
-          // The bottom inset clears the pinned claim bar, which would
-          // otherwise sit on top of the last solver row.
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
           children: [
             if (!today.isToday) _staleBanner(),
+            // Grouped with the stale banner rather than buried next to the
+            // editor: it explains why the pinned button at the foot of the
+            // screen says "Verify Codeforces handle" instead of "Claim", and
+            // that is the first question this screen raises.
+            if (!today.isSolved && !today.codeforcesVerified) _verifyBanner(),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -298,7 +362,9 @@ class DailyChallengeView extends StatelessWidget {
                     color: AppColors.textSecondary, fontSize: 15, height: 1.6)),
             if (c.sourceUrl != null) ...[
               const SizedBox(height: 16),
-              CopyableUrl(url: c.sourceUrl!),
+              ExternalLink(
+                  url: c.sourceUrl!,
+                  label: 'Read the statement on Codeforces'),
             ],
             // Above the fold when this is a tab: without an app bar the
             // history icon is gone, and the link at the foot of the solver
@@ -386,62 +452,152 @@ class DailyChallengeView extends StatelessWidget {
     );
   }
 
-  /// What the body says about claiming. The *action* itself is pinned to the
-  /// bottom of the screen by [_DailyChallengeScreenState._claimBar] — this is
-  /// the explanation that goes with it, and it must never duplicate the button
-  /// or there are two of them and neither looks primary.
+  /// What the body says about claiming, plus the editor that stores your code.
+  ///
+  /// The *claim* action itself is pinned to the bottom of the screen by
+  /// [_DailyChallengeScreenState._claimBar] — this is the explanation that
+  /// goes with it, and it must never duplicate that button or there are two of
+  /// them and neither looks primary.
+  ///
+  /// The editor is offered whether or not the handle is verified. Verifying
+  /// gates *claiming*, because only Codeforces can say a problem was solved;
+  /// it has nothing to do with keeping a copy of your work, and
+  /// `PUT /challenges/{id}/submission` does not ask for it. Hiding the editor
+  /// behind it meant a new user's first sight of this screen had no submit
+  /// button anywhere on it (decisions.md D40).
   Widget _action() {
     final attempt = today.myAttempt;
+    final submitted = attempt != null && !attempt.submission.isEmpty
+        ? attempt.submission
+        : null;
 
     if (today.isSolved) {
+      final saved = attempt == null ? const <Widget>[] : _savedSolution(attempt);
+      if (saved.isEmpty) {
+        return const Text(
+          'Solved. You did not attach a solution to this one.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        );
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (attempt != null) ..._savedSolution(attempt),
-        ],
+        children: saved,
       );
     }
 
-    if (!today.codeforcesVerified) {
-      return const Text(
-        'Claiming checks your public Codeforces submissions, so we need to '
-        'know which account is yours first.',
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-      );
-    }
-
+    // Editor first, rules second. They used to be the other way round, which
+    // put a three-step explainer and a warning panel between the problem and
+    // the only thing on the screen you can actually do — about a screen and a
+    // half of scrolling on a phone before the submit button appeared.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _howItWorks(),
         if (onSubmissionChanged != null) ...[
-          const SizedBox(height: 16),
-          const Text('Your solution (optional)',
+          const Text('Your solution',
               style: TextStyle(
                   fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           const SizedBox(height: 4),
-          const Text(
-            'Keep a copy of your code here. It is saved with your attempt — it '
-            'is not sent to Codeforces and it is not what earns the points.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          Text(
+            today.codeforcesVerified
+                ? 'Write or upload your code and submit it — it is saved '
+                    'against this challenge straight away. The bonus is still '
+                    'paid on the Codeforces verdict, so claim it once you have '
+                    'submitted there.'
+                : 'Write or upload your code and submit it — it is saved '
+                    'against this challenge straight away. Verifying your '
+                    'handle is only needed to claim the bonus, not for this.',
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 8),
+          if (submitted != null) ...[
+            _submittedNote(submitted),
+            const SizedBox(height: 8),
+          ],
           CodeComposer(
+            // Keyed on the challenge, because the composer holds the typed
+            // text in its own controller: without this, opening a second
+            // archived challenge reuses the element and shows the first one's
+            // code as if it were yours on this problem.
+            key: ValueKey('solution-${today.challenge.id}'),
             label: 'Write or upload your code',
-            enabled: !claiming,
+            enabled: !claiming && !savingCode,
             initial: attempt?.submission ?? CodeSubmission.empty,
             onChanged: onSubmissionChanged!,
+            onSubmit: onSubmitCode,
+            submitLabel: 'Submit code',
+            submitting: savingCode,
+            startOpen: true,
           ),
+          const SizedBox(height: 24),
         ],
-        if (attempt != null && !attempt.isSolved) ...[
-          const SizedBox(height: 12),
-          const Text(
-            'Your last claim did not find an accepted verdict. Anything you '
-            'wrote above was kept.',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
-        ],
+        _howItWorks(),
       ],
+    );
+  }
+
+  /// Why the pinned button at the foot of the screen says "Verify Codeforces
+  /// handle" rather than "Claim".
+  ///
+  /// It also says what verifying does *not* block, because the editor further
+  /// down works regardless, and an unexplained lock above an enabled submit
+  /// button reads as a broken screen.
+  Widget _verifyBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warningTint,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_outline_rounded,
+              size: 20, color: AppColors.warningDark),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Claiming the bonus checks your public Codeforces submissions, '
+              'so verify which account is yours first. Writing and saving your '
+              'solution here works without it.',
+              style: TextStyle(
+                  color: AppColors.warningDark, fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Confirms that a submission is stored, so "did that save?" has an answer
+  /// on the screen rather than only in a snackbar that has already gone.
+  Widget _submittedNote(CodeSubmission submission) {
+    final parts = <String>[
+      if (submission.hasCode) 'code',
+      if (submission.hasAttachment) submission.attachmentName ?? 'a file',
+    ];
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.successTint,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded,
+              size: 18, color: AppColors.successDark),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Submitted: ${parts.join(' + ')}. Editing and submitting again '
+              'replaces it.',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.successDark),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -509,7 +665,6 @@ class DailyChallengeView extends StatelessWidget {
     if (submission.isEmpty) return const [];
 
     return [
-      const SizedBox(height: 16),
       const Text('Your submission',
           style: TextStyle(
               fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
@@ -622,19 +777,29 @@ class DailyChallengeView extends StatelessWidget {
   }
 }
 
-/// A link the user can select and copy.
+/// An external link: tap the row to open it, or the icon to copy it.
 ///
-/// The app has no browser launcher and one external link is not worth adding
-/// a package for, so QuestBoard shows the URL instead of pretending to open it.
-class CopyableUrl extends StatelessWidget {
-  const CopyableUrl({super.key, required this.url});
+/// It used to be a box of raw URL text with a copy button, on the grounds that
+/// the app had no browser launcher. It has had one since D37, and CLAUDE.md's
+/// rule is that an external URL opens rather than asking to be pasted — a
+/// whole line of `https://codeforces.com/problemset/problem/1873/D` is also
+/// most of a phone's width spent on something nobody reads.
+///
+/// Copy stays as the secondary action: [openLink] falls back to the clipboard
+/// on a device with no browser, and this makes that deliberate too.
+class ExternalLink extends StatelessWidget {
+  const ExternalLink({
+    super.key,
+    required this.url,
+    this.label = 'Open in your browser',
+  });
 
   final String url;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
         color: AppColors.subtleFill,
         borderRadius: BorderRadius.circular(12),
@@ -642,9 +807,45 @@ class CopyableUrl extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: SelectableText(url,
-                style: const TextStyle(
-                    fontSize: 13, color: AppColors.textSecondary)),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
+                final failure = await openLink(url);
+                if (failure != null && context.mounted) {
+                  showAppSnack(context, failure);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.open_in_new_rounded,
+                        size: 18, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary)),
+                          Text(url,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textMuted)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           IconButton(
             tooltip: 'Copy link',
@@ -652,8 +853,7 @@ class CopyableUrl extends StatelessWidget {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: url));
               if (context.mounted) {
-                showAppSnack(context, 'Link copied.',
-                    tone: SnackTone.success);
+                showAppSnack(context, 'Link copied.', tone: SnackTone.success);
               }
             },
           ),
@@ -746,7 +946,12 @@ class ChallengeActionBar extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: claiming ? null : onOpenProblem,
             icon: const Icon(Icons.open_in_new_rounded, size: 18),
-            label: const Text('Open problem'),
+            // Half a 360px screen minus the icon does not fit "Open problem"
+            // at the default button size, and it wrapped onto two lines.
+            label: const Text('Open problem',
+                maxLines: 1, style: TextStyle(fontSize: 13)),
+            style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8)),
           ),
         ),
         const SizedBox(width: 10),

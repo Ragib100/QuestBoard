@@ -21,6 +21,10 @@ class CodeComposer extends StatefulWidget {
     this.initial = CodeSubmission.empty,
     this.enabled = true,
     this.label = 'Add code',
+    this.onSubmit,
+    this.submitLabel = 'Submit code',
+    this.submitting = false,
+    this.startOpen = false,
   });
 
   final ValueChanged<CodeSubmission> onChanged;
@@ -30,6 +34,25 @@ class CodeComposer extends StatefulWidget {
   /// What the collapsed button says. The challenge sheet calls it
   /// "Attach your solution", the answer composer just "Add code".
   final String label;
+
+  /// Draws a primary submit button under the editor when set.
+  ///
+  /// The answer composer leaves this null — it has its own send button, and a
+  /// second one would be ambiguous. The challenge screen sets it, because
+  /// otherwise the editor has no button of its own at all and the only thing
+  /// that saves the code is "Claim", which refuses unless Codeforces already
+  /// shows an accepted verdict.
+  final Future<void> Function(CodeSubmission)? onSubmit;
+  final String submitLabel;
+  final bool submitting;
+
+  /// Draws the editor already expanded.
+  ///
+  /// The answer composer stays collapsed — most answers are prose, and an open
+  /// code pane would push the text field off a phone screen. The challenge
+  /// screen sets this, because there the code *is* the point and a collapsed
+  /// text link reads as "there is no submit button".
+  final bool startOpen;
 
   @override
   State<CodeComposer> createState() => _CodeComposerState();
@@ -53,7 +76,7 @@ class _CodeComposerState extends State<CodeComposer> {
     _attachmentName = widget.initial.attachmentName;
     // Reopened already-populated, so editing an answer that had code does not
     // look like the code was lost.
-    _open = !widget.initial.isEmpty;
+    _open = widget.startOpen || !widget.initial.isEmpty;
     _code.addListener(_emit);
   }
 
@@ -65,13 +88,12 @@ class _CodeComposerState extends State<CodeComposer> {
   }
 
   void _emit() {
-    widget.onChanged(CodeSubmission(
-      // Always sent, even empty: clearing the editor has to clear the column.
-      codeBody: _code.text,
-      codeLanguage: _code.text.trim().isEmpty ? '' : _language,
-      attachmentUrl: _attachmentUrl ?? '',
-      attachmentName: _attachmentName ?? '',
-    ));
+    // Always sent, even empty: clearing the editor has to clear the column.
+    widget.onChanged(_current);
+    // The character counter and the submit button's enabled state both read
+    // the controller, so typing has to rebuild this widget — without it the
+    // counter froze at 0 and the submit button never came out of disabled.
+    if (mounted) setState(() {});
   }
 
   /// Tab moves focus in a Flutter form rather than indenting, so indenting is
@@ -228,10 +250,41 @@ class _CodeComposerState extends State<CodeComposer> {
                 ),
             ],
           ),
+          if (widget.onSubmit != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: widget.enabled &&
+                        !widget.submitting &&
+                        !overLimit &&
+                        !_current.isEmpty
+                    ? () => widget.onSubmit!(_current)
+                    : null,
+                icon: widget.submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.upload_rounded, size: 18),
+                label: Text(widget.submitting ? 'Saving…' : widget.submitLabel),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+
+  /// What the editor currently holds, in the shape the API takes.
+  CodeSubmission get _current => CodeSubmission(
+        codeBody: _code.text,
+        codeLanguage: _code.text.trim().isEmpty ? '' : _language,
+        attachmentUrl: _attachmentUrl ?? '',
+        attachmentName: _attachmentName ?? '',
+      );
 
   Widget _languagePicker() {
     return DropdownButtonHideUnderline(

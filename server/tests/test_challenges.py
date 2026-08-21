@@ -20,6 +20,7 @@ from app.core import clock
 from app.models import DECAY_FLOOR, PointReason, award_for
 from app.schemas.answer import AnswerCreate
 from app.schemas.challenge import SolveRequest
+from app.schemas.code import CodeSubmission
 from app.services import codeforces_service as cf
 from app.services.challenge_service import ChallengeService
 from app.services.user_service import UserService
@@ -146,6 +147,122 @@ def test_the_stored_award_matches_the_ledger_row(
     )
 
     assert rows == [attempt.awarded_points]
+
+
+def test_submitting_code_needs_no_codeforces_verdict(
+    db: Session, verified, make_challenge
+):
+    """The regression this guards: "there is no submit button".
+
+    `claim` was the only writer of a submission, and it refuses unless
+    Codeforces already shows an accepted verdict — so code written before
+    solving upstream could not be saved at all. Note there is no Codeforces
+    stub here on purpose: this path must never call out.
+    """
+    user = verified(points=0)
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    attempt = ChallengeService.save_submission(
+        db,
+        challenge.id,
+        user.id,
+        CodeSubmission(code_body="print(1)", code_language="python"),
+    )
+
+    assert attempt.code_body == "print(1)"
+    assert attempt.code_language == "python"
+    assert attempt.is_solved is False
+    assert attempt.awarded_points == 0
+    db.refresh(user)
+    assert user.points == 0, "saving code must never pay"
+    assert ledger_total(db, user) == 0
+
+
+def test_submitting_code_does_not_need_a_verified_handle(
+    db: Session, make_user, make_challenge
+):
+    """Keeping a record of your work is not the same act as claiming a bonus."""
+    user = make_user(points=0)
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    attempt = ChallengeService.save_submission(
+        db, challenge.id, user.id, CodeSubmission(code_body="x = 1")
+    )
+
+    assert attempt.code_body == "x = 1"
+    assert attempt.code_language == "text", "unlabelled code still gets a label"
+
+
+def test_submitting_code_twice_replaces_it(db: Session, verified, make_challenge):
+    user = verified(points=0)
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    ChallengeService.save_submission(
+        db, challenge.id, user.id, CodeSubmission(code_body="first")
+    )
+    attempt = ChallengeService.save_submission(
+        db, challenge.id, user.id, CodeSubmission(code_body="second")
+    )
+
+    rows = db.execute(
+        text(
+            "select count(*) from challenge_attempts "
+            "where challenge_id = :c and user_id = :u"
+        ),
+        {"c": challenge.id, "u": user.id},
+    ).scalar()
+
+    assert attempt.code_body == "second"
+    assert rows == 1, "the second submit must update, not insert a second row"
+
+
+def test_submitting_code_survives_a_later_claim(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    """Submitting first and claiming afterwards is the intended order."""
+    solved_on_codeforces(True)
+    user = verified(points=0)
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    ChallengeService.save_submission(
+        db, challenge.id, user.id, CodeSubmission(code_body="solution()")
+    )
+    attempt = ChallengeService.claim(db, challenge.id, user.id)
+
+    assert attempt.code_body == "solution()", "claiming must not wipe the code"
+    assert attempt.is_solved is True
+    assert attempt.awarded_points == 50
+
+
+def test_submitting_code_after_solving_is_still_allowed(
+    db: Session, verified, make_challenge, solved_on_codeforces
+):
+    """Claiming twice is refused; tidying up your saved solution is not."""
+    solved_on_codeforces(True)
+    user = verified(points=0)
+    challenge = make_challenge(age_days=0, bonus=50)
+
+    ChallengeService.claim(db, challenge.id, user.id)
+    before = ledger_total(db, user)
+
+    attempt = ChallengeService.save_submission(
+        db, challenge.id, user.id, CodeSubmission(code_body="tidied()")
+    )
+
+    assert attempt.code_body == "tidied()"
+    assert attempt.is_solved is True
+    assert ledger_total(db, user) == before, "editing code must not pay again"
+
+
+def test_submitting_to_a_missing_challenge_is_a_lookup_error(db: Session, verified):
+    from uuid import uuid4
+
+    user = verified(points=0)
+
+    with pytest.raises(LookupError):
+        ChallengeService.save_submission(
+            db, uuid4(), user.id, CodeSubmission(code_body="x")
+        )
 
 
 def test_claiming_twice_is_refused(

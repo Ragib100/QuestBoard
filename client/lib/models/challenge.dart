@@ -113,6 +113,20 @@ class TodayChallenge {
 
   bool get isSolved => myAttempt?.isSolved ?? false;
 
+  /// The same view with a freshly written attempt patched in.
+  ///
+  /// Saving code returns the updated attempt, so the screen can show it
+  /// without re-reading the whole challenge — and a re-read is not harmless
+  /// here: it rebuilds the code editor from the server while the user is still
+  /// typing in it.
+  TodayChallenge withAttempt(ChallengeAttempt attempt) => TodayChallenge(
+        challenge: challenge,
+        isToday: isToday,
+        solverCount: solverCount,
+        myAttempt: attempt,
+        codeforcesVerified: codeforcesVerified,
+      );
+
   factory TodayChallenge.fromJson(Map<String, dynamic> json) => TodayChallenge(
         challenge: DailyChallenge.fromJson(
             json['challenge'] as Map<String, dynamic>),

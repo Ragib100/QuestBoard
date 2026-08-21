@@ -58,4 +58,27 @@ void main() {
       expect(band.size.width, 1400);
     }
   });
+
+  testWidgets('the landing page keeps one alignment axis on a phone',
+      (tester) async {
+    // The hero centres itself on a phone. The highlights band under it used to
+    // stay left-aligned regardless, so the same page showed two competing
+    // alignments at once — reported as "the alignment is completely wrong".
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(360, 3000);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: Intro()));
+    await tester.pump();
+
+    for (final label in const [
+      'Ask. Answer. Learn. Grow.',
+      'Bounty answers',
+      'Attach points to a question. The answer you accept earns them.',
+    ]) {
+      final text = tester.widget<Text>(find.text(label));
+      expect(text.textAlign, TextAlign.center,
+          reason: '"\$label" should share the hero\'s centred axis');
+    }
+  });
 }

@@ -64,6 +64,28 @@ class ChallengeService {
     return ChallengeAttempt.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Saves the code written or attached in the app onto the caller's attempt,
+  /// without asking Codeforces anything.
+  ///
+  /// Separate from [claim] on purpose. `claim` refuses unless Codeforces
+  /// already shows an accepted verdict, so while it was the only thing that
+  /// persisted a submission there was no way to submit code before solving —
+  /// which is exactly what "there is no submit button" meant.
+  Future<ChallengeAttempt> saveSubmission(
+    String challengeId,
+    CodeSubmission submission,
+  ) async {
+    final json = await _api.put(
+      '/challenges/$challengeId/submission',
+      body: submission.toJson(),
+      // A solution is a few kilobytes going to a free Render dyno that may be
+      // cold. The default 10s turned a slow-but-fine save into "could not
+      // reach the server" — which is what submitting felt like when it worked.
+      timeout: const Duration(seconds: 20),
+    );
+    return ChallengeAttempt.fromJson(json as Map<String, dynamic>);
+  }
+
   Future<List<ChallengeSolver>> leaderboard(String challengeId) async {
     final json = await _api.get('/challenges/$challengeId/leaderboard',
         auth: false);

@@ -253,6 +253,52 @@ class ChallengeService:
         )
 
     @classmethod
+    def save_submission(
+        cls,
+        db: Session,
+        challenge_id: UUID,
+        user_id: UUID,
+        data: CodeSubmission,
+    ) -> ChallengeAttempt:
+        """Stores the caller's code on their attempt. Codeforces is not called.
+
+        Saving your work and claiming the bonus are two different acts, and
+        tying them together meant the only button that persisted code was the
+        one that refuses unless Codeforces already has an accepted verdict —
+        so someone who had written a solution but not submitted it upstream had
+        no way to submit code at all. This one always succeeds.
+
+        Deliberately does *not* require a verified handle, and stays available
+        after the challenge is solved: neither has anything to do with keeping a
+        record of the work.
+        """
+        challenge = cls.get(db, challenge_id)
+
+        attempt = cls.attempt_of(db, challenge.id, user_id, for_update=True)
+        if attempt is None:
+            attempt = ChallengeAttempt(
+                challenge_id=challenge.id, user_id=user_id, is_solved=False
+            )
+            db.add(attempt)
+
+        apply_submission(attempt, data)
+
+        try:
+            db.commit()
+        except IntegrityError:
+            # Two saves raced to create the *first* attempt: SELECT ... FOR
+            # UPDATE locks nothing when there is no row yet, so both inserted
+            # and the unique constraint caught the loser. Redo it on the row
+            # that won rather than 500ing on a double-tapped submit button.
+            db.rollback()
+            attempt = cls.attempt_of(db, challenge.id, user_id, for_update=True)
+            apply_submission(attempt, data)
+            db.commit()
+
+        db.refresh(attempt)
+        return attempt
+
+    @classmethod
     def claim(
         cls,
         db: Session,
