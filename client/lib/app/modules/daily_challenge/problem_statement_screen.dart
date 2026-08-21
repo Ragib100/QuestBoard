@@ -21,9 +21,16 @@ import '../../../services/common/challenge_service.dart';
 /// stylesheet over it, which is what makes it look like part of the app rather
 /// than a page from somebody else's site (decisions.md D45).
 ///
-/// Where there is no WebView — the Linux and Windows desktop builds — the same
-/// content degrades to stripped text plus native sample blocks. That is worse,
-/// and it is honest about being worse.
+/// There are two ways to get that HTML, tried in order. The server's cached
+/// scrape is primary — fast, sanitised, and shared by everyone. When it comes
+/// back `available: false`, which on the deployed API is the usual answer for a
+/// problem nobody has opened yet, [_renderLive] reads Codeforces' own page on
+/// the device instead. Both end up drawn with [statementCss], so which one ran
+/// is not something the reader can tell (decisions.md D47).
+///
+/// Where there is no WebView — the Linux and Windows desktop builds — neither
+/// path is available, and the same content degrades to stripped text plus
+/// native sample blocks. That is worse, and it is honest about being worse.
 class ProblemStatementScreen extends StatefulWidget {
   const ProblemStatementScreen({
     super.key,
@@ -54,6 +61,10 @@ class _ProblemStatementScreenState extends State<ProblemStatementScreen> {
   /// waiting through, and [ErrorState] draws it as a spinner.
   bool _offline = false;
 
+  /// True when the WebView is showing Codeforces' own page rather than the
+  /// statement our server cached. See [_renderLive].
+  bool _live = false;
+
   @override
   void initState() {
     super.initState();
@@ -72,8 +83,15 @@ class _ProblemStatementScreenState extends State<ProblemStatementScreen> {
       setState(() {
         _statement = statement;
         _loading = false;
+        _live = false;
+        _controller = null;
       });
-      if (statement.available && canEmbedCodeforces) _render(statement);
+      if (!canEmbedCodeforces) return;
+      if (statement.available) {
+        _render(statement);
+      } else if (statement.sourceUrl != null) {
+        _renderLive(statement.sourceUrl!);
+      }
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => (
@@ -105,6 +123,53 @@ class _ProblemStatementScreenState extends State<ProblemStatementScreen> {
         baseUrl: 'https://codeforces.com/',
       );
     setState(() => _controller = controller);
+  }
+
+  /// Reads the statement off Codeforces' own page, when our server could not.
+  ///
+  /// The server scrape fails a lot in production and hardly ever here, and the
+  /// difference is the IP: Cloudflare treats a datacenter address (which is
+  /// what the API runs on) as a robot, and a phone on mobile data or home wifi
+  /// as a person. The phone is also a real browser engine, so it clears the
+  /// checks the API cannot. Loading the page here and stripping it down to the
+  /// statement is therefore not a workaround — on the platform this app is
+  /// actually for, it is the more reliable of the two paths.
+  ///
+  /// Deliberately **no** JavaScript channel. [_render] opens one for the copy
+  /// buttons, and it can afford to because the server sanitised that HTML
+  /// first. This is codeforces.com running its own scripts in its own origin;
+  /// giving it a bridge into the app would hand a third party the thing the
+  /// sanitiser exists to prevent. The cost is that samples here are selected
+  /// and copied by hand.
+  void _renderLive(String url) {
+    late final WebViewController controller;
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(AppColors.surface)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) => controller.runJavaScript(statementReaderScript),
+        onWebResourceError: (error) {
+          // A sub-resource that will not load — one of Codeforces' images, a
+          // font — is not a failed page, and treating it as one would throw
+          // away a statement that rendered.
+          if (error.isForMainFrame != true || !_live) return;
+          // The page itself did not arrive. Drop the WebView so the screen
+          // falls through to the honest fallback instead of sitting on a blank
+          // white rectangle.
+          if (mounted) {
+            setState(() {
+              _live = false;
+              _controller = null;
+            });
+          }
+        },
+      ))
+      ..loadRequest(Uri.parse(url));
+
+    setState(() {
+      _controller = controller;
+      _live = true;
+    });
   }
 
   @override
@@ -143,16 +208,22 @@ class _ProblemStatementScreenState extends State<ProblemStatementScreen> {
     if (_error != null) return ErrorState(message: _error!, onRetry: _load, offline: _offline);
     if (statement == null) return const SizedBox.shrink();
 
-    if (!statement.available) return _unavailable(statement);
-    if (!canEmbedCodeforces) return _plainText(statement);
-
     final controller = _controller;
-    return controller == null
-        ? const LoadingState()
-        : WebViewWidget(controller: controller);
+    if (controller != null) return WebViewWidget(controller: controller);
+
+    // Cached statement, no WebView on this platform: stripped text and exact
+    // samples. Nothing to fall back to live, because falling back live is the
+    // WebView.
+    if (statement.available) {
+      return canEmbedCodeforces
+          ? const LoadingState()
+          : _plainText(statement);
+    }
+    return _unavailable(statement);
   }
 
-  /// Codeforces would not serve the page. Says so, shows what we do have, and
+  /// Neither path produced a statement: no WebView on this platform, or
+  /// Codeforces refused the phone too. Says so, shows what we do have, and
   /// offers the real thing — rather than an empty screen or an invented one.
   Widget _unavailable(ProblemStatement statement) {
     return ListView(
@@ -256,28 +327,111 @@ class _ProblemStatementScreenState extends State<ProblemStatementScreen> {
 
 }
 
-/// The page handed to the WebView: Codeforces' markup, our typography.
+/// Turns a loaded Codeforces problem page into the statement, and nothing else.
 ///
-/// Top-level and public so it can be rendered and looked at without a device:
-/// `webview_flutter` has no Linux build, so generating this and opening it in a
-/// browser is the only way to see it on the machine it is written on.
-String statementDocument(ProblemStatement statement) {
-    // Worded, not pictographic. The first version used ⏱ and ▨, and a device
-    // without those glyphs draws a tofu box next to the only two numbers on the
-    // page that constrain the solution.
-    final limits = [
-      if (statement.timeLimit.isNotEmpty)
-        '<span><b>Time</b> ${statement.timeLimit}</span>',
-      if (statement.memoryLimit.isNotEmpty)
-        '<span><b>Memory</b> ${statement.memoryLimit}</span>',
-    ].join('');
+/// Runs against their live DOM, which has the same shape the server scraper
+/// works on — `div.problem-statement`, a `div.header` of title and limits, then
+/// the specifications, `div.sample-test`s and the note. So it keeps that one
+/// subtree, drops their stylesheets, and applies [statementCss] instead, which
+/// is what makes the two paths land on the same page rather than one of them
+/// looking like somebody else's website.
+///
+/// Their inline `<style>` elements stay: MathJax writes its own, and removing
+/// them would leave every formula on the page unstyled. Their maths has already
+/// been typeset by the time this runs, and moving a node does not untypeset it.
+///
+/// Silent when the page is not a problem page — a Cloudflare interstitial, or a
+/// login wall. Rewriting one of those into "the statement" would be worse than
+/// showing it.
+///
+/// Public for the same reason [statementDocument] is: there is no WebView on
+/// Linux, so running this against a real Codeforces page in a browser is the
+/// only way to check it on the machine it is written on.
+final String statementReaderScript = '''
+(function () {
+  var s = document.querySelector('.problem-statement');
+  if (!s) return;
 
-    return '''
-<!doctype html>
-<html><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
+  // Their header is the title and the limits. The title is already in our app
+  // bar, so printing it again would show it twice — but the two limits are the
+  // only numbers on the page that constrain the solution, and dropping the
+  // header wholesale took them with it. Rebuilt in the same shape the cached
+  // path renders, so both look identical.
+  var header = s.querySelector('.header');
+  if (header) {
+    var limits = '';
+    ['.time-limit', '.memory-limit'].forEach(function (selector, i) {
+      var node = header.querySelector(selector);
+      if (!node) return;
+      var label = node.querySelector('.property-title');
+      var value = node.textContent;
+      if (label) value = value.replace(label.textContent, '');
+      value = value.replace(/^\\s+|\\s+\$/g, '');
+      if (!value) return;
+      limits += '<span><b>' + (i === 0 ? 'Time' : 'Memory') + '</b> ' +
+                value + '</span>';
+    });
+    if (limits) {
+      var row = document.createElement('div');
+      row.className = 'qb-limits';
+      row.innerHTML = limits;
+      s.insertBefore(row, s.firstChild);
+    }
+    if (header.parentNode) header.parentNode.removeChild(header);
+  }
+
+  var sheets = document.querySelectorAll('link[rel="stylesheet"]');
+  for (var i = 0; i < sheets.length; i++) sheets[i].remove();
+
+  // Held across the clear, then put back: the reference survives even though
+  // the node leaves the document.
+  document.body.innerHTML = '';
+  document.body.appendChild(s);
+  document.body.removeAttribute('class');
+  document.body.removeAttribute('style');
+
+  var viewport = document.querySelector('meta[name="viewport"]');
+  if (!viewport) {
+    viewport = document.createElement('meta');
+    viewport.setAttribute('name', 'viewport');
+    document.head.appendChild(viewport);
+  }
+  viewport.setAttribute('content', 'width=device-width, initial-scale=1');
+
+  var style = document.createElement('style');
+  style.textContent = ${jsonStringLiteral(statementCss + _liveOverrides)};
+  document.head.appendChild(style);
+
+  // Codeforces runs MathJax 2. If it had not finished when this ran, its queue
+  // is now pointing at nodes that left the document, so the formulas would stay
+  // as raw \$\$\$ source. Asking it again for the subtree that survived is
+  // idempotent — already-typeset maths is skipped.
+  if (window.MathJax && MathJax.Hub && MathJax.Hub.Queue) {
+    MathJax.Hub.Queue(['Typeset', MathJax.Hub, s]);
+  }
+})();
+''';
+
+/// What the live page needs on top of [statementCss].
+///
+/// Codeforces sizes their statement for a desktop column and their own reset is
+/// gone with their stylesheets, so this restores the two things that removal
+/// took away and overrides the widths their inline markup still carries.
+const String _liveOverrides = r'''
+  .problem-statement { width: auto !important; max-width: 100% !important; }
+  .problem-statement > div { margin-bottom: 0; }
+  ul, ol { padding-left: 22px; margin: 0 0 12px; }
+  li { margin-bottom: 4px; }
+''';
+
+/// The stylesheet the statement is drawn with, in both render paths.
+///
+/// Shared rather than duplicated because there are two: the sanitised HTML
+/// the server cached, and — when the server could not get it — Codeforces'
+/// own live page with its chrome stripped off. Both end up with the same DOM
+/// shape, so they must end up looking the same or the fallback announces
+/// itself as a downgrade every time it fires.
+const String statementCss = r'''
   :root {
     --text: #1E293B; --muted: #64748B; --border: #E2E8F0;
     --fill: #F1F5F9; --primary: #0066FF;
@@ -336,6 +490,31 @@ String statementDocument(ProblemStatement statement) {
   /* MathJax leaves the source visible until it runs; without this the reader
      sees a flash of raw \$\$\$ delimiters on every load. */
   .qb-pending { visibility: hidden; }
+''';
+
+/// The page handed to the WebView: Codeforces' markup, our typography.
+///
+/// Top-level and public so it can be rendered and looked at without a device:
+/// `webview_flutter` has no Linux build, so generating this and opening it in a
+/// browser is the only way to see it on the machine it is written on.
+String statementDocument(ProblemStatement statement) {
+    // Worded, not pictographic. The first version used ⏱ and ▨, and a device
+    // without those glyphs draws a tofu box next to the only two numbers on the
+    // page that constrain the solution.
+    final limits = [
+      if (statement.timeLimit.isNotEmpty)
+        '<span><b>Time</b> ${statement.timeLimit}</span>',
+      if (statement.memoryLimit.isNotEmpty)
+        '<span><b>Memory</b> ${statement.memoryLimit}</span>',
+    ].join('');
+
+    return '''
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+$statementCss
 </style>
 <script>
   window.MathJax = {

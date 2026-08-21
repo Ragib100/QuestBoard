@@ -94,12 +94,12 @@ mean a second fetch to render an answer.
 
 | | Endpoint | Notes |
 |---|---|---|
-| ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. Every `challenge` carries `source_url` (the statement) and `submit_url` (Codeforces' own submit form) — both derived from `codeforces_id`, neither stored. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. |
+| ✅ | `GET /challenges/today` | Public. Creates today's row on the first request of the day — there is no cron. Returns `{ challenge, is_today, solver_count, my_attempt, codeforces_verified }`. Every `challenge` carries `source_url` (the statement) and `submit_url` (Codeforces' own submit form) — both derived from `codeforces_id`, neither stored. `is_today` is false when Codeforces was unreachable and the server fell back to the last stored challenge; `503` if there is not even one of those. It is also false on every row of `GET /challenges` and on `GET /challenges/{id}` for an archived one, where it means nothing at all — only a caller that asked for *today* may read it as a fallback (D47). |
 | ✅ | `GET /challenges` | Public. The archive, newest first — `page`, `limit` ≤ 50, same page shape as `/questions`. Today's challenge is included only when `include_today=true`. Every row carries `award_points`: what solving it is worth **now**, after the age decay below. |
 | ✅ | `GET /challenges/{id}` | Public. One challenge in the same shape as `/challenges/today`, so a past challenge reuses the whole screen. `404` if it does not exist. |
 | ✅ | `POST /challenges/{id}/solve` | Checks the caller's public Codeforces submissions for an `OK` verdict on this problem **dated on or after the challenge's own day (00:00 Asia/Dhaka)**, then awards `award_points` — `bonus_points` decayed by the challenge's age, never `bonus_points` itself for an old one. Optional body `{ code_body?, code_language?, attachment_url?, attachment_name? }` stores the solution on the attempt. `403` without a **verified** handle, `409` if already claimed or not accepted yet, `502` if Codeforces is unreachable. A failed check still records an unsolved attempt — with the code, so nothing typed is lost. |
 | ✅ | `PUT /challenges/{id}/submission` | Saves the solution written or uploaded in the app onto the caller's attempt **without touching Codeforces**. Body `{ code_body?, code_language?, attachment_url?, attachment_name? }` — an omitted field is left alone, an empty string clears it. Creates the attempt row if there is not one yet, and works before the problem is solved, after it is solved, and without a verified handle: keeping your code is not the same act as claiming the bonus, and requiring a Codeforces verdict to save a draft meant there was no way to submit code at all. Returns the updated `my_attempt`. `404` if the challenge does not exist. |
-| ✅ | `GET /challenges/{id}/statement` | Public. The **real** Codeforces statement, scraped from the problem page once and cached on the row forever. `{ available, html, time_limit, memory_limit, samples[{input,output}], source_url, submit_url }`. `html` is sanitised server-side — no scripts, frames or event handlers, every URL absolute — because the client renders it in a WebView with a channel open to the app. `available: false` (a **200**, not a 502) when Codeforces refuses us: their API has no statement method, so the only source is the page, and it sits behind Cloudflare. A refusal is never cached. `404` if the challenge does not exist. |
+| ✅ | `GET /challenges/{id}/statement` | Public. The **real** Codeforces statement, scraped from the problem page once and cached on the row forever. `{ available, html, time_limit, memory_limit, samples[{input,output}], source_url, submit_url }`. `html` is sanitised server-side — no scripts, frames or event handlers, every URL absolute — because the client renders it in a WebView with a channel open to the app. `available: false` (a **200**, not a 502) when Codeforces refuses us: their API has no statement method, so the only source is the page, and it sits behind Cloudflare. A refusal is never cached — and on the deployed API it is the usual answer for an uncached problem, which is why the mobile client falls back to reading the page itself (D47). `404` if the challenge does not exist. |
 | ✅ | `GET /challenges/{id}/leaderboard` | Public. Solvers ordered by `solved_at`, `limit` ≤ 100. Each row carries the `awarded_points` that solver actually received, which differs between a same-day solve and a late one. |
 | ✅ | `GET /users/me/codeforces/verification` | The problem to submit a deliberate compilation error to, derived from the caller's id — deterministic, so nothing is stored server-side. Returns `problem_url` and `submit_url`. `400` without a handle on the profile. |
 | ✅ | `POST /users/me/codeforces/verification` | Looks for that compilation error in the last 30 minutes and sets `codeforces_verified`. `409` when it is not there yet. A handle existing proves nothing; a submission on it does. |
@@ -141,8 +141,18 @@ absolutises every URL, and stores the result on `daily_challenges.statement`
 never cached — Cloudflare lets the next caller through often enough that one
 refusal must not become a permanent "no statement" (D45).
 
+That scrape fails far more often in production than in development, and the
+difference is the IP: Cloudflare reads Render's datacenter address as a robot and
+a phone's as a person. So `available: false` is the *common* answer on the
+deployed API for any problem not already cached, and the client does not treat it
+as the end of the road — on Android and iOS it loads Codeforces' own page in the
+WebView and strips it down to the statement itself, styled with the same sheet
+the cached path uses. That WebView deliberately has no JavaScript channel. See
+[decisions.md](decisions.md) D47.
+
 A challenge's `body` remains a generated summary. It is the fallback the screen
-shows when `available` is false, and it is deliberately not an attempt at the
+shows when neither path produced a statement — no WebView on this platform, or
+Codeforces refused the phone too — and it is deliberately not an attempt at the
 statement itself.
 
 ### Challenge point decay

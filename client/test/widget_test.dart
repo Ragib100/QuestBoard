@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:client/app/intro.dart';
 import 'package:client/core/display_name.dart';
 import 'package:client/core/widgets/labeled_field.dart';
+import 'package:client/models/challenge.dart';
 import 'package:client/models/quest.dart';
 import 'package:client/core/widgets/search_field.dart';
 import 'package:client/main.dart';
@@ -271,6 +272,53 @@ void main() {
     test('a statement with no samples is left alone', () {
       const html = '<div>Legend</div>';
       expect(withoutSamples(html), html);
+    });
+  });
+
+  /// The second way to get a statement: Codeforces' own page, loaded on the
+  /// phone and stripped down to the statement, for when the server's scrape was
+  /// refused. That happens routinely in production — Cloudflare reads a
+  /// datacenter IP as a robot and a phone as a person (decisions.md D47).
+  group('live statement reader', () {
+    test('both render paths use the same stylesheet', () {
+      // If these drift, the fallback starts announcing itself as a downgrade:
+      // the same problem looks like our app one day and like a scraped web
+      // page the next.
+      expect(
+        statementDocument(const ProblemStatement(available: true, html: '<p>x</p>')),
+        contains(statementCss),
+      );
+      expect(statementReaderScript, contains(r'--primary: #0066FF'));
+    });
+
+    test('the live reader opens no bridge into the app', () {
+      // The cached path may talk to `QBCopy` because the server sanitised that
+      // HTML first. This one runs inside codeforces.com, with their scripts
+      // live in the same origin, so it must not name a channel at all — and a
+      // channel is only reachable if something references it.
+      expect(statementReaderScript, isNot(contains('QBCopy')));
+      expect(statementReaderScript, isNot(contains('postMessage')));
+    });
+
+    test('the live reader keeps the limits and drops the title', () {
+      // The app bar already carries the title, so the header would print it
+      // twice — but the limits are the only numbers on the page that constrain
+      // the solution, and removing the header wholesale took them too.
+      expect(statementReaderScript, contains('.time-limit'));
+      expect(statementReaderScript, contains('.memory-limit'));
+      expect(statementReaderScript, contains('qb-limits'));
+      expect(statementReaderScript, contains('removeChild(header)'));
+    });
+
+    test('the live reader gives up rather than rewriting a Cloudflare page', () {
+      // `.problem-statement` is absent from an interstitial and from a login
+      // wall. Presenting either as "the statement" would be worse than showing
+      // it as it is.
+      expect(
+        statementReaderScript,
+        contains("var s = document.querySelector('.problem-statement');"),
+      );
+      expect(statementReaderScript, contains('if (!s) return;'));
     });
   });
 

@@ -465,26 +465,105 @@ void main() {
     }
   });
 
-  testWidgets('a claimable challenge offers both submit and claim',
+  /// The bar shows the step you are on, not every step at once.
+  ///
+  /// It used to be Claim and Submit side by side, two half-width buttons of
+  /// equal weight, while a third button inside the editor said "Submit code"
+  /// and meant something else again. This walks the sequence instead.
+  testWidgets('the action bar offers one primary action per stage',
       (WidgetTester tester) async {
+    Future<void> pumpBar({
+      bool hasCode = false,
+      bool sent = false,
+      bool waiting = false,
+      int checks = 0,
+    }) =>
+        _pumpAt(
+          tester,
+          ChallengeActionBar(
+            today: _archived(ageDays: 0, award: 50),
+            onClaim: () {},
+            onVerify: () {},
+            onOpenProblem: () {},
+            onSubmitOnCodeforces: () {},
+            hasCode: hasCode,
+            submittedToCodeforces: sent,
+            waitingForVerdict: waiting,
+            verdictChecksDone: checks,
+            onStopWaiting: () {},
+          ),
+          _narrow,
+        );
+
+    // Nothing written yet: submitting is off, and the bar says why rather
+    // than waiting to fail when pressed.
+    await pumpBar();
+    final empty = find.widgetWithText(ElevatedButton, 'Submit to Codeforces');
+    expect(empty, findsOneWidget);
+    expect(tester.widget<ElevatedButton>(empty).onPressed, isNull);
+    expect(find.textContaining('Write your solution above'), findsOneWidget);
+
+    // Code in the editor: submit is live, and claiming stays reachable for
+    // anyone who solved it on the Codeforces site directly.
+    await pumpBar(hasCode: true);
+    final ready = find.widgetWithText(ElevatedButton, 'Submit to Codeforces');
+    expect(tester.widget<ElevatedButton>(ready).onPressed, isNotNull);
+    expect(find.textContaining('Claim'), findsOneWidget);
+
+    // Waiting for the verdict: a bar that moves, and a way out of it.
+    await pumpBar(hasCode: true, sent: true, waiting: true, checks: 3);
+    expect(find.textContaining('3 of $verdictChecks'), findsOneWidget);
+    expect(
+        tester
+            .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator))
+            .value,
+        closeTo(3 / verdictChecks, 0.001));
+    expect(find.widgetWithText(TextButton, 'Stop'), findsOneWidget);
+
+    // Submitted, poll over. The thing left to do is collect the verdict, so
+    // that is the primary action now — not submitting the same code again.
+    await pumpBar(hasCode: true, sent: true);
+    expect(find.widgetWithText(ElevatedButton, 'Check verdict'), findsOneWidget);
+    expect(find.text('Submit to Codeforces'), findsNothing);
+
+    expect(tester.takeException(), isNull);
+  });
+
+  /// `isToday` is false for two entirely different reasons: the server fell
+  /// back because Codeforces was unreachable, or you opened a challenge from
+  /// the archive on purpose. The banner only means the first one, and it was
+  /// firing on both — so every archived challenge, forever, claimed Codeforces
+  /// was down.
+  testWidgets('an archived challenge does not claim Codeforces is down',
+      (WidgetTester tester) async {
+    const stale = 'Codeforces is unreachable';
+
     await _pumpAt(
       tester,
-      ChallengeActionBar(
-        today: _archived(ageDays: 0, award: 50),
-        onClaim: () {},
-        onVerify: () {},
-        onOpenProblem: () {},
-        onSubmitOnCodeforces: () {},
+      DailyChallengeView(
+        today: _archived(ageDays: 6, award: 32),
+        solvers: const [],
+        askedForToday: false,
       ),
-      _narrow,
+      const Size(360, 2400),
     );
+    expect(find.textContaining(stale), findsNothing);
+    // The age and the decay are how an archived challenge says it is old.
+    expect(find.textContaining('6 days ago'), findsOneWidget);
 
-    // Submitting is the primary act: only a Codeforces verdict pays, so for
-    // anyone who has not submitted yet, Claim can only fail. It used to be the
-    // blue button, which made it the loud way of saying no.
-    expect(find.text('Submit'), findsOneWidget);
-    expect(find.text('Claim'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    // Asking for today and being handed something older is the real fallback,
+    // and it still says so.
+    await _pumpAt(
+      tester,
+      DailyChallengeView(
+        today: _archived(ageDays: 6, award: 32),
+        solvers: const [],
+        askedForToday: true,
+      ),
+      const Size(360, 2400),
+    );
+    expect(find.textContaining(stale), findsOneWidget);
   });
 
   testWidgets('the Codeforces verification sheet fits a phone',
@@ -651,7 +730,7 @@ void main() {
   /// button". There was an editor, but it was collapsed behind a text link and
   /// the only thing that persisted what you typed was "Claim" — which refuses
   /// unless Codeforces already shows an accepted verdict.
-  testWidgets('the code editor offers a submit button once there is code',
+  testWidgets('the code editor offers a save button once there is code',
       (WidgetTester tester) async {
     CodeSubmission? submitted;
 
@@ -675,8 +754,11 @@ void main() {
       // Open, not hidden behind "Add code".
       expect(find.byType(TextField), findsOneWidget, reason: 'editor at $size');
 
-      final button = find.widgetWithText(ElevatedButton, 'Submit code');
-      expect(button, findsOneWidget, reason: 'submit button at $size');
+      // "Save", not "Submit": this button writes the code to the attempt
+      // and calls no judge. Labelling it "Submit code" next to a button that
+      // submits to Codeforces made two different acts read as one.
+      final button = find.widgetWithText(ElevatedButton, 'Save code');
+      expect(button, findsOneWidget, reason: 'save button at $size');
 
       // Nothing typed yet: offering to submit an empty solution would only
       // produce a server error.
@@ -723,7 +805,7 @@ void main() {
     await _pumpAt(tester, unverified(), const Size(360, 2400));
 
     expect(find.byType(CodeComposer), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Submit code'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Save solution'), findsOneWidget);
     // ...and the screen still says why claiming is blocked, rather than
     // leaving the pinned "Verify Codeforces handle" button unexplained.
     expect(find.textContaining('verify which account is yours'), findsOneWidget);
@@ -851,7 +933,7 @@ void main() {
     );
 
     expect(find.byType(TextField), findsNothing);
-    expect(find.widgetWithText(ElevatedButton, 'Submit code'), findsNothing);
+    expect(find.widgetWithText(ElevatedButton, 'Save solution'), findsNothing);
   });
 
   /// An archived challenge renders through the same view as today's, with the
