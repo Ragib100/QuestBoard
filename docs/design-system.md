@@ -30,6 +30,24 @@ theme lives in `_buildTheme()` in `client/lib/main.dart`; the palette lives in
 Points and bounties are the one place to break the blue: use amber `#F59E0B` with a 🪙
 so a balance always reads as currency.
 
+### Code
+
+Code is the one surface with a palette of its own, applied by the lexer in
+`core/code_syntax.dart` — never colour code by hand. All six sit on
+`subtleFill`, the fill behind every code block and the editor.
+
+| Token | Hex | Used for |
+|---|---|---|
+| `AppColors.codeKeyword` | `#7C3AED` | `if`, `class`, `return` — the language's own words (semibold) |
+| `AppColors.codeType` | `#0F766E` | Built-in types and library names: `int`, `String`, `vector` |
+| `AppColors.codeString` | `#15803D` | String and character literals |
+| `AppColors.codeNumber` | `#B45309` | Numeric literals |
+| `AppColors.codeComment` | `#7C8798` | Comments (italic) |
+| `AppColors.codeMeta` | `#BE185D` | `#include`, `@Override`, `<?php` |
+
+`text` has no grammar, so sample input and output render plain — that is the
+point of the `text` option, not a gap.
+
 ## Type
 
 `google_fonts`: **Outfit** for anything bold — headings, button labels, nav, numbers.
@@ -56,6 +74,8 @@ All in `core/widgets/`.
 | `SkeletonPulse` + `*Skeleton` | Loading placeholders — see Motion below. |
 | `BrandArt` | The decorative mark on the landing and auth screens. |
 | `showRewardBurst(context, ...)` | The one-shot celebration for a bounty transfer or a claimed challenge. |
+| `CodeBlock` | Read-only code: language header, line-number gutter, copy button, syntax colours, long lines scroll sideways. |
+| `CodeComposer` | The editor: language picker, `Fix indent`, `Indent`, attach a file. Colours as you type, carries indentation onto a new line, and Tab / Shift-Tab indent instead of moving focus (decisions.md D49). |
 
 ## Motion
 

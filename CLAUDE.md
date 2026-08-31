@@ -51,7 +51,9 @@ client/lib/
   main.dart            app entry, theme, splash, deep-link handling. Bootstraps
                        *after* runApp — startup does no blocking network (D42)
   core/                app_colors.dart (the palette), widgets/ (shared UI),
-                       codeforces_web.dart (Codeforces in an in-app WebView)
+                       codeforces_web.dart (Codeforces in an in-app WebView),
+                       code_syntax.dart + code_format.dart (the highlighter and
+                       the language-aware re-indenter behind CodeComposer, D49)
   config/              env-backed config
   services/common/     auth_service, user_service, supabase_services (singletons)
   app/auth/            login, signup, forgot_password, email_verification

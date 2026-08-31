@@ -109,9 +109,23 @@ class UserService {
     return Profile.fromJson(json as Map<String, dynamic>);
   }
 
-  Future<({int balance, List<PointEntry> entries})> points(String userId) async {
-    final json =
-        await ApiClient.instance.get('/users/$userId/points') as Map<String, dynamic>;
+  /// How many ledger rows the profile asks for.
+  ///
+  /// The endpoint defaults to 50 and will go higher, but nobody scrolls a
+  /// ledger on a phone — ten is the recent history you actually read, and it
+  /// is one less screen of rows to build and one smaller response on a slow
+  /// connection. The screen says "last 10" rather than implying it is
+  /// everything.
+  static const pointHistoryLimit = 10;
+
+  Future<({int balance, List<PointEntry> entries})> points(
+    String userId, {
+    int limit = pointHistoryLimit,
+  }) async {
+    final json = await ApiClient.instance.get(
+      '/users/$userId/points',
+      query: {'limit': '$limit'},
+    ) as Map<String, dynamic>;
     return (
       balance: json['balance'] as int? ?? 0,
       entries: (json['transactions'] as List<dynamic>? ?? [])

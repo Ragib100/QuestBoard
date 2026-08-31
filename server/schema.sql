@@ -249,16 +249,39 @@ alter table public.challenge_attempts add column if not exists code_language   v
 alter table public.challenge_attempts add column if not exists attachment_url  text;
 alter table public.challenge_attempts add column if not exists attachment_name text;
 
+-- `description` is the badge's *condition*, and it is the only copy of it: the
+-- profile prints it under every badge, earned or not, so someone can see what
+-- a locked one takes, and the badge-earned notification quotes it back. Past
+-- tense for that reason -- it has to read as both "here is what to do" and
+-- "here is what you did".
 insert into public.badges (name, description) values
-    ('first_answer',  'Submitted your first answer'),
-    ('first_bounty',  'Won your first bounty'),
-    ('bounty_hunter', 'Won 10 bounties total'),
-    ('streak_5',      'Maintained a 5-day activity streak'),
-    ('streak_30',     'Maintained a 30-day activity streak'),
-    ('top_helper',    'Ranked in the top 10 on the weekly leaderboard'),
+    ('first_answer',  'Posted your first answer to a quest'),
+    ('first_bounty',  'Had an answer accepted and collected its bounty'),
+    ('bounty_hunter', 'Collected 10 accepted-answer bounties'),
+    ('streak_5',      'Kept a 5-day activity streak'),
+    ('streak_30',     'Kept a 30-day activity streak'),
+    ('top_helper',    'Ranked in the top 10 of the weekly leaderboard — not awarded automatically yet'),
     ('challenger',    'Solved 7 daily challenges'),
-    ('ai_skeptic',    'Solved a question without using any AI hints')
+    ('ai_skeptic',    'Had an answer accepted on a quest where you bought no AI hint')
 on conflict (name) do nothing;
+
+-- The insert above is `do nothing`, so a database seeded before this wording
+-- existed would keep the old, vaguer text forever. Names never change; the
+-- condition text is allowed to improve, so it is re-applied every run.
+update public.badges as b
+   set description = v.description
+  from (values
+    ('first_answer',  'Posted your first answer to a quest'),
+    ('first_bounty',  'Had an answer accepted and collected its bounty'),
+    ('bounty_hunter', 'Collected 10 accepted-answer bounties'),
+    ('streak_5',      'Kept a 5-day activity streak'),
+    ('streak_30',     'Kept a 30-day activity streak'),
+    ('top_helper',    'Ranked in the top 10 of the weekly leaderboard — not awarded automatically yet'),
+    ('challenger',    'Solved 7 daily challenges'),
+    ('ai_skeptic',    'Had an answer accepted on a quest where you bought no AI hint')
+  ) as v (name, description)
+ where b.name = v.name
+   and b.description is distinct from v.description;
 
 insert into public.tags (name) values
     ('dsa'), ('math'), ('physics'), ('chemistry'), ('calculus'),

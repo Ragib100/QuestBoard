@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_colors.dart';
+import '../code_syntax.dart';
 import '../open_link.dart';
 import 'app_snack.dart';
 
@@ -73,6 +74,9 @@ class CodeBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final lines = code.split('\n');
     final gutterWidth = 20.0 + 8.0 * '${lines.length}'.length;
+    // One span per line, coloured by language. `text` has no grammar, so
+    // sample input and output come back as plain spans and cost nothing.
+    final spans = highlightCodeLines(code, language, codeTextStyle);
 
     return Container(
       decoration: BoxDecoration(
@@ -117,12 +121,16 @@ class CodeBlock extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          for (final line in lines)
-                            Text(
-                              line.isEmpty ? ' ' : line,
-                              softWrap: false,
-                              style: codeTextStyle,
-                            ),
+                          for (final (i, line) in lines.indexed)
+                            line.isEmpty
+                                // A blank line still has to occupy a row, or
+                                // the gutter stops lining up with the code.
+                                ? Text(' ', style: codeTextStyle)
+                                : Text.rich(
+                                    spans[i],
+                                    softWrap: false,
+                                    style: codeTextStyle,
+                                  ),
                         ],
                       ),
                     ),

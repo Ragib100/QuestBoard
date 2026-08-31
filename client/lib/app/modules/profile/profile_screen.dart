@@ -304,24 +304,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: const TextStyle(color: AppColors.textMuted)),
             ],
           ),
+          const SizedBox(height: 4),
+          Text(
+            _isMe
+                ? 'What each one takes, and where you are.'
+                : 'What each one takes.',
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 13),
+          ),
           const SizedBox(height: 16),
           if (_badges.isEmpty)
             const Text('No badges defined yet.',
                 style: TextStyle(color: AppColors.textMuted))
           else
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final (i, badge) in _badges.indexed)
-                  FadeSlideIn(index: i, child: _badgeChip(badge)),
-              ],
-            ),
+            for (final (i, badge) in _badges.indexed)
+              FadeSlideIn(
+                index: i,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                      bottom: i == _badges.length - 1 ? 0 : 10),
+                  child: _badgeRow(badge),
+                ),
+              ),
         ],
       ),
     );
   }
 
+  /// One row per badge: what it is called, what it takes to earn it, and
+  /// whether you have it.
+  ///
+  /// The condition used to live in a `Tooltip`, which meant it existed only
+  /// for people on a desktop with a mouse — on the phone the app is actually
+  /// for, a badge was a word like "Ai skeptic" and no way to find out what it
+  /// wanted. The text comes from the server's own catalogue, so there is one
+  /// copy of it and the badge you are told about is the badge that gets
+  /// awarded.
+  ///
   /// Locked badges stay visible but greyed out — seeing what is still
   /// achievable is the point of a badge list.
   ///
@@ -329,53 +348,90 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// `awarded_at` and nothing else, so a first-time-unlock animation would be
   /// asserting something we cannot actually know. A badge earned in the last
   /// day gets a dot instead, which is derived from real data.
-  Widget _badgeChip(AchievementBadge badge) {
+  Widget _badgeRow(AchievementBadge badge) {
     final earned = badge.isEarned;
     final fresh = earned &&
         badge.awardedAt!
             .isAfter(DateTime.now().subtract(const Duration(days: 1)));
-    return Tooltip(
-      message: earned
-          ? '${badge.description}\nEarned ${timeAgo(badge.awardedAt!)}'
-          : '${badge.description} (locked)',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: earned ? AppColors.primaryTint : AppColors.subtleFill,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: earned ? AppColors.primary : AppColors.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              earned ? Icons.emoji_events_rounded : Icons.lock_outline_rounded,
-              size: 16,
-              color: earned ? AppColors.primary : AppColors.textMuted,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              badge.label,
-              style: TextStyle(
-                fontWeight: earned ? FontWeight.bold : FontWeight.normal,
-                color: earned ? AppColors.primary : AppColors.textMuted,
-                fontSize: 13,
-              ),
-            ),
-            if (fresh) ...[
-              const SizedBox(width: 6),
-              Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  color: AppColors.points,
-                  shape: BoxShape.circle,
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: earned ? AppColors.primaryTint : AppColors.subtleFill,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: earned ? AppColors.primary : AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            earned ? Icons.emoji_events_rounded : Icons.lock_outline_rounded,
+            size: 20,
+            color: earned ? AppColors.primary : AppColors.textMuted,
+          ),
+          const SizedBox(width: 12),
+          // Expanded, not a fixed width: the condition is a sentence and it
+          // has to wrap at 320px rather than run off the card.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        badge.label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: earned
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (fresh) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: AppColors.points,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-            ],
-          ],
-        ),
+                if (badge.description.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    badge.description,
+                    style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                        height: 1.35),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  earned
+                      ? 'Earned ${timeAgo(badge.awardedAt!)}'
+                      : 'Not earned yet',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: earned
+                        ? AppColors.successDark
+                        : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -396,8 +452,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: GoogleFonts.outfit(
                   fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('Every change to your balance, newest first.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          Text(
+              'Your last ${UserService.pointHistoryLimit} changes, newest '
+              'first.',
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13)),
           const SizedBox(height: 20),
           if (_entries.isEmpty)
             const Padding(
@@ -419,10 +478,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Earned against spent, folded from the ledger rows already on screen.
   ///
-  /// Deliberately *not* labelled "all time". `GET /users/{id}/points` caps the
-  /// transaction list at 50 server-side and the client sends no limit, so these
-  /// totals cover the entries we actually fetched and the caption says exactly
-  /// that — inventing an all-time figure from a partial page is the kind of
+  /// Deliberately *not* labelled "all time". The screen asks for the last
+  /// [UserService.pointHistoryLimit] transactions and nothing more, so these
+  /// totals cover exactly the entries we fetched and the caption underneath
+  /// says so — inventing an all-time figure from a partial page is the kind of
   /// number decisions.md D12 exists to prevent.
   Widget _earnedVsSpent() {
     var earned = 0;
