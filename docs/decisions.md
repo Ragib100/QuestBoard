@@ -820,3 +820,68 @@ it used to store nothing until a claim succeeded, so a submission whose verdict
 never landed left the attempt empty. And the verdict poll got a determinate
 progress bar and a **Stop** — half a minute behind an indeterminate spinner is
 indistinguishable from a hang, and a wait with no way out is a trap.
+
+### D49 — The editor colours code and re-indents it; it does not compile it
+
+"The indent doesn't work, it just gives a space" was exactly right. The button
+inserted two spaces at the caret, which is typing, not indenting: with a block
+of pasted code selected it moved nothing at all. The ask behind it was "indent
+it the way a compiler would — C++ its way, PHP its way" plus colour.
+
+Neither is available honestly. There is no clang-format, no Black and no PHP
+binary on a phone, and no formatting service we would be willing to ship
+someone's unsubmitted solution to. So the app does the part that can be derived
+from the text itself and says so:
+
+- **`core/code_syntax.dart`** is a hand-written lexer for the seventeen
+  languages the picker offers. They fall into three lexical families, so this is
+  smaller than the theme file of a highlighting package would have been, and it
+  is honest about broken input: an unterminated string ends at the newline
+  rather than painting the rest of the file green. Colours come from `AppColors`
+  like everything else. The editor gets them by overriding `buildTextSpan` on
+  its `TextEditingController` — no widget layered behind the field, no scroll
+  offsets to sync, and selection and the caret keep working because it is still
+  a plain `TextField`.
+- **`core/code_format.dart`** rebuilds every line's leading whitespace from the
+  structure of the code, in that language's own indent unit — tabs for Go the
+  way `gofmt` writes them, four spaces for PHP as PSR-12 asks, two for Dart and
+  JavaScript, four for Python per PEP 8. It reads the lexer's tokens, so a brace
+  inside a string opens nothing and a multi-line string's body is copied
+  through byte for byte. Python is re-spelled, not restructured: indentation is
+  its syntax, so the existing block structure is preserved and only the widths
+  are evened out.
+
+What it deliberately does not do is reflow anything — no line breaking, no
+spacing, no wrapping. That needs a parser per language, and a half-parser that
+moves code around would eventually mangle a solution someone was about to
+submit. Indentation is the part that is actually broken in pasted code, it is
+derivable from brackets alone, and getting it wrong is visible and harmless. The
+button says `Fix indent` and the confirmation says what it did, rather than
+claiming to have "formatted" the code (ground rule 4).
+
+Typing gained the two things that make an editor usable on a phone: return
+carries the current line's indentation down and adds a level after a line that
+opened something, and hardware Tab indents instead of moving focus (Shift-Tab
+goes back out). The newline behaviour is a `TextInputFormatter`, not a key
+handler, because a soft keyboard sends no key events — the newline arrives as an
+edit, and that is the only place both kinds of return show up.
+
+### D50 — A badge's condition is server text, printed under the badge
+
+Badges were a row of chips with a `Tooltip` carrying the condition, which means
+the condition existed only for someone on a desktop with a mouse. On the phone
+the app is for, `Ai skeptic` was a word and a padlock and no way to find out
+what it wanted.
+
+The condition now prints under every badge, earned or locked, as a full-width
+row. The text is `badges.description` from the server's own catalogue — not a
+second copy in the client — so the badge you are told about is the badge that
+gets awarded, and the badge-earned notification quotes the same sentence. The
+seed wording was rewritten to state the condition ("Collected 10
+accepted-answer bounties", not "Won 10 bounties total") and `schema.sql` now
+re-applies it on every run, because the seed insert is `on conflict do nothing`
+and would otherwise leave an existing database on the old text forever.
+`top_helper` says in its own description that it is not awarded automatically
+yet, which is the only honest thing to print next to a badge nothing can
+currently earn.
+

@@ -65,7 +65,12 @@ re-add one without deleting something else.
 
 ## Badges
 
-Checked in a background task after any point-earning event.
+Checked inline, in the same transaction as the event that earned them — three
+cheap counts, and a badge can never be lost to a background worker dying.
+
+Each row's condition is also its `badges.description` in the database, and the
+profile prints that under the badge whether it is earned or not, so the list
+doubles as the explanation (decisions.md D50).
 
 | Badge | Condition |
 |---|---|
@@ -74,6 +79,8 @@ Checked in a background task after any point-earning event.
 | `bounty_hunter` | won ≥ 10 bounties |
 | `streak_5` / `streak_30` | `streak_days` ≥ 5 / 30 |
 | `challenger` | solved ≥ 7 daily challenges |
+| `ai_skeptic` | an accepted answer on a quest you bought no AI hint for |
+| `top_helper` | top 10 on the weekly leaderboard — **not awarded yet**, it needs a scheduled rank check (TASKS.md) |
 
 ## Definition of done
 

@@ -59,4 +59,29 @@ class AppColors {
   /// Background for that same warning row — degraded-but-usable states, like
   /// a daily challenge served from cache because Codeforces was down.
   static const warningTint = Color(0xFFFEF3C7);
+
+  // ------------------------------------------------------------ code syntax
+  // The highlighter's palette (core/code_syntax.dart). Tuned against
+  // [subtleFill], the fill behind every code block and the editor, and kept
+  // to hues the rest of the app already uses so a code block still looks like
+  // QuestBoard rather than an IDE dropped into it.
+
+  /// `if`, `class`, `return` — the language's own words.
+  static const codeKeyword = Color(0xFF7C3AED);
+
+  /// Built-in types and library names: `int`, `String`, `vector`, `println`.
+  static const codeType = Color(0xFF0F766E);
+
+  /// String and character literals.
+  static const codeString = Color(0xFF15803D);
+
+  /// Numeric literals.
+  static const codeNumber = Color(0xFFB45309);
+
+  /// Comments. Muted on purpose — they are the one thing you skim past.
+  static const codeComment = Color(0xFF7C8798);
+
+  /// Preprocessor lines, annotations, `<?php` — things that are not code but
+  /// steer the compiler.
+  static const codeMeta = Color(0xFFBE185D);
 }

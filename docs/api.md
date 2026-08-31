@@ -42,7 +42,7 @@ reset all happen client-side through `supabase_flutter`. See
 | ✅ | `POST /users` | Creates the profile row after email verification. Body: `username`, `first_name`, `last_name`, `phone_number?`, `codeforces_handle`, `image_url` (storage path). `409` if username taken. |
 | ✅ | `GET /users/{id}` | Public profile: username, names, `image_url`, points, `streak_days`, `codeforces_handle`, `created_at`. Never returns email or phone for other users. |
 | ✅ | `PATCH /users/{id}` | Own profile only. Editable: names, `phone_number`, `image_url`, `codeforces_handle`. |
-| ✅ | `GET /users/{id}/points` | `{ balance, transactions: [{ amount, reason, ref_id, created_at }] }`, newest first, paginated. |
+| ✅ | `GET /users/{id}/points` | `{ balance, transactions: [{ amount, reason, ref_id, created_at }] }`, newest first, paginated. `limit` defaults to 50; the profile asks for **10** — the earned/spent figures on that screen cover exactly the rows it fetched and say so. |
 | ✅ | `GET /users/{id}/badges` | Earned badges with `earned_at`. |
 | ✅ | `GET /users/{id}/streak` | `{ streak_days, last_active }`. |
 

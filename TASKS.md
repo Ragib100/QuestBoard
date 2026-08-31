@@ -804,3 +804,42 @@ See [decisions.md](docs/decisions.md) D45–D46.
       succeeded, so a submission whose verdict never landed left the attempt empty
 - [x] The verdict poll has a determinate progress bar (`2 of 6`) and a **Stop**.
       Six checks, four seconds apart
+
+## Round seven: the badge that explains itself, and an editor that indents ✅
+
+### "In achievement badges users don't know how to get that"
+
+- [x] Every badge now prints its condition under its name, earned or locked, as
+      a full-width row instead of a chip with a desktop-only `Tooltip` (D50)
+- [x] The text is `badges.description` from the server — one copy, shared with
+      the badge-earned notification. Seed wording rewritten to state the
+      condition, and `schema.sql` re-applies it on every run so a database
+      seeded earlier does not keep the old text
+- [x] `top_helper` says in its own description that it is not awarded
+      automatically yet — it is still the one badge waiting on a scheduled
+      weekly-rank check
+
+### "The save code indent doesn't work — it just gives a space"
+
+- [x] It did: the button inserted two spaces at the caret and moved nothing when
+      a block was selected. `Fix indent` re-indents the whole buffer from the
+      code's own structure, in that language's unit — tabs for Go, four spaces
+      for C++/Java/Python/PHP, two for Dart/JS/Ruby (D49)
+- [x] `Indent` now shifts whole selected lines by one level, and Tab / Shift-Tab
+      do the same on a hardware keyboard instead of moving focus
+- [x] Return carries the current line's indentation down and adds a level after
+      a line that opened a block — a `TextInputFormatter`, so it works on a soft
+      keyboard too
+- [x] Not a compiler and does not pretend to be: it rebuilds leading whitespace
+      only, never reflows. Python is re-spelled to PEP 8 widths without
+      restructuring, since indentation is its syntax
+- [x] Syntax colours for all seventeen languages, in the editor as you type and
+      in the read-only block, from a hand-written lexer (no new dependency).
+      33 tests in `client/test/code_format_test.dart`
+
+### "Don't load the full history, just the latest 10"
+
+- [x] The profile ledger asks `GET /users/{id}/points?limit=10` instead of
+      taking the server's default 50. The earned/spent split and its caption
+      already describe only the rows fetched, so they stay honest
+
