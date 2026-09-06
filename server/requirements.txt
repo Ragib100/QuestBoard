@@ -1,22 +1,91 @@
-# Runtime
-fastapi>=0.139,<1.0
-uvicorn[standard]>=0.49,<1.0
-pydantic-settings>=2.14,<3.0
-SQLAlchemy>=2.0,<3.0
-psycopg[binary]>=3.3,<4.0
-supabase>=2.31,<3.0
-httpx>=0.28,<1.0        # Codeforces API + AI hints — arrives via supabase too, pinned here because we import it directly
-# Parsing the Codeforces problem page. Their API has no statement method, so the
-# page itself is the only source, and picking a nested div subtree out of 60KB of
-# real-world HTML is not a job for a regex (decisions.md D45).
-beautifulsoup4>=4.12,<5
-
-# Optional: only needed if you set ANTHROPIC_API_KEY. The free OpenAI-compatible
-# providers (Gemini, Groq, OpenRouter) go through httpx and need nothing extra,
-# so `anthropic` is imported lazily and this line can be dropped.
-anthropic>=0.122,<1.0
-
-# Tooling — run `ruff check app` and `black app` before every PR
-black>=25,<26
-ruff>=0.14,<1.0
-pytest>=8,<9         # tests/ — needs a reachable DATABASE_URL, see tests/conftest.py
+agent-detector==2.0.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anthropic==0.122.0
+anyio==4.14.1
+beautifulsoup4==4.15.0
+black==25.12.0
+certifi==2026.6.17
+cffi==2.1.0
+charset-normalizer==3.4.9
+click==8.4.2
+cryptography==49.0.0
+deprecation==2.1.0
+detect-installer==0.2.1
+distro==1.9.0
+dnspython==2.8.0
+docstring_parser==0.18.0
+ecdsa==0.19.2
+email-validator==2.3.0
+fastapi==0.139.0
+fastapi-cli==0.0.32
+fastapi-cloud-cli==0.25.0
+fastar==0.12.0
+greenlet==3.5.3
+h11==0.16.0
+h2==4.3.0
+hpack==4.2.0
+httpcore==1.0.9
+httpsx==0.0.1
+httptools==0.8.0
+httpx==0.28.1
+hyperframe==6.1.0
+idna==3.18
+iniconfig==2.3.0
+Jinja2==3.1.6
+jiter==0.16.0
+markdown-it-py==4.2.0
+MarkupSafe==3.0.3
+mdurl==0.1.2
+multidict==6.7.1
+mypy_extensions==1.1.0
+packaging==26.2
+pathspec==1.1.1
+platformdirs==4.10.0
+pluggy==1.6.0
+postgrest==2.31.0
+propcache==0.5.2
+psycopg==3.3.4
+psycopg-binary==3.3.4
+pyasn1==0.6.4
+pycparser==3.0
+pydantic==2.13.4
+pydantic-extra-types==2.11.1
+pydantic-settings==2.14.2
+pydantic_core==2.46.4
+Pygments==2.20.0
+PyJWT==2.13.0
+pytest==8.4.2
+python-dotenv==1.2.2
+python-jose==3.5.0
+python-multipart==0.0.32
+pytokens==0.4.1
+PyYAML==6.0.3
+realtime==2.31.0
+requests==2.34.2
+rich==15.0.0
+rich-toolkit==0.20.4
+rignore==0.8.1
+rsa==4.9.1
+ruff==0.15.20
+sentry-sdk==2.68.1
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
+soupsieve==2.9.2
+SQLAlchemy==2.0.51
+starlette==1.3.1
+storage3==2.31.0
+StrEnum==0.4.15
+supabase==2.31.0
+supabase-auth==2.31.0
+supabase-functions==2.31.0
+typer==0.27.2
+typing-inspection==0.4.2
+typing_extensions==4.16.0
+urllib3==2.7.0
+uvicorn==0.49.0
+uvloop==0.22.1
+watchfiles==1.2.0
+websockets==15.0.1
+yarl==1.24.2
