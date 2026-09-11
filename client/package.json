@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "vercel-build": "bash scripts/install-flutter.sh && export PATH=\"$HOME/flutter/bin:$PATH\" && flutter build web --release"
+    "vercel-build": "bash scripts/install-flutter.sh && export PATH=\"$HOME/flutter/bin:$PATH\" && bash scripts/create-env.sh && flutter build web --release"
   }
 }
