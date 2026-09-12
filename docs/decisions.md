@@ -241,7 +241,7 @@ plain text.
 
 ### D28 — Past challenges decay; and what the audit found in the ledger
 Archived challenges stay solvable and are worth **10% of their base less per day, with a
-floor at 20%** (`award_for`, table in [api.md](api.md#challenge-point-decay)). Linear,
+floor at 20%** (`award_for`, table in [backend/api.md](backend/api.md#challenge-point-decay)). Linear,
 not exponential, because a student can predict "five points a day" and cannot predict a
 half-life. The floor is the point: a challenge that decays to nothing is one nobody has
 a reason to open, and the archive exists to be worked through.
@@ -751,7 +751,7 @@ challenge twice; `retry` is set by `get` and nothing else.
 
 Past that, `ErrorState(offline: true)` renders as `ReconnectingState` — a
 spinner saying "Waiting for a connection…", retrying every five seconds. Capped
-at six attempts, because design-system.md's rule is that nothing repeats forever
+at six attempts, because frontend/design-system.md's rule is that nothing repeats forever
 and an app retrying in someone's pocket all afternoon is what that rule is for.
 After the cap it says "Still offline" and offers the button, which by then
 genuinely means something. The home screen's banner does the same thing in

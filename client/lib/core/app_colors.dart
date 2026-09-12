@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The QuestBoard palette. Single source of truth — see docs/design-system.md.
+/// The QuestBoard palette. Single source of truth — see docs/frontend/design-system.md.
 ///
 /// Prefer `Theme.of(context)` where the theme already carries the value; use
 /// these constants for the cases it does not cover (borders, muted text, tags).

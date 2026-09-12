@@ -6,7 +6,7 @@ import '../app_colors.dart';
 ///
 /// This shape was hand-written about fifteen times across the app and the radius
 /// had drifted to 16, 20 and 24 depending on the screen; two call sites had also
-/// picked up a `boxShadow`, which docs/design-system.md forbids outright. Use
+/// picked up a `boxShadow`, which docs/frontend/design-system.md forbids outright. Use
 /// this instead of a bare `Container(decoration: BoxDecoration(...))`.
 class AppCard extends StatelessWidget {
   const AppCard({

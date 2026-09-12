@@ -890,7 +890,7 @@ void main() {
     await tester.pump(ReconnectingState.gap);
     expect(attempts, 1, reason: 'it retries without being asked');
 
-    // ...but not forever. design-system.md's rule is that nothing repeats
+    // ...but not forever. docs/frontend/design-system.md's rule is that nothing repeats
     // endlessly, and after the cap the button genuinely means something.
     for (var i = 1; i < ReconnectingState.maxAttempts; i++) {
       await tester.pump(ReconnectingState.gap);

@@ -401,7 +401,7 @@ class _DashboardState extends State<Dashboard> {
   /// these read "Ranks" and "Daily" rather than their full titles.
   ///
   /// The bar carried `elevation: 10`, the only drop shadow left in the app and
-  /// against docs/design-system.md. Separation now comes from a top border, the
+  /// against docs/frontend/design-system.md. Separation now comes from a top border, the
   /// same treatment the top app bar already uses; the rest of the styling lives
   /// in `bottomNavigationBarTheme`.
   Widget _buildMobileNav() {
@@ -838,7 +838,7 @@ class _UserHomeState extends State<UserHome> {
   }
 
   /// The shadow that used to be here was the only one in the app and
-  /// docs/design-system.md forbids shadows outright, so the tile now takes the
+  /// docs/frontend/design-system.md forbids shadows outright, so the tile now takes the
   /// standard border treatment via [AppCard] like every other card.
   Widget _statCard(int value, String label, IconData icon, Color color) {
     return AppCard(
@@ -1037,7 +1037,7 @@ class _UserHomeState extends State<UserHome> {
   Widget _buildTopLeaderboard(BuildContext context) {
     // AppCard, not a hand-rolled Container: this one had drifted to radius 20
     // and a raw `Colors.white`, which is the exact drift AppCard exists to
-    // stop (design-system.md).
+    // stop (docs/frontend/design-system.md).
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
