@@ -327,7 +327,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   /// The type scale. Outfit for chrome and numbers, Inter for body — never a
-  /// third family (docs/design-system.md).
+  /// third family (docs/frontend/design-system.md).
   ///
   /// Screens still carry local `GoogleFonts.*` calls, which win over this theme,
   /// so adding it is backwards-compatible; sites migrate to `Theme.of(context)

@@ -10,7 +10,7 @@ Two conventions to internalise:
 - `auth.users` is Supabase's own table. Never write to it. Our `public.users` row
   shares its primary key. **Email lives only in `auth.users`** — never copy it.
 - The table is `questions`; the product calls it a **quest**
-  ([decisions.md](decisions.md) D1). Every foreign key, route and JSON key says
+  ([decisions.md](../decisions.md) D1). Every foreign key, route and JSON key says
   `question`. Do not rename one without the other.
 
 ---
@@ -46,7 +46,7 @@ users (
 the client turns it into a URL with `getPublicUrl`. `points` is a **cache** of the
 `point_transactions` sum — see the ledger rule below. `is_suspended` is set by an
 admin and checked by `UserService.require_active` on every write path, not in the JWT
-dependency ([decisions.md](decisions.md) D22).
+dependency ([decisions.md](../decisions.md) D22).
 
 ## Timestamps: UTC in the rows, Dhaka on the screen
 
@@ -54,7 +54,7 @@ Every stored instant is **UTC**. Every calendar question — which challenge is
 today's, whether a streak survived, whether a Codeforces submission is recent
 enough — is answered in **Asia/Dhaka** (UTC+6, no DST), by
 `server/app/core/clock.py`. Nothing else in the server reads a wall clock. See
-[decisions.md](decisions.md) D29.
+[decisions.md](../decisions.md) D29.
 
 **The live schema is mixed, and the `timestamptz` written below is not
 universally true.** `schema.sql` uses `add column if not exists`, so columns
@@ -161,7 +161,7 @@ The economy ledger, and the reason the numbers can be trusted.
 **Append-only. Never `UPDATE` or `DELETE` a row.** `users.points` is a cache of
 `sum(amount)`, and the two are written together inside one transaction by
 `PointService` — the only code allowed to touch either
-([decisions.md](decisions.md) D15).
+([decisions.md](../decisions.md) D15).
 
 ```sql
 point_transactions (
@@ -175,10 +175,10 @@ point_transactions (
 ```
 
 Valid `reason` values live in `PointReason` (`app/models/point_transaction.py`) and
-are documented in [product.md](product.md#point-economy). A CHECK constraint enforces
+are documented in [product.md](../product.md#point-economy). A CHECK constraint enforces
 the list; `schema.sql` **drops and recreates** it rather than adding it only when
 absent, because it had already drifted out of sync once and silently broke two
-features ([decisions.md](decisions.md) D24).
+features ([decisions.md](../decisions.md) D24).
 
 Two rules follow from "`users.points` is a cache of `sum(amount)`", and both were
 being broken until the D28 audit:
@@ -227,7 +227,7 @@ CHECK constraint listing the five allowed values, so adding a member to
 `NotificationType` without a migration fails at insert time. `badges` is keyed by
 `id` + `name` — there is **no** `code` column — and is seeded with eight rows;
 `user_badges` has a composite primary key, which is what makes awarding idempotent
-([decisions.md](decisions.md) D18).
+([decisions.md](../decisions.md) D18).
 
 ## `ai_hints`
 
@@ -297,7 +297,7 @@ accepted submission yet, and what they had written when they tried.
 `awarded_points` exists because a challenge is not worth a fixed amount.
 `bonus_points` is its value on its own day; the award decays by 10% of that per
 day and floors at 20% (`award_for` in `models/challenge.py`, table in
-[api.md](api.md#challenge-point-decay)). The decayed figure is deliberately
+[backend/api.md](../backend/api.md#challenge-point-decay)). The decayed figure is deliberately
 **not** stored on the challenge — it would be wrong by the next morning — but
 what a specific solve paid is stored here, because otherwise nothing could say
 what a late solver received and the leaderboard would contradict the ledger.

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// The QuestBoard motion vocabulary. Single source of truth for durations and
-/// curves — see docs/design-system.md.
+/// curves — see docs/frontend/design-system.md.
 ///
 /// This file exists for the same reason [AppColors] does (decisions.md D13): the
 /// alternative is every screen picking its own 250ms/easeInOut until the app

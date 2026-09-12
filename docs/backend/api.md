@@ -1,14 +1,28 @@
 # API contract
 
-Base URL `${API_URL}/api`. Every endpoint except `/` requires
-`Authorization: Bearer <supabase-access-token>`.
+Base URL `${API_URL}/api`. Most endpoints require
+`Authorization: Bearer <supabase-access-token>`; the exceptions are listed below.
+
+**41 routes** — 40 plus the unauthenticated liveness root. For the declarations
+themselves (paths, query-parameter constraints, which dependency guards each
+one) see [routers.md](routers.md); this page is the behavioural contract.
+
+### Three access levels
+
+| Level | Dependency | Endpoints |
+|---|---|---|
+| **Required** | `get_current_user_id` | Everything not listed below. `401` without a valid token |
+| **Optional** | `get_optional_user_id` | `GET /questions`, `GET /questions/{id}`, `GET /leaderboard`, `GET /challenges`, `GET /challenges/today`, `GET /challenges/{id}` — public, but a token adds `my_vote`, `my_attempt` or your own rank |
+| **Public** | none | `GET /`, `GET /users/{id}`, `GET /users/{id}/points`, `GET /users/{id}/badges`, `GET /users/{id}/streak`, `GET /badges`, `GET /challenges/{id}/statement`, `GET /challenges/{id}/leaderboard` |
+
+A public profile read never returns an email or another user's phone number.
 
 CORS is enabled via `CORS_ORIGINS` (defaults to `*`) — Flutter web cannot call the
 API without it.
 
 There are **no auth endpoints** — registration, login, logout, refresh and password
 reset all happen client-side through `supabase_flutter`. See
-[architecture.md](architecture.md#auth-flow).
+[architecture.md](../architecture.md#auth-flow).
 
 **Errors** are FastAPI's default shape. Never invent another.
 
@@ -25,7 +39,7 @@ reset all happen client-side through `supabase_flutter`. See
 ---
 
 > **Path naming:** the routes say `/questions` because the table does. The product
-> calls them quests. See [decisions.md](decisions.md) D1.
+> calls them quests. See [decisions.md](../decisions.md) D1.
 
 ## Health
 
@@ -131,7 +145,7 @@ Codeforces pages in an in-app WebView, and the user submits on Codeforces' own
 form under their own session — prefilled from the in-app editor, with the
 compiler chosen by matching Codeforces' own option labels. The verdict comes
 back the way it always has, through `user.status` on
-`POST /challenges/{id}/solve`. See [decisions.md](decisions.md) D43.
+`POST /challenges/{id}/solve`. See [decisions.md](../decisions.md) D43.
 
 The **statement** is a scrape, not an API read, and is the one place this app
 parses someone else's HTML. `GET /challenges/{id}/statement` fetches the problem
@@ -148,7 +162,7 @@ deployed API for any problem not already cached, and the client does not treat i
 as the end of the road — on Android and iOS it loads Codeforces' own page in the
 WebView and strips it down to the statement itself, styled with the same sheet
 the cached path uses. That WebView deliberately has no JavaScript channel. See
-[decisions.md](decisions.md) D47.
+[decisions.md](../decisions.md) D47.
 
 A challenge's `body` remains a generated summary. It is the fallback the screen
 shows when neither path produced a statement — no WebView on this platform, or
@@ -206,6 +220,6 @@ rather than the next login.
 | | Endpoint | Notes |
 |---|---|---|
 | ✅ | `GET /admin/stats` | `{ total_users, suspended_users, total_quests, open_quests, total_answers, points_in_circulation }` — all live counts. |
-| ✅ | `GET /admin/users` | Paginated (`page`, `limit` ≤ 50), `search` over username and first/last name. **Not email** — that lives in `auth.users` and is never copied ([data-model.md](data-model.md)). |
+| ✅ | `GET /admin/users` | Paginated (`page`, `limit` ≤ 50), `search` over username and first/last name. **Not email** — that lives in `auth.users` and is never copied ([db/schema.md](../db/schema.md)). |
 | ✅ | `PATCH /admin/users/{id}/suspend` | Body `{ suspended: bool }` — explicit, not a toggle, so two admins cannot flip each other's decision. `403` on yourself or on another admin. A suspended user can still read; posting, answering and voting return `403`. |
 | ✅ | `DELETE /admin/quests/{id}` | Bypasses the author check *and* the has-answers rule. Refunds the bounty unless the quest was already solved — that bounty is with the helper and refunding it would mint points. Deletes the answers and their votes too. |

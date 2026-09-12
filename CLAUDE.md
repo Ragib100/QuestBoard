@@ -105,10 +105,15 @@ client/lib/
 - **Theme:** light, blue `#0066FF`, Inter/Outfit via `google_fonts`. Colors come
   from `AppColors` in `client/lib/core/app_colors.dart` — never write a raw
   `Color(0xFF...)` literal. Forms use `LabeledField` from `core/widgets/`. See
-  [docs/design-system.md](docs/design-system.md); the old dark-navy palette is gone.
+  [docs/frontend/design-system.md](docs/frontend/design-system.md); the old dark-navy palette is gone.
 - **Branching:** feature branches, PR review before merge, `main` always deployable.
 
 ## Docs (read on demand — do not preload)
+
+`docs/` is split three ways — [`docs/backend/`](docs/backend/README.md),
+[`docs/frontend/`](docs/frontend/README.md), [`docs/db/`](docs/db/README.md) —
+with the cross-cutting documents at the top level.
+[docs/README.md](docs/README.md) is the full index.
 
 | File | Read it when |
 |---|---|
@@ -116,15 +121,18 @@ client/lib/
 | [docs/setup.md](docs/setup.md) | Nothing runs, email never arrives, DB won't connect, or you're deploying |
 | [docs/product.md](docs/product.md) | Deciding scope, point-economy rules, what is out of scope |
 | [docs/architecture.md](docs/architecture.md) | Adding an endpoint, screen, or changing auth/data flow |
-| [docs/data-model.md](docs/data-model.md) | Touching the DB — canonical schema, live vs. planned tables |
-| [docs/api.md](docs/api.md) | Wiring client↔server — endpoint contract + implementation status |
-| [docs/design-system.md](docs/design-system.md) | Building UI — colors, type, spacing, components |
+| [docs/backend/api.md](docs/backend/api.md) | Wiring client↔server — endpoint contract + implementation status |
+| [docs/backend/](docs/backend/README.md) | Server internals — routers, services, models, schemas, core, tests |
+| [docs/frontend/](docs/frontend/README.md) | Client internals — screens, services, core, widgets, tests |
+| [docs/frontend/design-system.md](docs/frontend/design-system.md) | Building UI — colors, type, spacing, components |
+| [docs/db/schema.md](docs/db/schema.md) | Touching the DB — canonical schema, live vs. planned tables |
+| [docs/db/economy.md](docs/db/economy.md) | Anything that moves points — the ledger contract and its invariants |
 | [docs/decisions.md](docs/decisions.md) | Something in the code contradicts your assumption — the "why" lives here |
 | [docs/demo-script.md](docs/demo-script.md) | Recording the demo — shot list, narration, seed data, capture commands |
 
 ## Ground rules
 
-1. **API contract first.** Add the endpoint to `docs/api.md` before building the screen
+1. **API contract first.** Add the endpoint to `docs/backend/api.md` before building the screen
    that consumes it.
 2. **No gold plating.** Finish all Tier 1 (MVP) items in `TASKS.md` before starting Tier 2.
 3. **Keep docs true.** If code and docs disagree, the code wins — fix the doc in the same PR.

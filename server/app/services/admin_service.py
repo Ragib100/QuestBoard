@@ -54,7 +54,7 @@ class AdminService:
         if search:
             term = f"%{search.strip()}%"
             # Email lives in auth.users and is never copied here
-            # (docs/data-model.md), so username and name are all we can match.
+            # (docs/db/schema.md), so username and name are all we can match.
             stmt = stmt.where(
                 or_(
                     User.username.ilike(term),

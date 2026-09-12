@@ -8,7 +8,7 @@ theme lives in `_buildTheme()` in `client/lib/main.dart`; the palette lives in
 `Theme.of(context)` where the theme already carries the value.
 
 > An earlier spec called for a dark navy + neon palette. It was abandoned once the app
-> was built light — see [decisions.md](decisions.md) D2. Do not reintroduce it.
+> was built light — see [decisions.md](../decisions.md) D2. Do not reintroduce it.
 
 ## Color
 
@@ -96,7 +96,7 @@ asserts that it does.
 There are **no exceptions**. `LeaderboardPodium` looks like one — its pedestals rise —
 but they are laid out at full height from frame 0 and only *drawn* growing, via a
 `scaleY` transform. The first version did tween the height inside a fixed-height box,
-which passed the widget test and overflowed in real use; see [decisions.md](decisions.md)
+which passed the widget test and overflowed in real use; see [decisions.md](../decisions.md)
 D25.
 
 **Testing animated widgets:** a single `pump()` measures frame 0, which for an entry
@@ -108,7 +108,7 @@ Helpers: `appRoute()` for pushes, `FadeSlideIn(index:)` for staggered list entry
 the call site, not inside the tile), `TabTransition` for the dashboard's tabs,
 `CountUpText` for numbers that roll up when data lands.
 
-No animation package — see [decisions.md](decisions.md) D25.
+No animation package — see [decisions.md](../decisions.md) D25.
 
 ## Shape and spacing
 

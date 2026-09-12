@@ -273,7 +273,7 @@ class _Highlight extends StatelessWidget {
     // paragraphs floating in 32px of whitespace with no container around them,
     // which on a phone read as a long sparse scroll rather than a list of
     // three things. [AppCard] is the app's standard container — white, 1px
-    // border, radius 16, no shadow (design-system.md) — and it reads against
+    // border, radius 16, no shadow (docs/frontend/design-system.md) — and it reads against
     // the band's grey.
     //
     // The contents stay centred so the band keeps the hero's axis: a centred

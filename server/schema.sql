@@ -2,7 +2,7 @@
 --
 -- Run this once in the Supabase SQL editor on a new project. It is idempotent,
 -- so re-running it is safe. Every table the API touches is here — keep it in
--- sync with app/models/ and docs/data-model.md.
+-- sync with app/models/ and docs/db/schema.md.
 
 -- ---------------------------------------------------------------- users -----
 -- Mirrors app/models/user.py. Shares its primary key with auth.users; the email

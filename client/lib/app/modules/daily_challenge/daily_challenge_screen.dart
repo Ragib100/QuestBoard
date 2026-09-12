@@ -33,7 +33,7 @@ const int verdictChecks = 6;
 /// in the app does not change that; it records the work, it does not prove it.
 ///
 /// Pass [challengeId] to open an archived challenge, which pays less the older
-/// it is (docs/api.md, "Challenge point decay").
+/// it is (docs/backend/api.md, "Challenge point decay").
 class DailyChallengeScreen extends StatefulWidget {
   const DailyChallengeScreen({
     super.key,

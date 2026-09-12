@@ -21,7 +21,7 @@ class ChallengeResponse(BaseModel):
     # like `award_points`, it is derived from `codeforces_id`.
     submit_url: str | None = None
     # The challenge's value on its own day. What a solve pays *now* is
-    # `award_points`, which is this decayed by age — see docs/api.md.
+    # `award_points`, which is this decayed by age — see docs/backend/api.md.
     bonus_points: int
     challenge_date: date
 

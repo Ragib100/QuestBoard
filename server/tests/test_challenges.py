@@ -63,7 +63,7 @@ def solved_on_codeforces(monkeypatch):
 
 
 def test_the_decay_matches_the_published_table():
-    """docs/api.md promises these exact numbers for a 50-point challenge."""
+    """docs/backend/api.md promises these exact numbers for a 50-point challenge."""
     today = date(2026, 8, 20)
     awards = [award_for(50, today - timedelta(days=age), on=today) for age in range(9)]
 

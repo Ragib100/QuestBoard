@@ -83,7 +83,7 @@ class ErrorState extends StatelessWidget {
 /// seconds needed a tap to recover, and a user watching a sleeping free-tier
 /// dyno wake up had no idea whether tapping would help.
 ///
-/// Capped rather than endless — design-system.md's rule is that nothing repeats
+/// Capped rather than endless — docs/frontend/design-system.md's rule is that nothing repeats
 /// forever, and an app quietly retrying in someone's pocket all afternoon is
 /// exactly what that rule is about. After [maxAttempts] it stops and offers the
 /// button, which by then genuinely means something.

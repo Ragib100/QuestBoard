@@ -188,7 +188,7 @@ real free-tier provider.
 - [x] `pg_trgm` and the GIN indexes over `questions.title` / `body` — they were
       already live but in neither `schema.sql` nor the docs, so both now say so.
       `ILIKE '%term%'` is index-served by them, which is why no query rewrite was
-      needed ([data-model.md](docs/data-model.md#search))
+      needed ([db/schema.md](docs/db/schema.md#search))
 - [x] Title hits rank above body-only hits; an explicit `sort=bounty|votes` still wins
 - [x] The desktop top-bar box works and hands its term to the Browse tab. The phone
       has no top bar, so Browse grew its own field — debounced, clearable, and the
